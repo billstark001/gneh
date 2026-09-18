@@ -1,6 +1,7 @@
 import type { AnyFragment, StoryIR } from '@gneh/core';
 import { Story, type StoryOptions } from '@gneh/runtime';
-import { DOMRenderer, type DOMMount, type DOMOptions } from './renderer.js';
+import { DOMRenderer } from './renderer.js';
+import type { DOMMount, DOMOptions } from './types.js';
 
 export interface DOMStoryOptions extends StoryOptions {
   renderer?: DOMOptions;
