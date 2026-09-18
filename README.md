@@ -2,26 +2,17 @@
 
 **Know how a story behaves without deciding how it must look.**
 
-`gneh` is named after the Proto-Indo-European root _gneh3-_ (“to know”). It is a
-renderer-neutral narrative toolkit with three authoring frontends, one semantic IR,
-one Fragment ABI, and one transactional story runtime. It is not a drop-in Harlowe
-or SugarCube engine.
+`gneh` is named after the Proto-Indo-European root _gneh3-_ (“to know”). It is a renderer-neutral narrative toolkit with three authoring frontends, one semantic IR, one Fragment ABI, and one transactional story runtime. It is not a drop-in Harlowe or SugarCube engine.
 
-- **Inkdown** combines Markdown-like prose with portable JavaScript expressions,
-  actions, and ESM bindings.
-- **Karlowe** is an explicit, portable Harlowe-like subset. It supports anonymous
-  and semantic named hooks, source-order effects, interactions, and portable
-  presentation changers; selectors that depend on Harlowe's DOM runtime are rejected.
-- **Sugarcast** is an explicit, portable SugarCube-like subset. Source-defined
-  widgets, runtime macro injection, and DOM injection are rejected.
+- **Inkdown** combines Markdown-like prose with portable JavaScript expressions, actions, and ESM bindings.
+- **Karlowe** is an explicit, portable Harlowe-like subset. It supports anonymous and semantic named hooks, source-order effects, interactions, and portable presentation changers; selectors that depend on Harlowe's DOM runtime are rejected.
+- **Sugarcast** is an explicit, portable SugarCube-like subset. Source-defined widgets, runtime macro injection, and DOM injection are rejected.
 
-All three languages use the same Twee 3 passage container and metadata merger.
-A navigable passage and an embedded component are the same typed `Fragment`.
+All three languages use the same Twee 3 passage container and metadata merger. A navigable passage and an embedded component are the same typed `Fragment`.
 
 ## Create and run a project
 
-Node.js 22.16 or newer is required. New applications use the standard npm
-initializer and Vite workflow:
+Node.js 22.16 or newer is required. New applications use the standard npm initializer and Vite workflow:
 
 ```sh
 npm create @gneh@latest my-story
@@ -33,13 +24,9 @@ npm install
 npm run dev
 ```
 
-The generated Wiki/story-flow/visual-novel interface is application source, not a
-runtime-owned shell. The vanilla, Preact, and Vue starters share that one interface
-implementation; the framework variants only derive their mounting entry from it.
-Edit it freely or replace it with another renderer.
+The generated Wiki/story-flow/visual-novel interface is application source, not a runtime-owned shell. The vanilla, Preact, and Vue starters share that one interface implementation; the framework variants only derive their mounting entry from it. Edit it freely or replace it with another renderer.
 
-The CLI remains focused on story-domain tooling and can also be used from the
-generated standalone distribution:
+The CLI remains focused on story-domain tooling and can also be used from the generated standalone distribution:
 
 ```sh
 node standalone/gneh.mjs check examples/playground
@@ -49,9 +36,7 @@ node standalone/gneh.mjs import-twine story.html -o imported-story
 node standalone/gneh.mjs inspect imported-story --level ir
 ```
 
-Development servers, production web builds, asset handling and preview are Vite's
-responsibility. The CLI deliberately does not maintain competing `init`, `dev`, or
-HTML `build` implementations.
+Development servers, production web builds, asset handling and preview are Vite's responsibility. The CLI deliberately does not maintain competing `init`, `dev`, or HTML `build` implementations.
 
 ## Develop it
 
@@ -64,21 +49,15 @@ pnpm demos
 pnpm test:browser
 ```
 
-The workspace uses pnpm 12, TypeScript 7 for builds, Oxlint, and Oxfmt. The language
-service intentionally uses a separate TypeScript 6 compiler-API alias because the
-TypeScript 7 native CLI package does not expose the classic JavaScript language
-service API.
+The workspace uses pnpm 12, TypeScript 7 for builds, Oxlint, and Oxfmt. The language service intentionally uses a separate TypeScript 6 compiler-API alias because the TypeScript 7 native CLI package does not expose the classic JavaScript language service API.
 
 `pnpm build` produces three distinct artifact shapes:
 
 1. `packages/*/dist`: ordinary ESM packages with declarations and source maps.
 2. `dist/gneh*.global.js`: browser IIFE bundles built by Vite.
-3. `standalone/`: a standard dependency-free Node module graph derived from the
-   package outputs by `scripts/standalone.mjs`.
+3. `standalone/`: a standard dependency-free Node module graph derived from the package outputs by `scripts/standalone.mjs`.
 
-All three directories are generated. `demo/` is also generated, from `examples/`,
-by `pnpm demos`. See [Generated artifacts](docs/GENERATED_ARTIFACTS.md) for the exact
-provenance and regeneration commands.
+All three directories are generated. `demo/` is also generated, from `examples/`, by `pnpm demos`. See [Generated artifacts](docs/GENERATED_ARTIFACTS.md) for the exact provenance and regeneration commands.
 
 ## One file, several Fragments
 
@@ -113,12 +92,9 @@ paramTypes:
 The room beyond the door is quiet.
 ```
 
-`$hp` in prose is syntax sugar for `{{ $hp }}`. Complex access stays explicit:
-`{{ $player.stats.hp }}`. Global state is declared in `gneh.config.json`.
+`$hp` in prose is syntax sugar for `{{ $hp }}`. Complex access stays explicit: `{{ $player.stats.hp }}`. Global state is declared in `gneh.config.json`.
 
-Metadata precedence is file front matter, then Twee header JSON, then passage front
-matter. Objects merge recursively, arrays replace earlier arrays, and only `tags`
-uses a stable union.
+Metadata precedence is file front matter, then Twee header JSON, then passage front matter. Objects merge recursively, arrays replace earlier arrays, and only `tags` uses a stable union.
 
 ## Handwritten JavaScript uses the same ABI
 
@@ -144,31 +120,29 @@ export default defineFragment({
 });
 ```
 
-A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScript.
-The complete ESM example is in `examples/vite-app/`.
+A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScript. The complete ESM example is in `examples/vite-app/`.
 
 ## Package boundaries
 
-| Package                               | Responsibility                                                                    |
-| ------------------------------------- | --------------------------------------------------------------------------------- |
-| `@gneh/core`                          | JSON state, expression/action IR, semantic views, Fragment and renderer protocols |
-| `@gneh/source`                        | Twee containers, front matter, metadata, and source locations                     |
-| `@gneh/expression`                    | Portable JavaScript parsing, validation, evaluation support, and code generation  |
-| `@gneh/syntax`                        | Dialect-neutral scanning, CST-to-IR lowering, and passage assembly                |
-| `@gneh/inkdown`                       | Inkdown directives and frontend assembly                                          |
-| `@gneh/karlowe`                       | Harlowe-like syntax and expression lowering                                       |
-| `@gneh/sugarcast`                     | SugarCube-like macro syntax and expression lowering                               |
-| `@gneh/compiler`                      | Project validation, graphing, ESM/declarations/maps, and migration output         |
-| `@gneh/runtime`                       | Fragment instances, transactions, navigation, history, regions, and saves         |
-| `@gneh/renderer-dom`                  | Keyed DOM reconciliation and an optional minimal Story-to-DOM adapter             |
-| `@gneh/vendor`                        | Source/IR browser loading and optional dynamic wikification                       |
-| `@gneh/vite`                          | ESM compilation, project aggregation, and local passage exports                   |
-| `@gneh/create`                        | Standard npm initializer and editable Vite application template                   |
-| `@gneh/cli`                           | Diagnostics, metadata, graphs, migration, formatting, and non-Vite ESM output     |
-| `@gneh/language-service`, `@gneh/lsp` | TypeScript projection and Language Server Protocol adapters                       |
+| Package | Responsibility |
+| --- | --- |
+| `@gneh/core` | JSON state, expression/action IR, semantic views, Fragment and renderer protocols |
+| `@gneh/source` | Twee containers, front matter, metadata, and source locations |
+| `@gneh/expression` | Portable JavaScript parsing, validation, evaluation support, and code generation |
+| `@gneh/syntax` | Dialect-neutral scanning, CST-to-IR lowering, and passage assembly |
+| `@gneh/inkdown` | Inkdown directives and frontend assembly |
+| `@gneh/karlowe` | Harlowe-like syntax and expression lowering |
+| `@gneh/sugarcast` | SugarCube-like macro syntax and expression lowering |
+| `@gneh/compiler` | Project validation, graphing, ESM/declarations/maps, and migration output |
+| `@gneh/runtime` | Fragment instances, transactions, navigation, history, regions, and saves |
+| `@gneh/renderer-dom` | Keyed DOM reconciliation and an optional minimal Story-to-DOM adapter |
+| `@gneh/vendor` | Source/IR browser loading and optional dynamic wikification |
+| `@gneh/vite` | ESM compilation, project aggregation, and local passage exports |
+| `@gneh/create` | Standard npm initializer and editable Vite application template |
+| `@gneh/cli` | Diagnostics, metadata, graphs, migration, formatting, and non-Vite ESM output |
+| `@gneh/language-service`, `@gneh/lsp` | TypeScript projection and Language Server Protocol adapters |
 
-The package count follows optional dependency and runtime boundaries. Stable
-`src/index.ts` files only re-export named implementation modules.
+The package count follows optional dependency and runtime boundaries. Stable `src/index.ts` files only re-export named implementation modules.
 
 ## Documentation
 
@@ -183,6 +157,4 @@ The package count follows optional dependency and runtime boundaries. Stable
 - [Generated artifacts](docs/GENERATED_ARTIFACTS.md)
 - [Third-party provenance](THIRD_PARTY_NOTICES.md)
 
-New gneh code is MIT licensed. Adapted parser code retains its original notices.
-No legacy interpreter is bundled, and compatibility frontends do not claim the full
-behavior of their source engines.
+New gneh code is MIT licensed. Adapted parser code retains its original notices. No legacy interpreter is bundled, and compatibility frontends do not claim the full behavior of their source engines.

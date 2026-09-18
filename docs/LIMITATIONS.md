@@ -1,77 +1,46 @@
 # Limitations and security boundaries
 
-gneh 0.1 is a working reference implementation, not an audited game engine or an
-arbitrary-code sandbox.
+gneh 0.1 is a working reference implementation, not an audited game engine or an arbitrary-code sandbox.
 
 ## Implemented scope
 
-| Area           | Current scope                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------------------------- |
-| Authoring      | Three portable profiles over shared container and document tools; not full Harlowe or SugarCube                |
-| Metadata       | JSON plus a JSON-compatible YAML subset; not YAML 1.2                                                          |
-| JavaScript     | A closed Acorn-parsed portable AST; ordinary JavaScript only in trusted ESM                                    |
-| Generated code | ESM, expression evaluators, declarations, and maps; structural traversal still uses runtime IR                 |
-| Reactivity     | Transaction-level full-view recomputation with keyed identities; not fine-grained signals                      |
-| Types          | Typed Fragment props and state/props projection; external module bindings remain conservative                  |
-| LSP            | Protocol diagnostics, completion, hover, definitions, references, and conservative rename; no editor extension |
-| Presentation   | One DOM renderer plus an editable three-mode starter template; no Three.js or terminal renderer is included    |
-| Visual novel   | Text beats, dialogue, and choices; no asset timeline, audio, skip, or read-history engine                      |
-| Hot reload     | Normal Vite module propagation; the starter does not preserve Story state across module replacement            |
-| Migration      | Supported-profile rewrite plus diagnostics; not a universal legacy importer                                    |
-| Distribution   | ESM, Vite applications, source/IR vendor APIs, and standalone domain CLI; no Twine story-format adapter        |
+| Area | Current scope |
+| --- | --- |
+| Authoring | Three portable profiles over shared container and document tools; not full Harlowe or SugarCube |
+| Metadata | JSON plus a JSON-compatible YAML subset; not YAML 1.2 |
+| JavaScript | A closed Acorn-parsed portable AST; ordinary JavaScript only in trusted ESM |
+| Generated code | ESM, expression evaluators, declarations, and maps; structural traversal still uses runtime IR |
+| Reactivity | Transaction-level full-view recomputation with keyed identities; not fine-grained signals |
+| Types | Typed Fragment props and state/props projection; external module bindings remain conservative |
+| LSP | Protocol diagnostics, completion, hover, definitions, references, and conservative rename; no editor extension |
+| Presentation | One DOM renderer plus an editable three-mode starter template; no Three.js or terminal renderer is included |
+| Visual novel | Text beats, dialogue, and choices; no asset timeline, audio, skip, or read-history engine |
+| Hot reload | Normal Vite module propagation; the starter does not preserve Story state across module replacement |
+| Migration | Supported-profile rewrite plus diagnostics; not a universal legacy importer |
+| Distribution | ESM, Vite applications, source/IR vendor APIs, and standalone domain CLI; no Twine story-format adapter |
 
 ## Trusted and untrusted code
 
-Portable expressions do not use `eval` or `new Function`. They operate on a checked
-AST, guarded property/method access, deep read-only render state, finite execution
-budgets, and post-transaction JSON validation.
+Portable expressions do not use `eval` or `new Function`. They operate on a checked AST, guarded property/method access, deep read-only render state, finite execution budgets, and post-transaction JSON validation.
 
-Imported `.mjs`, module helpers, and renderer extensions are normal trusted host
-JavaScript. Passing them to the runtime does not sandbox them. Their purity and host
-permissions remain the application's responsibility.
+Imported `.mjs`, module helpers, and renderer extensions are normal trusted host JavaScript. Passing them to the runtime does not sandbox them. Their purity and host permissions remain the application's responsibility.
 
-Interpolation emits scalar text and never reparses a returned string as HTML or
-markup. The DOM renderer does not use `innerHTML` and filters URL schemes. This is
-defense in depth, not an independent security audit. Host isolation and resource
-limits are still required for hostile files, remote plugins, or very large input.
+Interpolation emits scalar text and never reparses a returned string as HTML or markup. The DOM renderer does not use `innerHTML` and filters URL schemes. This is defense in depth, not an independent security audit. Host isolation and resource limits are still required for hostile files, remote plugins, or very large input.
 
 ## Saves and versioning
 
-A save contains the ABI, story identity, route, props, JSON state, PRNG state, and
-bounded history. It does not serialize DOM nodes, region overrides, closures, or
-native widgets. Materialized Karlowe/Sugarcast expression caches, revealed interaction
-instances, and other view-local state are also transient. After undo, redo, or load,
-the view is reconstructed from saved persistent state without replaying source effects;
-authors who require exact restoration of such UI must represent it in story state.
+A save contains the ABI, story identity, route, props, JSON state, PRNG state, and bounded history. It does not serialize DOM nodes, region overrides, closures, or native widgets. Materialized Karlowe/Sugarcast expression caches, revealed interaction instances, and other view-local state are also transient. After undo, redo, or load, the view is reconstructed from saved persistent state without replaying source effects; authors who require exact restoration of such UI must represent it in story state.
 
-Version 0.1 has no automatic state-schema migration and no route migration after a
-module path is renamed. Large published projects should own a versioned migration
-policy. Runtime-created Fragments need a stable registry if they must survive a new
-session; static reachable bindings are registered automatically.
+Version 0.1 has no automatic state-schema migration and no route migration after a module path is renamed. Large published projects should own a versioned migration policy. Runtime-created Fragments need a stable registry if they must survive a new session; static reachable bindings are registered automatically.
 
 ## Toolchain and test claims
 
-The workspace declares pnpm 12, TypeScript 7, Oxlint, Oxfmt, and Vite 8. The language
-service separately uses a TypeScript 6 compiler API alias. `pnpm check` runs lint,
-format verification, a clean build, and Node tests.
+The workspace declares pnpm 12, TypeScript 7, Oxlint, Oxfmt, and Vite 8. The language service separately uses a TypeScript 6 compiler API alias. `pnpm check` runs lint, format verification, a clean build, and Node tests.
 
-The browser suite serves generated Vite applications to a real Chromium process
-through `puppeteer-core`. It checks starter behavior and coexistence with an
-unrelated frontend root; it is not a compatibility matrix for every framework.
+The browser suite serves generated Vite applications to a real Chromium process through `puppeteer-core`. It checks starter behavior and coexistence with an unrelated frontend root; it is not a compatibility matrix for every framework.
 
-Compatibility audits parse passages from real compiled Twine HTML. Their acceptance
-ratio measures the documented portable profile only. A customized story with private
-widgets can be a useful stress sample without defining SugarCube compatibility.
+Compatibility audits parse passages from real compiled Twine HTML. Their acceptance ratio measures the documented portable profile only. A customized story with private widgets can be a useful stress sample without defining SugarCube compatibility.
 
 ## Explicit rejection is part of the contract
 
-Unknown, well-formed macros must become explicit `invoke` IR rather than silently
-becoming prose; compilation then requires a declared runtime-extension ID. Malformed
-syntax still produces diagnostics. Karlowe accepts semantic named hooks and a
-documented presentation changer set, but not DOM/text selectors, `enchant`, `click`
-matching, timers, or source-defined macro runtimes. Sugarcast excludes source
-widgets, `Macro.add`, scripts and Wikifier/DOM integration. Trusted build
-configuration can register additional IR lowerings, but cannot silently expand the
-portable runtime boundary.
-Both compatibility dialects use explicit source-position effects rather than guessed
-hoisting. They share IR with Inkdown but do not accept Inkdown syntax.
+Unknown, well-formed macros must become explicit `invoke` IR rather than silently becoming prose; compilation then requires a declared runtime-extension ID. Malformed syntax still produces diagnostics. Karlowe accepts semantic named hooks and a documented presentation changer set, but not DOM/text selectors, `enchant`, `click` matching, timers, or source-defined macro runtimes. Sugarcast excludes source widgets, `Macro.add`, scripts and Wikifier/DOM integration. Trusted build configuration can register additional IR lowerings, but cannot silently expand the portable runtime boundary. Both compatibility dialects use explicit source-position effects rather than guessed hoisting. They share IR with Inkdown but do not accept Inkdown syntax.

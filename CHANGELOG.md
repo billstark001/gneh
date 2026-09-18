@@ -2,19 +2,7 @@
 
 ## Unreleased
 
-Karlowe now uses a new lossless lexer and materialized source-order evaluation. The
-portable profile adds semantic named-hook mutation, reveal/repeat interactions,
-presentation changers, host portals, and bound controls without importing Harlowe's
-DOM runtime. Sugarcast uses the same source-order effect model and supports its basic
-checkbox form. All three frontends now dispatch built-ins and trusted build-time
-extensions through caller-owned CST-to-IR lowering registries in `@gneh/syntax`;
-Karlowe macro lookup is case-insensitive and internal-hyphen-optional. Expressions
-now use a closed, origin-preserving AST with explicit state, temporary, lexical,
-props, intrinsic, and host-binding references. Unknown Karlowe and Sugarcast macros
-lower to generic `invoke` IR and require an explicitly declared `RuntimeExtension`.
-Source-defined widgets and custom macros remain deferred. The superseded registry
-API names were removed without aliases, and the pre-production serialized story ABI
-remains version 1.
+Karlowe now uses a new lossless lexer and materialized source-order evaluation. The portable profile adds semantic named-hook mutation, reveal/repeat interactions, presentation changers, host portals, and bound controls without importing Harlowe's DOM runtime. Sugarcast uses the same source-order effect model and supports its basic checkbox form. All three frontends now dispatch built-ins and trusted build-time extensions through caller-owned CST-to-IR lowering registries in `@gneh/syntax`; Karlowe macro lookup is case-insensitive and internal-hyphen-optional. Expressions now use a closed, origin-preserving AST with explicit state, temporary, lexical, props, intrinsic, and host-binding references. Unknown Karlowe and Sugarcast macros lower to generic `invoke` IR and require an explicitly declared `RuntimeExtension`. Source-defined widgets and custom macros remain deferred. The superseded registry API names were removed without aliases, and the pre-production serialized story ABI remains version 1.
 
 ## 0.1.0
 

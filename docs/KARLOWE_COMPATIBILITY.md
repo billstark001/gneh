@@ -1,8 +1,6 @@
 # Karlowe compatibility design
 
-Karlowe is a Harlowe source frontend for gneh, not a second Harlowe runtime. Its
-compatibility boundary is observable story behavior that can be expressed without
-assuming a DOM, Twine's passage elements, or Harlowe's private macro protocol.
+Karlowe is a Harlowe source frontend for gneh, not a second Harlowe runtime. Its compatibility boundary is observable story behavior that can be expressed without assuming a DOM, Twine's passage elements, or Harlowe's private macro protocol.
 
 ## Frontend pipeline
 
@@ -16,39 +14,24 @@ source
   -> shared runtime and renderer protocol
 ```
 
-The lexer is a new single-pass scanner. It owns balanced macros, hooks, strings,
-comments, verbatim spans, and the `[[`/`[[[` ambiguity, but deliberately does not
-classify expression operators. This keeps `/` and `%` distinct and prevents markup
-token rules from becoming expression semantics. The small attributed Pratt parser
-is retained only for precedence after atoms have been parsed into the closed gneh
-expression AST.
+The lexer is a new single-pass scanner. It owns balanced macros, hooks, strings, comments, verbatim spans, and the `[[`/`[[[` ambiguity, but deliberately does not classify expression operators. This keeps `/` and `%` distinct and prevents markup token rules from becoming expression semantics. The small attributed Pratt parser is retained only for precedence after atoms have been parsed into the closed gneh expression AST.
 
 ## Semantic compatibility classes
 
-| Class         | Karlowe behavior                                                 | Boundary                                                                              |
-| ------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Flow          | `set`, `put`, `print`, conditions, loops, display and navigation | Materialized once per mounted passage, in source order                                |
-| Hooks         | anonymous hooks and prefix/suffix named hooks                    | Structural nodes and instance-local regions, never global selectors                   |
-| Interaction   | `link`, `link-repeat`, `link-goto`, dropdown and checkbox        | Semantic View events; no synthesized DOM queries                                      |
-| Presentation  | color, font, text style, size, border and radius composition     | Renderer-neutral extension data interpreted by a renderer                             |
-| Region change | `replace`, `append`, `prepend` with `?name`                      | Only semantic named-hook references; missing regions are errors                       |
-| Host effect   | sidebar portal, external navigation, restart, save/load helpers  | Explicit `StoryOptions.host`; unavailable operations fail; portals may return cleanup |
+| Class | Karlowe behavior | Boundary |
+| --- | --- | --- |
+| Flow | `set`, `put`, `print`, conditions, loops, display and navigation | Materialized once per mounted passage, in source order |
+| Hooks | anonymous hooks and prefix/suffix named hooks | Structural nodes and instance-local regions, never global selectors |
+| Interaction | `link`, `link-repeat`, `link-goto`, dropdown and checkbox | Semantic View events; no synthesized DOM queries |
+| Presentation | color, font, text style, size, border and radius composition | Renderer-neutral extension data interpreted by a renderer |
+| Region change | `replace`, `append`, `prepend` with `?name` | Only semantic named-hook references; missing regions are errors |
+| Host effect | sidebar portal, external navigation, restart, save/load helpers | Explicit `StoryOptions.host`; unavailable operations fail; portals may return cleanup |
 
-Harlowe passage output is materialized because Harlowe wikifies source in order.
-Inkdown remains reactive. The policy is an IR field rather than a dialect check in
-the runtime, so a future frontend can select either model without coupling packages.
-Bound controls are intentionally live and continue to read current state.
+Harlowe passage output is materialized because Harlowe wikifies source in order. Inkdown remains reactive. The policy is an IR field rather than a dialect check in the runtime, so a future frontend can select either model without coupling packages. Bound controls are intentionally live and continue to read current state.
 
 ## Explicit exclusions
 
-Karlowe rejects constructs whose identity depends on Harlowe's rendered document:
-text selectors, `enchant`, `click`/`click-replace` matching, arbitrary changer
-attachment, timers/live hooks, Harlowe's source-defined macro protocol, scripts, and
-private dialog/file APIs. Trusted compiler configuration may register a new lowering
-that satisfies the criteria below; that does not install a Harlowe runtime.
-Adding one of these requires a new semantic IR operation or an explicit host
-capability; implementing it with `querySelector`, hidden global state, or silent
-fallback is outside the project boundary.
+Karlowe rejects constructs whose identity depends on Harlowe's rendered document: text selectors, `enchant`, `click`/`click-replace` matching, arbitrary changer attachment, timers/live hooks, Harlowe's source-defined macro protocol, scripts, and private dialog/file APIs. Trusted compiler configuration may register a new lowering that satisfies the criteria below; that does not install a Harlowe runtime. Adding one of these requires a new semantic IR operation or an explicit host capability; implementing it with `querySelector`, hidden global state, or silent fallback is outside the project boundary.
 
 An extension is suitable for the portable profile when all of the following hold:
 
@@ -60,28 +43,13 @@ An extension is suitable for the portable profile when all of the following hold
 
 ## Performance and maintenance policy
 
-- Markup scanning is linear over consumed source and retains offsets in a compact
-  CST that is independent of the semantic lowering registry.
-- Lowering dispatch normalizes once at the frontend boundary and uses a caller-owned
-  `Map`; built-ins and extensions share the same constant-time lookup path.
-- Materialized values use one frame-local `Map`; there is no signal graph or generic
-  Harlowe AST interpreter.
+- Markup scanning is linear over consumed source and retains offsets in a compact CST that is independent of the semantic lowering registry.
+- Lowering dispatch normalizes once at the frontend boundary and uses a caller-owned `Map`; built-ins and extensions share the same constant-time lookup path.
+- Materialized values use one frame-local `Map`; there is no signal graph or generic Harlowe AST interpreter.
 - Named-hook changes address runtime regions directly and never scan the DOM.
-- The runtime still performs transaction-level view recomputation, allowing the
-  existing keyed renderer to preserve node identity.
-- Dialect-only syntax stays in `@gneh/karlowe`; core additions are small semantic
-  operations that another frontend or renderer can implement independently.
+- The runtime still performs transaction-level view recomputation, allowing the existing keyed renderer to preserve node identity.
+- Dialect-only syntax stays in `@gneh/karlowe`; core additions are small semantic operations that another frontend or renderer can implement independently.
 
-The `gneh-ws` audit is a staged static check, not a full playthrough. It separately
-reports `structured`, `declared`, `resolved`, `lowered`, and `runtime-satisfied`
-passage counts. At the current revision, the three Karlowe samples contain 1,530
-passages: 1,529 build a CST and 1,522 pass declaration, resolution, lowering, and
-runtime gates. The remainder contain deliberately excluded DOM/custom macros or one
-malformed string. Torean Role Finder is 124/124 at every stage.
+The `gneh-ws` audit is a staged static check, not a full playthrough. It separately reports `structured`, `declared`, `resolved`, `lowered`, and `runtime-satisfied` passage counts. At the current revision, the three Karlowe samples contain 1,530 passages: 1,529 build a CST and 1,522 pass declaration, resolution, lowering, and runtime gates. The remainder contain deliberately excluded DOM/custom macros or one malformed string. Torean Role Finder is 124/124 at every stage.
 
-The Degrees of Lewdity 0.5.12.12 stress sample contains 16,087 passages. Of those,
-15,638 build a Sugarcast CST, 9,728 have declared macro names, 9,614 resolve, 1,413
-fully lower through the current finite expression profile, and 7 require no missing
-runtime extension. The declaration inventory finds 5,005 widget names and 220
-script-registered names without enabling either mechanism. These numbers make the
-boundary measurable; they are not a claim of SugarCube gameplay compatibility.
+The Degrees of Lewdity 0.5.12.12 stress sample contains 16,087 passages. Of those, 15,638 build a Sugarcast CST, 9,728 have declared macro names, 9,614 resolve, 1,413 fully lower through the current finite expression profile, and 7 require no missing runtime extension. The declaration inventory finds 5,005 widget names and 220 script-registered names without enabling either mechanism. These numbers make the boundary measurable; they are not a claim of SugarCube gameplay compatibility.

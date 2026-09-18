@@ -1,7 +1,6 @@
 # @gneh/source
 
-Twee 3 containers and deterministic JSON/front-matter metadata. This package stays
-free of HTML and CLI dependencies; published Twine extraction belongs to `@gneh/cli`.
+Twee 3 containers and deterministic JSON/front-matter metadata. This package stays free of HTML and CLI dependencies; published Twine extraction belongs to `@gneh/cli`.
 
 Part of gneh 0.1.0. See the workspace README and docs for the supported language profile and verification limitations.
 

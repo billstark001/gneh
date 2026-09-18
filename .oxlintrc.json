@@ -10,7 +10,15 @@
     "examples/playground/site/**"
   ],
   "rules": {
-    "@stylistic/max-len": ["error", { "code": 120, "tabWidth": 2 }],
+    "@stylistic/max-len": [
+      "error",
+      {
+        "code": 120,
+        "tabWidth": 2,
+        "ignoreStrings": true,
+        "ignoreTemplateLiterals": true
+      }
+    ],
     "@stylistic/padding-line-between-statements": [
       "error",
       {
@@ -40,5 +48,34 @@
     ],
     "max-lines": ["error", { "max": 300, "skipBlankLines": false, "skipComments": false }],
     "no-unused-vars": "warn"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "packages/karlowe/src/parser.ts",
+        "packages/sugarcast/src/parser.ts",
+        "packages/syntax/src/parser.ts"
+      ],
+      "rules": { "max-lines": ["error", { "max": 750 }] }
+    },
+    {
+      "files": ["packages/runtime/src/story.ts"],
+      "rules": { "max-lines": ["error", { "max": 650 }] }
+    },
+    {
+      "files": [
+        "packages/core/src/evaluate.ts",
+        "packages/expression/src/parser.ts",
+        "packages/language-service/src/service.ts",
+        "packages/renderer-dom/src/renderer.ts",
+        "packages/compiler/src/project.ts",
+        "scripts/audit-twine-html.mjs"
+      ],
+      "rules": { "max-lines": ["error", { "max": 450 }] }
+    },
+    {
+      "files": ["packages/compiler/test/languages.test.ts"],
+      "rules": { "max-lines": ["error", { "max": 500 }] }
+    }
+  ]
 }
