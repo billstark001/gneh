@@ -1,0 +1,74 @@
+---
+tags: [archive]
+layout:
+  atmosphere: nocturne
+---
+:: Start [start] {"title":"01 / The Nocturne Archive","layout":{"column":"reading"}}
+---
+layout:
+  accent: brass
+---
+@action takeKey {
+  $hasKey = true;
+  $insight += 1;
+  $log.push({id: $log.length, text: "You accepted the brass key from the archivist."});
+}
+
+# The Nocturne Archive
+
+THE NOCTURNE ARCHIVE / CHAPTER 01
+
+The clock stopped at midnight. **{{ $player.name }}**, this archive keeps not books,
+but the things people forgot they once knew.
+
+::: dialogue {speaker="Irene" mood="calm"}
+“The name is not important. What matters is whether you will read it again.”
+:::
+
+@if (!$hasKey) {
+  A [brass key]{.warning} rests on the desk. Its back bears a nearly forgotten word:
+  *gneh3-*.
+
+  [[Take the key => takeKey]]
+} @else {
+  You close your hand around the key. The archive's northern door can now open.
+}
+
+[[Enter the reading room - Karlowe -> ReadingRoom]]
+
+[[Enter the vault - Sugarcast -> Vault]]
+
+@slot notes {
+  *This notes region belongs to one Fragment instance. JavaScript can replace it
+  without manipulating the DOM.*
+}
+
+:: FieldNotes {"title":"04 / Traveler's notes"}
+# Traveler's notes
+
+@for (const event of $log; key event.id) {
+  - {{ event.text }}
+}
+
+[[Return to the entrance -> Start]]
+
+:: Status {"nav":false}
+Known things: **$insight**. Key: {{ $hasKey ? "held" : "not yet found" }}.
+
+:: EnemyCard [reusable] {"nav":false,"presentation":{"tone":"muted"}}
+---
+params: [enemy]
+paramTypes:
+  enemy: '{name: string; hp: number; maxHp: number}'
+presentation:
+  density: compact
+---
+::: status {.enemy-card}
+**{{ enemy.name }}**
+
+HP: {{ enemy.hp }} / {{ enemy.maxHp }}
+
+@if (enemy.hp <= 0) {
+  *It has remembered its name.*
+}
+:::

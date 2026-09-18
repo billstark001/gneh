@@ -1,0 +1,17 @@
+{
+  "upstream": "https://github.com/billstark001/twee-grind",
+  "commit": "a51c373c280f10d1448bb3bbbb51b60a39b09349",
+  "copiedRuntime": false,
+  "altered": true,
+  "files": [
+    {
+      "from": "packages/harlowe-markup/src/utils/pratt-parser.ts",
+      "to": "packages/karlowe/src/pratt-parser.ts"
+    },
+    {
+      "from": "packages/harlowe-markup/src/markup/expression.ts",
+      "to": "packages/karlowe/src/expression.ts",
+      "scope": "operator precedence subset"
+    }
+  ]
+}

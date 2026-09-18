@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error"
+  },
+  "jsPlugins": ["@stylistic/eslint-plugin"],
+  "ignorePatterns": [
+    "**/dist/**",
+    "standalone/**",
+    "examples/playground/site/**"
+  ],
+  "rules": {
+    "@stylistic/max-len": ["error", { "code": 120, "tabWidth": 2 }],
+    "@stylistic/padding-line-between-statements": [
+      "error",
+      {
+        "blankLine": "always",
+        "prev": { "selector": "Program > ImportDeclaration" },
+        "next": { "selector": "Program > *" }
+      },
+      {
+        "blankLine": "any",
+        "prev": { "selector": "Program > ImportDeclaration" },
+        "next": { "selector": "Program > ImportDeclaration" }
+      },
+      {
+        "blankLine": "always",
+        "prev": {
+          "selector": "Program > :matches(FunctionDeclaration, ClassDeclaration, TSInterfaceDeclaration, TSTypeAliasDeclaration, TSEnumDeclaration, TSDeclareFunction, ExportNamedDeclaration[declaration.type=/^(?:FunctionDeclaration|ClassDeclaration|TSInterfaceDeclaration|TSTypeAliasDeclaration|TSEnumDeclaration|TSDeclareFunction)$/], ExportDefaultDeclaration[declaration.type=/^(?:FunctionDeclaration|ClassDeclaration)$/])"
+        },
+        "next": { "selector": "Program > *" }
+      },
+      {
+        "blankLine": "always",
+        "prev": { "selector": "Program > *" },
+        "next": {
+          "selector": "Program > :matches(FunctionDeclaration, ClassDeclaration, TSInterfaceDeclaration, TSTypeAliasDeclaration, TSEnumDeclaration, TSDeclareFunction, ExportNamedDeclaration[declaration.type=/^(?:FunctionDeclaration|ClassDeclaration|TSInterfaceDeclaration|TSTypeAliasDeclaration|TSEnumDeclaration|TSDeclareFunction)$/], ExportDefaultDeclaration[declaration.type=/^(?:FunctionDeclaration|ClassDeclaration)$/])"
+        }
+      }
+    ],
+    "max-lines": ["error", { "max": 300, "skipBlankLines": false, "skipComments": false }],
+    "no-unused-vars": "warn"
+  }
+}

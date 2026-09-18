@@ -1,0 +1,26 @@
+:: Vault [sugarcast] {"title":"03 / Vault"}
+# Vault
+
+A faceless warden blocks the way. Its armor is made from unfinished sentences.
+
+<<include "EnemyCard" {enemy: $enemy}>>
+
+<<if not $hasKey>>
+You have no key. The warden will not answer.
+<<else>>
+<<if $enemy.hp > 0>>
+<<button "Speak a forgotten name">>
+  <<set $enemy.hp -= 1>>
+  <<set $insight += 1>>
+  <<set $log.push({id: $log.length, text: "The Page Warden recovered a memory."})>>
+<</button>>
+<<else>>
+::: dialogue {speaker="Warden" mood="relieved"}
+“Thank you. I was not here to stop you. I was waiting for you.”
+:::
+
+[[Read the traveler's notes->FieldNotes]]
+<</if>>
+<</if>>
+
+[[Return to the entrance->Start]]

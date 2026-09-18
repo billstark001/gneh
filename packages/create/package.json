@@ -1,0 +1,22 @@
+{
+  "name": "@gneh/create",
+  "version": "0.1.0",
+  "description": "Create an editable Vite-based gneh project",
+  "license": "MIT",
+  "bin": {
+    "create-gneh": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "overlays",
+    "template",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  }
+}

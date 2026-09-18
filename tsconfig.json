@@ -1,0 +1,53 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/source"
+    },
+    {
+      "path": "./packages/expression"
+    },
+    {
+      "path": "./packages/syntax"
+    },
+    {
+      "path": "./packages/inkdown"
+    },
+    {
+      "path": "./packages/karlowe"
+    },
+    {
+      "path": "./packages/sugarcast"
+    },
+    {
+      "path": "./packages/compiler"
+    },
+    {
+      "path": "./packages/runtime"
+    },
+    {
+      "path": "./packages/renderer-dom"
+    },
+    {
+      "path": "./packages/vendor"
+    },
+    {
+      "path": "./packages/vite"
+    },
+    {
+      "path": "./packages/cli"
+    },
+    {
+      "path": "./packages/language-service"
+    },
+    {
+      "path": "./packages/lsp"
+    },
+    {
+      "path": "./packages/create"
+    }
+  ]
+}

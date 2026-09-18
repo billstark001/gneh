@@ -1,0 +1,14 @@
+:: Start [start]
+# A document without live behavior
+
+Hello, $name. This target has no action transactions or mutable regions, but it can
+still navigate.
+
+[[Next page -> Next]]
+
+:: Next
+# Second page
+
+The same semantic nodes are running in a snapshot context.
+
+[[Return home -> Start]]

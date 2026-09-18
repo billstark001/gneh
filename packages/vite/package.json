@@ -1,0 +1,36 @@
+{
+  "name": "@gneh/vite",
+  "version": "0.1.0",
+  "description": "Vite integration for typed narrative ESM modules",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "client.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./client.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gneh/compiler": "workspace:*",
+    "@gneh/core": "workspace:*",
+    "@gneh/runtime": "workspace:*"
+  },
+  "peerDependencies": {
+    "vite": "^8.0.0"
+  }
+}

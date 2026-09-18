@@ -1,0 +1,214 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #25352c;
+  background: #f5f3ee;
+}
+body {
+  margin: 0;
+  min-width: 20rem;
+}
+button,
+select {
+  font: inherit;
+}
+.gneh-app {
+  --surface: #fffefa;
+  --ink: #25352c;
+  --muted: #68766c;
+  --line: #dce2d9;
+  --accent: #256c52;
+  min-height: 100vh;
+  color: var(--ink);
+  background: #f5f3ee;
+  line-height: 1.7;
+  isolation: isolate;
+}
+.gneh-app * {
+  box-sizing: border-box;
+}
+.toolbar {
+  min-height: 4.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.toolbar strong {
+  margin-right: auto;
+  letter-spacing: 0.12em;
+}
+.toolbar small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+}
+.toolbar button,
+.toolbar select,
+footer button {
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  color: inherit;
+  background: transparent;
+  padding: 0.35rem 0.65rem;
+}
+.layout {
+  max-width: 80rem;
+  min-height: calc(100vh - 4.5rem);
+  margin: auto;
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+}
+aside {
+  border-right: 1px solid var(--line);
+  padding: 2rem 1.3rem;
+}
+aside p,
+.route {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+}
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+nav button {
+  border: 0;
+  border-radius: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  color: var(--muted);
+  background: transparent;
+  text-align: left;
+}
+nav button[aria-current='page'] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-weight: 700;
+}
+main {
+  min-width: 0;
+  padding: 2.5rem 4rem;
+}
+.route {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+}
+article {
+  max-width: 50rem;
+  font-size: 1.05rem;
+}
+article h1 {
+  font-family: Georgia, serif;
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 500;
+}
+article a,
+.choices a {
+  color: var(--accent);
+}
+article button,
+.choices button {
+  border: 1px solid var(--accent);
+  border-radius: 2rem;
+  padding: 0.45rem 1rem;
+  color: var(--accent);
+  background: transparent;
+}
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 38rem;
+  margin: 1rem auto;
+}
+footer {
+  display: none;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+}
+.status {
+  display: block;
+  color: var(--muted);
+  margin-top: 1rem;
+}
+.status[data-error] {
+  color: #b33a2f;
+}
+
+.gneh-app[data-environment='story-flow'] {
+  --surface: #191f29;
+  --ink: #e3e8ef;
+  --muted: #929dab;
+  --line: #303a48;
+  --accent: #b7a4ed;
+  background: #141921;
+}
+.gneh-app[data-environment='story-flow'] .layout {
+  display: block;
+  max-width: 65rem;
+}
+.gneh-app[data-environment='story-flow'] aside {
+  display: none;
+}
+.gneh-app[data-environment='story-flow'] article {
+  font-size: 1.15rem;
+  line-height: 1.9;
+}
+
+.gneh-app[data-environment='visual-novel'] {
+  --surface: #121d31;
+  --ink: #edf2fb;
+  --muted: #9eacc4;
+  --line: #34435d;
+  --accent: #c4a76c;
+  background: linear-gradient(125deg, #111d33, #24304b 50%, #101727);
+}
+.gneh-app[data-environment='visual-novel'] .layout {
+  display: block;
+  max-width: 70rem;
+}
+.gneh-app[data-environment='visual-novel'] aside {
+  display: none;
+}
+.gneh-app[data-environment='visual-novel'] article {
+  max-width: none;
+  min-height: 10rem;
+  padding: 1.5rem 2rem;
+  border: 1px solid #b7a07166;
+  border-radius: 0.75rem;
+  background: #141e33ed;
+}
+.gneh-app[data-environment='visual-novel'] footer {
+  display: flex;
+}
+.gneh-app:not([data-environment='visual-novel']) .choices {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .toolbar {
+    flex-wrap: wrap;
+    padding: 0.7rem;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  aside {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0.7rem;
+  }
+  nav {
+    flex-direction: row;
+    overflow: auto;
+  }
+  main {
+    padding: 1.5rem 1rem;
+  }
+}

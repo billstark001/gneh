@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./.oxlintrc.json"],
+  "categories": {
+    "correctness": "off"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "standalone/**",
+    "examples/playground/site/**"
+  ],
+  "rules": {
+    "@stylistic/max-len": "off",
+    "max-lines": "off",
+    "no-unused-vars": "off"
+  }
+}

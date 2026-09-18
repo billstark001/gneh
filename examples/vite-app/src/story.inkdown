@@ -1,0 +1,23 @@
+:: Start [start]
+@module {
+  import Panel from './Panel.mjs';
+  export const description = 'A normal ESM named export.';
+}
+
+# Markdown is one source representation
+
+The Panel below is handwritten `.mjs`. It can be embedded or used as a navigation
+target.
+
+@Panel({ label: "A prop from Inkdown" })
+
+[[Open the native JavaScript Fragment -> Panel({label: "As a page"})]]
+
+[[Open the second local passage -> About]]
+
+:: About
+# About
+
+The same direct module import exposes this passage as `fragments.About`.
+
+[[Return -> Start]]

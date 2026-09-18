@@ -1,0 +1,12 @@
+{
+  "title": "The Nocturne Archive",
+  "entry": "Start",
+  "sources": ["story"],
+  "state": {
+    "player": { "name": "Traveler" },
+    "hasKey": false,
+    "insight": 0,
+    "enemy": { "name": "Page Warden", "hp": 3, "maxHp": 3 },
+    "log": [{ "id": 0, "text": "You woke after the archive closed." }]
+  }
+}

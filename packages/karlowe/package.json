@@ -1,0 +1,32 @@
+{
+  "name": "@gneh/karlowe",
+  "version": "0.1.0",
+  "description": "Portable karlowe frontend with attributed Pratt parser extraction",
+  "license": "MIT AND Zlib",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md",
+    "licenses"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*",
+    "@gneh/expression": "workspace:*",
+    "@gneh/source": "workspace:*",
+    "@gneh/syntax": "workspace:*"
+  }
+}

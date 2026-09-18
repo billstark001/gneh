@@ -1,0 +1,28 @@
+{
+  "name": "@gneh/expression",
+  "version": "0.1.0",
+  "description": "Acorn-based portable JavaScript expressions and code generation",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*",
+    "acorn": "^8.18.0"
+  }
+}

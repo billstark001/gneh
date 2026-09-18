@@ -1,0 +1,15 @@
+{
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "printWidth": 120,
+  "ignorePatterns": [
+    "**/dist/**",
+    "standalone/**",
+    "examples/playground/site/**",
+    "**/*.inkdown",
+    "**/*.karlowe",
+    "**/*.sugarcast",
+    "**/*.twee"
+  ]
+}

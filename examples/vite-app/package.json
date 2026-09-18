@@ -1,0 +1,18 @@
+{
+  "name": "@gneh/example-vite",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*",
+    "@gneh/renderer-dom": "workspace:*",
+    "@gneh/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@gneh/vite": "workspace:*",
+    "vite": "^8.3.0"
+  }
+}

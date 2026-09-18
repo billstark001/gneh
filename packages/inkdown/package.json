@@ -1,0 +1,30 @@
+{
+  "name": "@gneh/inkdown",
+  "version": "0.1.0",
+  "description": "inkdown authoring frontend",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*",
+    "@gneh/expression": "workspace:*",
+    "@gneh/source": "workspace:*",
+    "@gneh/syntax": "workspace:*"
+  }
+}

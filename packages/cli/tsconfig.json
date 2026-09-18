@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.cache/tsbuildinfo/cli.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../compiler"
+    },
+    {
+      "path": "../source"
+    },
+    {
+      "path": "../lsp"
+    },
+    {
+      "path": "../language-service"
+    }
+  ]
+}

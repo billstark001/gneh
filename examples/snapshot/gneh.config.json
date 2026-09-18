@@ -1,0 +1,7 @@
+{
+  "title": "gneh / Snapshot documents",
+  "entry": "Start",
+  "sources": ["story.inkdown"],
+  "live": false,
+  "state": { "name": "Reader" }
+}

@@ -1,0 +1,21 @@
+:: ReadingRoom [karlowe] {"title":"02 / Reading room"}
+# Reading room
+
+A silver bookmark crosses the light. This room is written in **Karlowe**; the runtime
+does not need to know that.
+
+(display: "Status")
+
+(if: $hasKey)[
+  The archivist pushes the final book toward you.
+
+  (link-goto: "Take the key to the vault", "Vault")
+](else:)[
+  (print: "The northern door is locked. Retrieve the key at the entrance first.")
+]
+
+(link-repeat: "Read an unfamiliar passage")[
+  (set: $insight to $insight + 1)
+]
+
+[[Return to the entrance->Start]]

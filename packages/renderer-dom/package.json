@@ -1,0 +1,28 @@
+{
+  "name": "@gneh/renderer-dom",
+  "version": "0.1.0",
+  "description": "Keyed DOM backend for gneh semantic views",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run test/renderer-dom.test.ts"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*",
+    "@gneh/runtime": "workspace:*"
+  }
+}

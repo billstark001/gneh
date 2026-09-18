@@ -1,0 +1,35 @@
+{
+  "name": "@gneh/compiler",
+  "version": "0.1.0",
+  "description": "Narrative project analysis, ESM generation and portable migration",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*",
+    "@gneh/expression": "workspace:*",
+    "@gneh/inkdown": "workspace:*",
+    "@gneh/karlowe": "workspace:*",
+    "@gneh/source": "workspace:*",
+    "@gneh/sugarcast": "workspace:*"
+  },
+  "peerDependencies": {
+    "@gneh/runtime": "workspace:*"
+  }
+}

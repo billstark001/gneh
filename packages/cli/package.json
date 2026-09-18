@@ -1,0 +1,36 @@
+{
+  "name": "@gneh/cli",
+  "version": "0.1.0",
+  "description": "gneh project command-line tools",
+  "license": "MIT",
+  "bin": {
+    "gneh": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gneh/compiler": "workspace:*",
+    "@gneh/core": "workspace:*",
+    "@gneh/language-service": "workspace:*",
+    "@gneh/lsp": "workspace:*",
+    "@gneh/source": "workspace:*",
+    "commander": "^15.0.0",
+    "parse5": "^8.0.1"
+  }
+}
