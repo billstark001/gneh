@@ -15,3 +15,5 @@ export * from './view.js';
 export * from './expression-runtime.js';
 
 export * from './effects.js';
+
+export type { BindingPattern, ExpressionNode } from 'pure-expr/expr';

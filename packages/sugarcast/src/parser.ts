@@ -1,12 +1,13 @@
-import { GnehError, type ParseResult, type Statement, type StoryNode, type Span } from '@gneh/core';
+import { GnehError, type EffectNode, type ParseResult, type StoryNode, type Span } from '@gneh/core';
 import { splitPassages, diag } from '@gneh/source';
-import { parseExpression, parseStatements } from '@gneh/expression';
+import { parseSugarExpression } from '@gneh/expression';
 import {
   caseInsensitiveMacroName,
   MacroLoweringRegistry,
   MarkupParser,
   balanced,
   basePassage,
+  splitTopLevel,
   type MacroLowering,
   type SpecialReader,
 } from '@gneh/syntax';
@@ -271,7 +272,7 @@ function extendParagraph(source: string, start: number, initialEnd: number, regi
 }
 
 function expr(source: string, span: Span) {
-  return parseExpression(source, span);
+  return parseSugarExpression(source, span);
 }
 
 function firstString(
@@ -284,14 +285,14 @@ function firstString(
 } {
   const m = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*/.exec(source);
   if (!m) p.error('SUGARCAST_LITERAL', 'Expected a literal string argument.', start);
-  const ast = parseExpression(m[1]).ast;
+  const ast = parseSugarExpression(m[1]).ast;
   if (ast.type !== 'Literal' || typeof ast.value !== 'string') p.error('SUGARCAST_LITERAL', 'Expected string', start);
   return { value: ast.value as string, rest: source.slice(m[0].length) };
 }
 
-function actionBody(source: string, base: number, p: MarkupParser, registry: SugarcastLowerings): Statement[] {
+function actionBody(source: string, base: number, p: MarkupParser, registry: SugarcastLowerings): EffectNode[] {
   let i = 0;
-  const statements: Statement[] = [];
+  const bodyEffects: EffectNode[] = [];
   while (i < source.length) {
     if (/\s/.test(source[i])) {
       i++;
@@ -320,10 +321,10 @@ function actionBody(source: string, base: number, p: MarkupParser, registry: Sug
         base + i,
         base + m.end,
       );
-    for (const node of effects) statements.push(...node.statements);
+    for (const node of effects) bodyEffects.push(...node.effects);
     i = result.end;
   }
-  return statements;
+  return bodyEffects;
 }
 
 const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
@@ -344,7 +345,13 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
         nodes: [
           {
             type: 'effect',
-            statements: parseStatements(m.args, p.span(base + m.argStart, base + m.end - 2)),
+            effects: splitTopLevel(m.args, ';')
+              .filter((part) => part.trim())
+              .map((part) => ({
+                type: 'expression' as const,
+                expression: parseSugarExpression(part, p.span(base + m.argStart, base + m.end - 2), { writes: true })
+                  .ast,
+              })),
             span,
           },
         ],
@@ -455,9 +462,9 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
           ],
           end: b.end,
         };
-      const statements = actionBody(body.body, base + body.base, p, registry);
+      const bodyEffects = actionBody(body.body, base + body.base, p, registry);
       if (target)
-        statements.push({
+        bodyEffects.push({
           type: 'expression',
           expression: {
             type: 'CallExpression',
@@ -466,7 +473,7 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
             optional: false,
           },
         });
-      const name = p.addAction(statements, body.body, p.span(base + body.base, base + body.base + body.body.length));
+      const name = p.addAction(bodyEffects, body.body, p.span(base + body.base, base + body.base + body.body.length));
       return {
         nodes: [
           {
@@ -540,7 +547,7 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
         nodes: [
           {
             type: 'effect',
-            statements: [
+            effects: [
               {
                 type: 'expression',
                 expression: {

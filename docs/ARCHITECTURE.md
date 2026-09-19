@@ -37,7 +37,7 @@ Inkdown directives use the same lowering contract, although its native grammar c
 
 Expressions are the restricted ESTree subset owned by `pure-expr`; gneh has no parallel expression IR. `$name` and `_name` remain ordinary ESTree identifiers whose sigils are interpreted by a runtime `BindingStore`: persistent state, mounted-fragment temporary state, lexical props/loop locals, and application capabilities are layered in one evaluation environment. Sugarcast and Inkdown add lexer-level operator aliases, while Karlowe's Pratt parser emits the same nodes directly.
 
-Render and effect phases select separate evaluator policies. Render denies writes and sees deeply read-only state. Enter/actions enable identifier and member writes, but those writes target the Story transaction's private state copy. Gneh owns only statement control flow (`expression`, `declare`, `if`, and `each`); pure-expr owns expression parsing, calls, property access, optional chains, assignments, and updates.
+Render and effect phases select separate evaluator policies. Render denies writes and sees deeply read-only state. Enter/actions enable identifier and member writes, but those writes target the Story transaction's private state copy. Gneh owns a small effect IR (`expression`, `bind`, `if`, `each`, and named effect invocation), not JavaScript statements. pure-expr owns expression and binding-pattern parsing, calls, property access, optional chains, assignments, and updates.
 
 Unknown compatibility macros lower to `invoke` IR. Compilation requires the application to declare each extension ID; execution requires a matching phase-limited `RuntimeExtension`. This is intentionally parallel to renderer and host boundaries. It does not grant source code the authority to register executable widgets, custom macros, scripts, or DOM operations.
 
@@ -69,7 +69,7 @@ The diagram omits some direct imports, but its ownership rules are strict:
 - `core` has no parser, DOM, build-tool, or application dependency.
 - `source` parses Twee/front matter and does not choose a story language.
 - `syntax` is dialect-neutral infrastructure. `MarkupParser` receives both an expression parser and an optional special-syntax reader from its caller. Its caller-owned `MacroLoweringRegistry` dispatches dialect tokens without global state or a dependency from core to authoring syntax.
-- Inkdown owns `@if`, `@action`, `@module`, and related directives.
+- Inkdown owns structural `@if`/`@each`, effect `@action`/`@effect`, reusable `@view`, and declarative `@import`/`@export` directives. It has no embedded JavaScript module or script block.
 - Karlowe and Sugarcast own their compatibility syntax and do not recognize Inkdown directives. Shared tools do not imply a shared surface language.
 - All dialects lower to the same IR and never own a separate runtime.
 - The compiler has no CLI I/O; the CLI composes compiler and filesystem concerns.
@@ -102,7 +102,7 @@ The statement that `.inkdown` and `.mjs` are equivalent means that they meet at 
 
 ## Modules and large projects
 
-A multi-passage source file has one lexical module scope. Bindings declared by `@module` and local entries in `fragments` share a binding table with live getters. A local `@Card()` resolves inside that file before the external registry.
+A multi-passage source file has one generated ESM scope. Declarative `@import` records become static ESM imports and enter each passage through a binding table with live getters. `@export` may expose an imported binding from the generated module. Local entries in `fragments` share that table, and a local passage or `@view` named `Card` resolves before an external fragment registry entry.
 
 Vite assigns stable module-scoped IDs such as `path/chapter.inkdown#Card`. Renaming the file changes that ID; version 0.1 does not migrate saved routes automatically. Applications that require long-term save compatibility should own a route/state migration policy.
 
@@ -117,7 +117,7 @@ CLI compilation does not have an application module graph and therefore requires
 - successful actions and navigation create bounded history snapshots.
 - asynchronous transactions and atomicity across `await` are not supported.
 
-Inkdown passages use reactive structural evaluation. Karlowe and Sugarcast passages use materialized evaluation: expressions and source-position effects are evaluated once per mounted Fragment, in document order. Bound form controls are the deliberate exception and continue to observe current state. This policy lives on `PassageIR`; the runtime does not infer semantics from a dialect name.
+Inkdown passages normally use reactive structural evaluation. An explicit source-position `@effect` switches that passage to materialized evaluation because retaining values on both sides of an ordered write is otherwise impossible. Karlowe and Sugarcast passages are also materialized: expressions and source-position effects are evaluated once per mounted Fragment, in document order. Bound form controls are the deliberate exception and continue to observe current state. This policy lives on `PassageIR`; the runtime does not infer semantics from a dialect name.
 
 Version 0.1 recomputes the current semantic view after a transaction. Stable include and loop keys preserve Fragment and DOM identity, but this is not a fine-grained signal graph and does not promise O(changed nodes) work.
 

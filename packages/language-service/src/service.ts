@@ -141,8 +141,8 @@ export class GnehLanguageService {
     this.analyze();
     return parsed.passages.flatMap((p) => [
       { name: p.id, span: p.span, kind: 'fragment' as const },
-      ...(this.result.passages.find((x) => x.id === p.id)?.actions
-        ? Object.values(this.result.passages.find((x) => x.id === p.id)!.actions).map((a) => ({
+      ...(this.result.passages.find((x) => x.id === p.id)?.effects
+        ? Object.values(this.result.passages.find((x) => x.id === p.id)!.effects).map((a) => ({
             name: a.name,
             span: a.span,
             kind: 'action' as const,
@@ -261,9 +261,10 @@ export class GnehLanguageService {
           ? ['<<if >><</if>>', '<<set >>', '<<print >>', '<<include "">>', '<<button "">><</button>>']
           : [
               '@if () {\n\n}',
-              '@for (const item of $items; key item.id) {\n\n}',
-              '@action name {\n\n}',
-              '@slot name {\n\n}',
+              '@each (item of $items; key item.id) {\n\n}',
+              '@action name() {\n  @do $value += 1;\n}',
+              '@view name() {\n\n}',
+              '@region name {\n\n}',
               '{{ }}',
             ];
     return words.map((label) => ({ label, kind: 'keyword' }));

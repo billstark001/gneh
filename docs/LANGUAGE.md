@@ -50,34 +50,44 @@ These semantics belong to gneh. Familiar surface syntax does not import the sour
 
 ```inkdown
 @enter {
-  $visits += 1;
+  @do $visits += 1;
 }
 
-@action attack {
-  $enemy.hp -= 1;
-  $log.push({ id: $log.length, text: 'attack' });
+@action damage(amount) {
+  @do $enemy.hp -= amount;
+}
+
+@action attack({ amount = 1 }) {
+  @call damage(amount);
+  @let entry = { id: $log.length, text: 'attack' };
+  @do $log.push(entry);
 }
 
 @if ($enemy.hp > 0) {
-  [[Attack => attack]]
+  [[Attack => attack({amount: 2})]]
 } @else {
   [[Continue -> Hallway]]
 }
 
-@for (const item of $inventory; key item.id) {
+@each (item of $inventory; key item.id) {
   - {{ item.name }}
 }
 
 @EnemyCard({ enemy: $enemy })
+
+@view EnemyBadge({ enemy }) {
+  **{{ enemy.name }}**
+  @children
+}
 
 @region notification {
   No messages.
 }
 ```
 
-`@slot` is a synonym for `@region`. Loop keys must be unique strings or numbers. Without an explicit key, gneh uses `item.id` when available and otherwise the index, with a warning. `@enter`, `@action`, and `@module` are top-level declarations and may not be hidden in a reactive branch.
+Loop keys must be unique strings or numbers. Without an explicit key, gneh uses `item.id` when available and otherwise the index, with a warning. `@enter`, `@action`, `@view`, `@import`, `@export`, and `@const` are top-level declarations and may not be hidden in a reactive branch.
 
-Navigation uses `[[Label -> Target]]`, `[[Target]]`, and optional props such as `[[Inspect -> Card({enemy: $enemy})]]`. An action button uses `[[Label => actionName]]`.
+Navigation uses `[[Label -> Target]]`, `[[Target]]`, and optional props such as `[[Inspect -> Card({enemy: $enemy})]]`. An action button uses `[[Label => actionName(args)]]`. `@view` and `@action` both accept pure-expr binding-pattern parameters; a view call renders nodes, while an action call runs effects in the current transaction. `@children` inserts the caller-provided body inside a view.
 
 The document profile includes headings, paragraphs, lists, quotes, code fences, inline code, emphasis, strong text, strikeout, links, images, rules, styled spans, and extension containers. Raw HTML is not an executable host node.
 
@@ -95,24 +105,36 @@ The health value changed.
 
 Presentation tokens and extension records are semantic data. A renderer decides how to display them.
 
-## Inkdown modules
+## Inkdown effects and ESM imports
 
 ```inkdown
-@module {
-  import Panel from './Panel.mjs';
-  const prefix = 'Hello';
-  export function greet(name) { return prefix + ' ' + name; }
+@import { default as Panel, greet } from "./ui.mjs"
+@export { greet }
+@const heading = "Welcome"
+
+@action collect({ bonus = 1 }) {
+  @let [first, ...rest] = $values;
+  @if (first > 0) {
+    @do $total += first + bonus;
+    @each (value of rest) {
+      @do $total += value;
+    }
+  } @else {
+    @do $total = 0;
+  }
 }
 
-# {{ greet(props.name) }}
+# {{ heading }} — {{ greet(props.name) }}
 @Panel({ label: 'embedded' })
 ```
 
-A source file has at most one shared `@module`. It uses JavaScript ESM grammar, not TypeScript syntax. Default export and compiler-reserved names are unavailable because the document owns those exports. Data/vendor builds reject modules; Vite or CLI ESM compilation is required.
+Effect bodies contain only `@do`, `@let`, `@call`, effect `@if`, and effect `@each`. They cannot contain JavaScript declarations, blocks, `import`, `export`, `await`, `yield`, or dynamic import. A source-position `@effect { ... }` is available for explicit ordered effects, primarily as a behavior-preserving migration target for compatibility dialects. Its presence makes that passage materialized so values before and after the effect retain source-order observations.
+
+`@import` becomes a static named ESM import; `default as Name` imports a default export. `@export` exposes an imported local binding. JavaScript implementation belongs in an ordinary `.mjs`/`.js` module, where standard ESM can import any other module. Data/vendor builds reject these imports because they have no application module graph. Inkdown deliberately has no `@module` or `@script` escape hatch.
 
 ## Portable JavaScript subset
 
-`pure-expr` parses every frontend into its restricted ESTree subset. Supported forms include scalars, arrays/objects, property access, arithmetic and boolean operators, conditionals, short-circuit and optional chains, templates, expression-bodied arrow functions, and calls. Actions additionally enable identifier/member assignment and updates; gneh supplies the small statement layer for local declarations, expression statements, `if`, and `for-of`.
+`pure-expr` parses every frontend into its restricted ESTree subset. Supported forms include scalars, arrays/objects, property access, arithmetic and boolean operators, conditionals, short-circuit and optional chains, templates, expression-bodied arrow functions, and calls. It also supplies binding-pattern and streaming scan APIs used by action/view parameters, `@let`, and iteration clauses. Effect expressions additionally enable identifier/member assignment and updates; gneh supplies effect control flow rather than a JavaScript statement parser.
 
 Render expressions are evaluated with writes denied. Enter/action expressions commit writes into the enclosing Story transaction, so failed member writes, invalid JSON state, or later rendering errors roll back together. The parser still excludes statement-only JavaScript such as `new`, classes, dynamic import, generators, and block-bodied arrow functions; complex trusted behavior belongs in handwritten ESM or an explicit host binding.
 
@@ -154,4 +176,4 @@ Range and C-style loops, widget and capture scope semantics, scripts, source-lev
 
 ## Migration
 
-`gneh migrate` converts only constructs with a behavior-preserving Inkdown spelling. Compatibility-only source-order effects, interactions, controls, portals, and region changes fail with `MIGRATION_UNREPRESENTABLE`; they are never emitted as false-success Inkdown. Migration means “same observable gneh semantics after lowering,” not “complete source-engine behavior preserved.”
+`gneh migrate` converts only constructs with a behavior-preserving Inkdown spelling. Source-order effects become `@effect` blocks. Compatibility-only interactions, controls, portals, and region changes still fail with `MIGRATION_UNREPRESENTABLE`; they are never emitted as false-success Inkdown. Migration means “same observable gneh semantics after lowering,” not “complete source-engine behavior preserved.”

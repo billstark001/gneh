@@ -1,4 +1,4 @@
-import { type Expression, type ParseResult, type Statement, type StoryNode } from '@gneh/core';
+import { type EffectNode, type Expression, type ParseResult, type StoryNode } from '@gneh/core';
 import { splitPassages, diag } from '@gneh/source';
 import {
   harloweMacroName,
@@ -159,7 +159,7 @@ function labelNodes(macro: KarloweMacroToken, p: MarkupParser, base: number): St
   ];
 }
 
-function hostStatement(operation: string, args: Expression[]): Statement {
+function hostEffect(operation: string, args: Expression[]): EffectNode {
   return {
     type: 'expression',
     expression: {
@@ -171,10 +171,10 @@ function hostStatement(operation: string, args: Expression[]): Statement {
   };
 }
 
-function effect(statements: Statement[], macro: KarloweMacroToken, p: MarkupParser, base: number) {
+function effect(effects: EffectNode[], macro: KarloweMacroToken, p: MarkupParser, base: number) {
   return {
     type: 'effect' as const,
-    statements,
+    effects,
     span: p.span(base + macro.start, base + macro.end),
   };
 }
@@ -475,7 +475,7 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
   if (name === 'gotourl' || name === 'reload') {
     const args = name === 'reload' ? [] : [expression(first, p, base)];
     return {
-      nodes: [effect([hostStatement(name === 'reload' ? 'restart' : 'open-external', args)], first, p, base)],
+      nodes: [effect([hostEffect(name === 'reload' ? 'restart' : 'open-external', args)], first, p, base)],
       end: first.end,
       block: !inline,
     };
@@ -487,7 +487,7 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
       : [];
     const operation = name.startsWith('save') ? 'save' : 'load';
     return {
-      nodes: [effect([hostStatement(operation, args)], first, p, base)],
+      nodes: [effect([hostEffect(operation, args)], first, p, base)],
       end: first.end,
       block: !inline,
     };
@@ -497,7 +497,7 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
     const args = splitTopLevel(first.args);
     const label = literalString(args[0] ?? '"Undo"', p, base + first.argsStart);
     const action = p.addAction(
-      [hostStatement('undo', [])],
+      [hostEffect('undo', [])],
       first.args,
       p.span(base + first.argsStart, base + first.end - 1),
     );

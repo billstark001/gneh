@@ -1,6 +1,6 @@
 # @gneh/expression
 
-Shared `pure-expr` grammar, dialect operator lexer rules, ESTree traversal, and restricted effect-statement parsing. Runtime evaluation belongs to `@gneh/core`; this package has no second expression IR or JavaScript emitter.
+Shared `pure-expr` grammar, binding patterns, streaming scanners, and dialect operator lexer rules. Runtime evaluation belongs to `@gneh/core`; this package has no second expression IR, JavaScript statement parser, or JavaScript emitter.
 
 Part of gneh 0.1.0. See the workspace README and docs for the supported language profile and verification limitations.
 

@@ -44,7 +44,7 @@ test('Vite hooks enforce snapshot capability and emit concrete declarations', ho
             throw new Error(message);
           },
         },
-        ':: Start\n@action hit { $hp -= 1; }\n[[Hit => hit]]',
+        ':: Start\n@action hit { @do $hp -= 1; }\n[[Hit => hit]]',
         '/project/a.inkdown',
       ),
     /live/,

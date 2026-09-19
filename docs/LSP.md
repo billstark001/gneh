@@ -52,6 +52,6 @@ TypeScript 7 builds and checks the workspace. The language service imports the c
 
 ## Precision limits
 
-External `@module` bindings are conservatively typed in template projection. Full type inference for ordinary ESM remains the responsibility of the application build. Diagnostic mapping is expression/action-block level and may not preserve an exact sub-token column after a dialect alias is lowered. Rename refuses ambiguous IDs, header-name/metadata-ID mismatches, and dynamic references.
+External `@import` bindings are conservatively typed in template projection. Full type inference for ordinary ESM remains the responsibility of the application build. Diagnostic mapping is expression/effect-block level and may not preserve an exact sub-token column after a compatibility-dialect alias is lowered. Rename refuses ambiguous IDs, header-name/metadata-ID mismatches, and dynamic references.
 
 `packages/language-service/test/language-service.test.ts` covers the TypeScript projection and cross-file operations. `packages/lsp/test/lsp.test.ts` launches real server subprocesses and exchanges Content-Length protocol messages over both supported transports.

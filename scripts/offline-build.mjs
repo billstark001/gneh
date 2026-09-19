@@ -41,13 +41,6 @@ for (const name of packages) {
 
 fs.rmSync(path.join(root, '.cache', 'tsbuildinfo'), { recursive: true, force: true });
 
-if (process.env.GNEH_ACORN_ROOT) {
-  const link = path.join(root, 'node_modules', 'acorn');
-  try {
-    fs.symlinkSync(process.env.GNEH_ACORN_ROOT, link, 'dir');
-  } catch {}
-}
-
 if (process.env.GNEH_TYPESCRIPT_API) {
   const configured = path.resolve(process.env.GNEH_TYPESCRIPT_API);
   const directory = configured.endsWith('.js') ? path.resolve(configured, '../..') : configured;

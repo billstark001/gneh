@@ -1,10 +1,10 @@
 /** Portable IR pretty-printer used by the explicit migration command. */
-import { GnehError, type PassageIR, type Statement, type StoryNode } from '@gneh/core';
+import { GnehError, type EffectNode, type PassageIR, type StoryNode } from '@gneh/core';
 import type { BindingPattern, ExpressionNode, Property } from '@gneh/expression';
 
 export type IdentifierPrinter = (name: string) => string;
 
-function printBinding(binding: BindingPattern, identifier: IdentifierPrinter): string {
+export function printBinding(binding: BindingPattern, identifier: IdentifierPrinter): string {
   switch (binding.type) {
     case 'Identifier':
       return identifier(binding.name);
@@ -95,18 +95,20 @@ export function printExpression(e: ExpressionNode, identifier: IdentifierPrinter
   }
 }
 
-export function printStatements(statements: Statement[], indent = '  '): string {
-  return statements
+export function printEffects(effects: EffectNode[], indent = '  '): string {
+  return effects
     .map((s) => {
       switch (s.type) {
-        case 'declare':
-          return `${indent}let ${s.name} = ${printExpression(s.value)};`;
+        case 'bind':
+          return `${indent}@let ${printBinding(s.binding, (name) => name)} = ${printExpression(s.value)};`;
         case 'expression':
-          return `${indent}${printExpression(s.expression)};`;
+          return `${indent}@do ${printExpression(s.expression)};`;
         case 'if':
-          return `${indent}if (${printExpression(s.test)}) {\n${printStatements(s.yes, indent + '  ')}\n${indent}}${s.no.length ? ` else {\n${printStatements(s.no, indent + '  ')}\n${indent}}` : ''}`;
+          return `${indent}@if (${printExpression(s.test)}) {\n${printEffects(s.yes, indent + '  ')}\n${indent}}${s.no.length ? ` @else {\n${printEffects(s.no, indent + '  ')}\n${indent}}` : ''}`;
         case 'each':
-          return `${indent}for (const ${s.name} of ${printExpression(s.items)}) {\n${printStatements(s.body, indent + '  ')}\n${indent}}`;
+          return `${indent}@each (${printBinding(s.binding, (name) => name)} of ${printExpression(s.items)}) {\n${printEffects(s.body, indent + '  ')}\n${indent}}`;
+        case 'invoke':
+          return `${indent}@call ${s.name}(${s.args.map((argument) => printExpression(argument)).join(', ')});`;
       }
     })
     .join('\n');
@@ -128,13 +130,13 @@ export function toInkdown(passages: PassageIR[]): string {
           case 'if':
             return `\n@if (${printExpression(n.test.ast)}) {\n${render(n.yes)}\n}${n.no.length ? ` @else {\n${render(n.no)}\n}` : ''}\n`;
           case 'each':
-            return `\n@for (const ${n.name} of ${printExpression(n.items.ast)}${n.key ? `; key ${printExpression(n.key.ast)}` : ''}) {\n${render(n.children)}\n}\n`;
+            return `\n@each (${n.name} of ${printExpression(n.items.ast)}${n.key ? `; key ${printExpression(n.key.ast)}` : ''}) {\n${render(n.children)}\n}\n`;
           case 'include':
             return `@${n.target}(${n.props ? printExpression(n.props.ast) : ''})`;
           case 'choice':
             return `[[${render(n.children)} -> ${n.target}${n.props ? '(' + printExpression(n.props.ast) + ')' : ''}]]`;
           case 'button':
-            return `[[${render(n.children)} => ${n.action}]]`;
+            return `[[${render(n.children)} => ${n.action.name}(${n.action.args.map((argument) => printExpression(argument)).join(', ')})]]`;
           case 'region':
             return `\n@region ${n.name} {\n${render(n.children)}\n}\n`;
           case 'extension':
@@ -146,6 +148,7 @@ export function toInkdown(passages: PassageIR[]): string {
               .map(([k, e]) => `${k}={{ ${printExpression(e.ast)} }}`)
               .join(' ')}}\n${render(n.children)}\n:::\n`;
           case 'effect':
+            return `\n@effect {\n${printEffects(n.effects)}\n}\n`;
           case 'interaction':
           case 'region-change':
           case 'portal':
@@ -156,6 +159,10 @@ export function toInkdown(passages: PassageIR[]): string {
               `${n.type} has no behavior-preserving Inkdown spelling. Keep the source dialect or rewrite it explicitly.`,
               n.span,
             );
+          case 'view-call':
+            return `@${n.name}(${n.args.map((argument) => printExpression(argument.ast)).join(', ')})${n.children.length ? `{${render(n.children)}}` : ''}`;
+          case 'children':
+            return '@children';
           case 'content': {
             const c = render(n.children);
             switch (n.kind) {
@@ -207,10 +214,21 @@ export function toInkdown(passages: PassageIR[]): string {
       const metadata = { ...p.metadata };
       delete metadata.name;
       delete metadata.dialect;
-      return `:: ${p.name} ${JSON.stringify(metadata)}\n${p.module ? '@module {\n' + p.module + '\n}\n' : ''}${p.enter.length ? '@enter {\n' + printStatements(p.enter) + '\n}\n' : ''}${Object.values(
-        p.actions,
+      return `:: ${p.name} ${JSON.stringify(metadata)}\n${p.imports.map((value) => `@import { ${value.imported}${value.imported === value.local ? '' : ` as ${value.local}`} } from ${JSON.stringify(value.source)}\n`).join('')}${p.exports.length ? `@export { ${p.exports.join(', ')} }\n` : ''}${Object.entries(
+        p.constants,
       )
-        .map((a) => '@action ' + a.name + ' {\n' + printStatements(a.statements) + '\n}\n')
+        .map(([name, value]) => `@const ${name} = ${printExpression(value.ast)}\n`)
+        .join('')}${p.enter.length ? '@enter {\n' + printEffects(p.enter) + '\n}\n' : ''}${Object.values(p.effects)
+        .filter((effect) => !effect.name.startsWith('__action'))
+        .map(
+          (effect) =>
+            `@action ${effect.name}(${effect.params.map((param) => printBinding(param, (name) => name)).join(', ')}) {\n${printEffects(effect.body)}\n}\n`,
+        )
+        .join('')}${Object.values(p.views)
+        .map(
+          (view) =>
+            `@view ${view.name}(${view.params.map((param) => printBinding(param, (name) => name)).join(', ')}) {\n${render(view.body).trim()}\n}\n`,
+        )
         .join('')}\n${render(p.body).trim()}\n`;
     })
     .join('\n');

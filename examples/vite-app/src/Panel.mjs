@@ -1,6 +1,8 @@
 import { defineFragment, v } from '@gneh/runtime';
 import Start from './story.inkdown';
 
+export const description = 'A normal ESM named export.';
+
 /** @typedef {{ label?: string }} Props */
 /** @type {import('@gneh/core').Fragment<Props>} */
 export default defineFragment({

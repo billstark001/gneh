@@ -22,6 +22,7 @@ export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: Mar
     }
   }
   visit(body);
+  for (const view of Object.values(parser.views)) visit(view.body);
   return {
     id: parsed.id,
     name: parsed.name,
@@ -30,11 +31,13 @@ export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: Mar
     source: parsed.body,
     span: parsed.span,
     body,
-    evaluation: 'reactive',
+    evaluation: parser.evaluation,
     enter: parser.enter,
-    actions: parser.actions,
-    module: parser.module,
+    effects: parser.effects,
+    views: parser.views,
+    constants: parser.constants,
     imports: parser.imports,
+    exports: parser.exports,
     capabilities: [...capabilities],
   };
 }

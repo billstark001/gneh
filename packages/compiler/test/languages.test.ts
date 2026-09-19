@@ -11,7 +11,7 @@ import { createSugarcastLowerings, parseSugarcastCST } from '../../sugarcast/dis
 test('native documents stay reactive while compatibility dialects materialize their passage', () => {
   const sources = {
     inkdown:
-      ':: Start\n@action hit { $hp -= 1; }\n@if ($hp > 0) {\nHP: $hp\n[[Hit => hit]]\n} @else {\nDead\n}\n[[Next -> End]]\n:: End\nEnd',
+      ':: Start\n@action hit { @do $hp -= 1; }\n@if ($hp > 0) {\nHP: $hp\n[[Hit => hit]]\n} @else {\nDead\n}\n[[Next -> End]]\n:: End\nEnd',
     karlowe:
       ':: Start\n(if: $hp > 0)[HP: $hp (link-repeat: "Hit")[(set: $hp to $hp - 1)]](else:)[Dead]\n[[Next->End]]\n:: End\nEnd',
     sugarcast:
@@ -44,7 +44,7 @@ test('dialect frontends do not expose aliases or interpret Inkdown directives', 
 
   for (const dialect of ['karlowe', 'sugarcast']) {
     const result = compiled('@action change { $value = 2; }\n@if ($value) { changed }', dialect);
-    assert.deepEqual(result.passages[0].actions, {});
+    assert.deepEqual(result.passages[0].effects, {});
     assert.match(text(new Story(result.story).view), /@action/);
   }
 });
@@ -64,7 +64,7 @@ test('expression identifiers preserve sigils while the expression wrapper carrie
     assert.equal(ast.name, source);
     assert.deepEqual(parseExpression(source, span).span, span);
   }
-  const passage = compiled('@module {\nexport const helper = () => 1;\n}\n{{ helper() }}').passages[0];
+  const passage = compiled('@import { helper } from "./helpers.mjs"\n{{ helper() }}').passages[0];
   const call = passage.body[0].children.find((node) => node.type === 'value').expression.ast;
   assert.deepEqual(call.callee, { type: 'Identifier', name: 'helper' });
 });
@@ -76,7 +76,7 @@ test('inline escapes, code and currency do not execute variables', () => {
 
 test('nested conditions and keyed loops are real structural nodes', () => {
   const s = story(
-    '@if ($ok) {\n@for (const item of $items; key item.id) {\n- {{ item.name }}\n}\n} @else {\nNo\n}',
+    '@if ($ok) {\n@each (item of $items; key item.id) {\n- {{ item.name }}\n}\n} @else {\nNo\n}',
     'inkdown',
     {
       state: {
@@ -103,6 +103,12 @@ test('reusable passage parameters are checked and passed', () => {
   const s = story(source, 'inkdown', { state: { enemy: { name: 'Ink' } } });
   assert.equal(text(s.view), 'Ink');
   assert.ok(compileSource(source.replace('{enemy: $enemy}', '{}')).diagnostics.some((d) => d.code === 'PROPS_MISSING'));
+});
+
+test('view-style passage calls resolve display-name aliases to runtime ids', () => {
+  const source = ':: Start\n@Card()\n:: Card\n---\nid: RealCard\n---\nresolved';
+  assert.equal(text(story(source).view), 'resolved');
+  assert.equal(compileSource(source).passages[0].body[0].children[0].name, 'RealCard');
 });
 
 test('unknown fragment references fail at compile time', () => {
@@ -319,8 +325,42 @@ test('portable Harlowe and SugarCube checkbox bindings remain live', () => {
 
 test('entry declarations cannot hide inside reactive branches', () => {
   assert.ok(
-    compileSource('@if ($yes) {\n@enter { $x = 1; }\n}').diagnostics.some((d) => d.code === 'DECLARATION_NESTED'),
+    compileSource('@if ($yes) {\n@enter { @do $x = 1; }\n}').diagnostics.some((d) => d.code === 'DECLARATION_POSITION'),
   );
+});
+
+test('Inkdown has no JavaScript statement, module, or script escape hatch', () => {
+  for (const source of [
+    '@action broken { if ($ok) { $x = 1; } }',
+    '@action broken { @do await task(); }',
+    '@module { export const x = 1; }',
+    '@script { import("./side-effect.mjs"); }',
+  ])
+    assert.ok(compileSource(source).diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
+});
+
+test('declarative ESM records reject names that collide with state or temporary namespaces', () => {
+  for (const source of [
+    '@import { helper as $helper } from "./helpers.mjs"',
+    '@import { helper as _helper } from "./helpers.mjs"',
+    '@const $value = 1',
+    '@export { bad-name }',
+  ])
+    assert.ok(compileSource(source).diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
+});
+
+test('effect calls are checked inside actions and declared views are checked like passage bodies', () => {
+  assert.ok(
+    compileSource('@action outer { @call missing(); }\n[[Run => outer]]').diagnostics.some(
+      (diagnostic) => diagnostic.code === 'ACTION_MISSING',
+    ),
+  );
+  assert.ok(
+    compileSource('@view Card() { @Missing() }\n@Card()').diagnostics.some(
+      (diagnostic) => diagnostic.code === 'VIEW_MISSING',
+    ),
+  );
+  assert.ok(compileSource('@children').diagnostics.some((diagnostic) => diagnostic.code === 'CHILDREN_POSITION'));
 });
 
 test('karlowe arithmetic, containers, possessive access and membership are normalized', () => {
@@ -385,10 +425,15 @@ test('migration pretty-printer preserves supported observable behavior', () => {
   assert.equal(text(a.view).replace(/\s/g, ''), text(b.view).replace(/\s/g, ''));
 });
 
-test('migration refuses compatibility-only effects instead of dropping them', () => {
-  assert.throws(
-    () => toInkdown(compiled('(set: $hp to 2)', 'karlowe', { state: { hp: 1 } }).passages),
-    /no behavior-preserving Inkdown spelling/,
+test('migration spells compatibility effects as Inkdown effects', () => {
+  const parsed = compiled('(print: $hp)(set: $hp to 2)(print: $hp)', 'karlowe', { state: { hp: 1 } });
+  const native = toInkdown(parsed.passages);
+  const original = new Story(parsed.story);
+  original.start();
+  assert.match(native, /@effect[\s\S]*@do \(\$hp = 2\)/);
+  assert.equal(
+    text(original.view).replaceAll(/\s/g, ''),
+    text(story(native, 'inkdown', { state: { hp: 1 } }).view).replaceAll(/\s/g, ''),
   );
 });
 
@@ -404,16 +449,16 @@ test('vendor data compiler and optional wikifier use the same ABI', () => {
 });
 
 test('wikify rejects module and source effects; pure excludes actions/regions', () => {
-  assert.throws(() => createWikifier()('@enter { $hp=1; }'));
+  assert.throws(() => createWikifier()('@enter { @do $hp=1; }'));
   assert.throws(() => createWikifier()('(set: $hp to 1)', 'karlowe'));
-  assert.throws(() => createWikifier()('@module { export const x=1; }'));
-  assert.throws(() => createWikifier({ pure: true })('@slot x { hello }'));
+  assert.throws(() => createWikifier()('@import { x } from "./x.mjs"'));
+  assert.throws(() => createWikifier({ pure: true })('@region x { hello }'));
   assert.throws(() => createWikifier()(':: A\na\n:: B\nb'));
 });
 
 test('snapshot target rejects live requirements but retains navigation', () => {
   assert.ok(
-    compileSource('@slot n { hello }', 'x.md', { live: false }).diagnostics.some((d) => d.code === 'CAPABILITY_LIVE'),
+    compileSource('@region n { hello }', 'x.md', { live: false }).diagnostics.some((d) => d.code === 'CAPABILITY_LIVE'),
   );
   const s = story(':: Start\n[[Go->End]]\n:: End\nDone', 'inkdown', { live: false });
   click(s, 'Go');

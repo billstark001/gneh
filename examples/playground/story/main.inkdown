@@ -9,9 +9,9 @@ layout:
   accent: brass
 ---
 @action takeKey {
-  $hasKey = true;
-  $insight += 1;
-  $log.push({id: $log.length, text: "You accepted the brass key from the archivist."});
+  @do $hasKey = true;
+  @do $insight += 1;
+  @do $log.push({id: $log.length, text: "You accepted the brass key from the archivist."});
 }
 
 # The Nocturne Archive
@@ -38,7 +38,7 @@ but the things people forgot they once knew.
 
 [[Enter the vault - Sugarcast -> Vault]]
 
-@slot notes {
+@region notes {
   *This notes region belongs to one Fragment instance. JavaScript can replace it
   without manipulating the DOM.*
 }
@@ -46,7 +46,7 @@ but the things people forgot they once knew.
 :: FieldNotes {"title":"04 / Traveler's notes"}
 # Traveler's notes
 
-@for (const event of $log; key event.id) {
+@each (event of $log; key event.id) {
   - {{ event.text }}
 }
 

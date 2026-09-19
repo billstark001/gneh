@@ -17,9 +17,9 @@ These are **altered source versions**, not the original Harlowe implementation. 
 
 The root twee-grind MIT license is in `licenses/twee-grind-MIT.txt`. The Harlowe package's additional **zlib-style** license is in `licenses/twee-grind-harlowe.txt`; it is not MIT. Both original copyright notices are retained. Relevant notices are also included with the individual packages.
 
-## Acorn
+## pure-expr
 
-The standalone ESM/vendor builds include Acorn 8.18.0, copyright its contributors, under MIT. See `licenses/acorn-MIT.txt` and `standalone/node_modules/acorn/LICENSE`. It parses JavaScript; gneh validates and lowers the supported portable subset rather than evaluating arbitrary source.
+Expression parsing, binding patterns, streaming scanners, and evaluation use `pure-expr` 0.4.0 under MIT. Browser bundles retain its notice in `licenses/pure-expr-MIT.txt`; standalone builds also retain the installed package license under `standalone/node_modules/pure-expr/LICENSE`.
 
 ## parse5 and entities
 

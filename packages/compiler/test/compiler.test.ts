@@ -11,11 +11,12 @@ const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
 
 const core = new URL('../../core/dist/index.js', import.meta.url).href;
 
-async function emittedStory(source, state = {}) {
+async function emittedStory(source, state = {}, modules = {}) {
   const result = compiled(source, 'inkdown', { state });
   const output = generateModule(result.passages, source, 'test.inkdown');
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-esm-'));
   const file = path.join(dir, 'story.mjs');
+  for (const [name, contents] of Object.entries(modules)) await fs.writeFile(path.join(dir, name), contents);
   await fs.writeFile(
     file,
     output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)).replaceAll('"@gneh/core"', JSON.stringify(core)),
@@ -30,7 +31,7 @@ async function emittedStory(source, state = {}) {
 
 test('generated ESM and IR interpretation agree on mutations, conditions and navigation', async () => {
   const source =
-    ':: Start\n@action hit { $hp -= 1; }\n@if ($hp > 0) {\nHP: {{ $hp + 1 }}\n[[Hit => hit]]\n} @else {\nDone\n}\n[[End]]\n:: End\nEND';
+    ':: Start\n@action hit { @do $hp -= 1; }\n@if ($hp > 0) {\nHP: {{ $hp + 1 }}\n[[Hit => hit]]\n} @else {\nDone\n}\n[[End]]\n:: End\nEND';
   const a = story(source, 'inkdown', { state: { hp: 2 } }),
     b = await emittedStory(source, { hp: 2 });
   try {
@@ -81,9 +82,14 @@ test('optional chaining stops only its own chain, not a parenthesized outer acce
 });
 
 test('compiled null results are not evaluated twice', async () => {
-  const source =
-    '@module {\nexport let calls = 0;\nexport function counted() { calls++; return null; }\n}\n{{ counted() }}';
-  const b = await emittedStory(source);
+  const source = '@import { calls, counted } from "./helpers.mjs"\n@export { calls }\n{{ counted() }}';
+  const b = await emittedStory(
+    source,
+    {},
+    {
+      'helpers.mjs': 'export let calls = 0; export function counted() { calls++; return null; }',
+    },
+  );
   try {
     assert.equal(text(b.story.view), '');
     assert.equal(
@@ -190,15 +196,34 @@ test('different modules may each define a private passage named Card', async () 
 
 test('private module helpers and live module bindings remain available to templates', async () => {
   const b = await emittedStory(
-    '@module {\nlet value = "first";\nfunction local() { return value; }\nexport function change() { value = "second"; }\n}\n{{ local() }} / {{ value }}',
+    '@import { value, local, change } from "./helpers.mjs"\n@export { change }\n{{ local() }} / {{ value }}',
+    {},
+    {
+      'helpers.mjs':
+        'export let value = "first"; export function local() { return value; } export function change() { value = "second"; }',
+    },
   );
   try {
     assert.equal(text(b.story.view), 'first / first');
     b.module.change();
     b.story.refresh();
     assert.equal(text(b.story.view), 'second / second');
-    assert.match(b.output.declarations, /function change/);
+    assert.match(b.output.declarations, /const change/);
   } finally {
     await b.dispose();
+  }
+});
+
+test('declarative imports support default ESM exports without an embedded module body', async () => {
+  const output = await emittedStory(
+    '@import { default as greet } from "./greet.mjs"\n@export { greet }\n{{ greet("Ada") }}',
+    {},
+    { 'greet.mjs': 'export default name => `Hello ${name}`;' },
+  );
+  try {
+    assert.equal(text(output.story.view), 'Hello Ada');
+    assert.equal(output.module.greet('Lin'), 'Hello Lin');
+  } finally {
+    await output.dispose();
   }
 });

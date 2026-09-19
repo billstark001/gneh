@@ -24,7 +24,6 @@ async function offlineBundle(entry, output) {
   const modules = new Map();
   function resolve(specifier, parent) {
     if (specifier.startsWith('@gneh/')) return path.join(root, 'packages', specifier.slice(6), 'src/index.ts');
-    if (specifier === 'acorn') return require.resolve('acorn');
     if (specifier.startsWith('.')) {
       const full = path.resolve(path.dirname(parent), specifier);
       for (const candidate of [full.replace(/\.js$/, '.ts'), full, full + '/index.ts'])
@@ -98,9 +97,9 @@ if (offline) {
 // Preserve full license notices even when a browser bundle is copied out of the workspace.
 const licenseFiles = [
   'LICENSE',
+  'licenses/pure-expr-MIT.txt',
   'licenses/twee-grind-MIT.txt',
   'licenses/twee-grind-harlowe.txt',
-  'licenses/acorn-MIT.txt',
 ];
 
 const banner =

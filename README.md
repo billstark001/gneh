@@ -67,7 +67,7 @@ tags: [chapter-one]
 ---
 :: Start [start] {"title":"The Night Archive"}
 @action takeKey {
-  $hasKey = true;
+  @do $hasKey = true;
 }
 
 # The Night Archive
@@ -128,7 +128,7 @@ A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScr
 | --- | --- |
 | `@gneh/core` | JSON state, Story/effect IR, pure-expr runtime integration, semantic views, and Fragment protocols |
 | `@gneh/source` | Twee containers, front matter, metadata, and source locations |
-| `@gneh/expression` | Shared pure-expr grammar, dialect lexer rules, ESTree traversal, and restricted effect statements |
+| `@gneh/expression` | Shared pure-expr grammar, binding patterns, streaming scanners, and dialect lexer rules |
 | `@gneh/syntax` | Dialect-neutral scanning, CST-to-IR lowering, and passage assembly |
 | `@gneh/inkdown` | Inkdown directives and frontend assembly |
 | `@gneh/karlowe` | Harlowe-like syntax and expression lowering |

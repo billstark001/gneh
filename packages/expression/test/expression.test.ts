@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { parseExpression, parseModule, parseStatements } from '../dist/index.js';
+import {
+  parseBindingPattern,
+  parseExpression,
+  parseIterationClause,
+  parseSugarExpression,
+  scanBindingPattern,
+} from '../dist/index.js';
 
 describe('@gneh/expression', () => {
   test('parses state and lexical identifiers into restricted ESTree', () => {
@@ -13,7 +19,7 @@ describe('@gneh/expression', () => {
   });
 
   test('parses dialect operator aliases without rewriting strings', () => {
-    expect(parseExpression('$a is 1 and "is and"').ast).toMatchObject({
+    expect(parseSugarExpression('$a is 1 and "is and"').ast).toMatchObject({
       type: 'LogicalExpression',
       operator: '&&',
       left: { type: 'BinaryExpression', operator: '===' },
@@ -21,21 +27,29 @@ describe('@gneh/expression', () => {
     });
   });
 
-  test('uses the same aliases inside effect control flow', () => {
-    expect(parseStatements('if ($hp gt 0 and ready) { $hp to $hp - 1; }')).toMatchObject([
-      {
-        type: 'if',
-        test: { type: 'LogicalExpression', operator: '&&' },
-        yes: [{ type: 'expression', expression: { type: 'AssignmentExpression', operator: '=' } }],
-      },
-    ]);
+  test('parses binding patterns for Inkdown declarations', () => {
+    expect(parseBindingPattern('{ hp, inventory: [first, ...rest] }')).toMatchObject({
+      type: 'ObjectPattern',
+      properties: [{ value: { type: 'Identifier', name: 'hp' } }, { value: { type: 'ArrayPattern' } }],
+    });
+    expect(() => parseBindingPattern('$hp')).toThrow(/Persistent state/);
   });
 
-  test('extracts module bindings and exports', () => {
-    expect(parseModule('export const answer = 42; export function helper() {}')).toMatchObject({
-      exports: ['answer', 'helper'],
-      bindings: ['answer', 'helper'],
-      functions: ['helper'],
+  test('parses DSL iteration clauses without a JavaScript Program parser', () => {
+    expect(parseIterationClause('[head, ...tail] of $items')).toMatchObject({
+      binding: { type: 'ArrayPattern' },
+      iterable: { type: 'Identifier', name: '$items' },
     });
+  });
+
+  test('streams a binding pattern up to a host-language delimiter', () => {
+    const source = '{ value = 1, ...rest } = input';
+    const result = scanBindingPattern(
+      source,
+      undefined,
+      (token, depth) => depth === 0 && token.kind === 'op' && token.value === '=',
+    );
+    expect(result.pattern).toMatchObject({ type: 'ObjectPattern' });
+    expect(source.slice(result.next).trimStart()).toBe('= input');
   });
 });

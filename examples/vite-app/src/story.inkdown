@@ -1,8 +1,6 @@
 :: Start [start]
-@module {
-  import Panel from './Panel.mjs';
-  export const description = 'A normal ESM named export.';
-}
+@import { default as Panel, description } from "./Panel.mjs"
+@export { description }
 
 # Markdown is one source representation
 

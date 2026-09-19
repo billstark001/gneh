@@ -1,11 +1,11 @@
-/** Fragment constructors and semantic-IR rendering adapter. */
 import {
   display,
+  bindPattern,
   evaluateExpression,
-  executeStatements,
+  executeEffects,
   invariant,
-  type AnyFragment,
   type Expression,
+  type EffectCallIR,
   type Fragment,
   type FragmentContext,
   type FragmentProps,
@@ -46,6 +46,15 @@ export function defineIRFragment(
   } = {},
 ): Fragment {
   const evaluateValue = (e: Expression, ctx: FragmentContext, scope: Scope) => evaluateExpression(e.ast, ctx, scope);
+  const resolveEffect = (name: string) => ir.effects[name];
+  const invokeEffect = (name: string, args: EffectCallIR['args'], ctx: FragmentContext, scope: Scope) =>
+    executeEffects([{ type: 'invoke', name, args }], ctx, scope, resolveEffect);
+  const withConstants = (ctx: FragmentContext, scope: Scope): Scope => {
+    const result = { ...scope };
+    for (const [name, expression] of Object.entries(ir.constants))
+      result[name] = evaluateValue(expression, ctx, result);
+    return result;
+  };
   const valueAt = (e: Expression, ctx: FragmentContext, scope: Scope, key: string) =>
     ir.evaluation === 'materialized'
       ? ctx.local(`value:${key}`, (initial) => evaluateValue(e, initial, scope))
@@ -67,7 +76,7 @@ export function defineIRFragment(
             },
           ];
         case 'effect':
-          ctx.effect(key, (initial) => executeStatements(node.statements, initial, { ...scope }));
+          ctx.effect(key, (initial) => executeEffects(node.effects, initial, { ...scope }, resolveEffect));
           return [];
         case 'value':
           return [{ kind: 'text', key, text: display(valueAt(node.expression, ctx, scope, key)) }];
@@ -121,9 +130,7 @@ export function defineIRFragment(
               children: nodes(node.children, ctx, scope, key),
               activate: () =>
                 ctx.dispatch((actionCtx) => {
-                  const action = ir.actions[node.action];
-                  invariant(action, 'ACTION_MISSING', `Unknown action: ${node.action}`);
-                  executeStatements(action.statements, actionCtx, { ...scope });
+                  invokeEffect(node.action.name, node.action.args, actionCtx, { ...scope });
                 }),
             },
           ];
@@ -144,8 +151,6 @@ export function defineIRFragment(
                   const current = actionCtx.local(countKey, () => 0);
                   if (node.behavior === 'reveal' && current) return;
                   actionCtx.setLocal(countKey, current + 1);
-                  // Materialize the newly revealed flow inside the transaction so
-                  // its source-order effects participate in rollback/history.
                   nodes(node.children, actionCtx, scope, `${key}/reveal:${current}`);
                 }),
             },
@@ -174,13 +179,11 @@ export function defineIRFragment(
           });
           return [];
         case 'control': {
-          const action = ir.actions[node.action];
-          invariant(action, 'ACTION_MISSING', `Unknown action: ${node.action}`);
+          const action = ir.effects[node.action.name];
+          invariant(action, 'ACTION_MISSING', `Unknown action: ${node.action.name}`);
           const options = node.options.map((option, optionIndex) =>
             valueAt(option, ctx, scope, `${key}/option:${optionIndex}`),
           );
-          // Bound controls intentionally observe current state even in an otherwise
-          // materialized Harlowe passage; 2bind is a live UI contract.
           const value = evaluateValue(node.value, ctx, scope);
           return [
             {
@@ -189,9 +192,40 @@ export function defineIRFragment(
               attrs: { options, value, checked: Boolean(value) },
               children: nodes(node.label, ctx, scope, key + '/label'),
               change: (value) =>
-                ctx.dispatch((actionCtx) => executeStatements(action.statements, actionCtx, { ...scope, value })),
+                ctx.dispatch((actionCtx) =>
+                  invokeEffect(node.action.name, node.action.args, actionCtx, { ...scope, value }),
+                ),
             },
           ];
+        }
+        case 'view-call': {
+          const declaration = ir.views[node.name];
+          if (!declaration) {
+            const props = node.args[0] ? valueAt(node.args[0], ctx, scope, `${key}/props`) : {};
+            invariant(
+              props && typeof props === 'object' && !Array.isArray(props),
+              'E_PROPS',
+              'Fragment props must be an object.',
+            );
+            return ctx.include(node.name, props as FragmentProps, key);
+          }
+          const child = {
+            ...scope,
+            __children: () => nodes(node.children, ctx, scope, `${key}/children`),
+          };
+          for (let argument = 0; argument < declaration.params.length; argument++)
+            bindPattern(
+              declaration.params[argument],
+              node.args[argument] ? valueAt(node.args[argument], ctx, scope, `${key}/argument:${argument}`) : undefined,
+              ctx,
+              child,
+            );
+          return nodes(declaration.body, ctx, child, `${key}/view:${node.name}`);
+        }
+        case 'children': {
+          const renderChildren = scope.__children;
+          invariant(typeof renderChildren === 'function', 'E_CHILDREN', '@children is only available inside a view.');
+          return (renderChildren as () => View[])();
         }
         case 'extension':
           return [
@@ -228,7 +262,6 @@ export function defineIRFragment(
       }
     });
   }
-  // Keep the object ABI identical for interpreted data, generated ESM and handwritten JS.
   return Object.freeze({
     kind: 'gneh.fragment' as const,
     id: ir.id,
@@ -237,24 +270,22 @@ export function defineIRFragment(
     ir,
     bindings: options.bindings,
     enter: (ctx: FragmentContext, props: FragmentProps) =>
-      executeStatements(ir.enter, ctx, {
-        ...props,
-        props,
-        __temporary: ctx.local('temporary-scope', () => ({})),
-      }),
+      executeEffects(
+        ir.enter,
+        ctx,
+        withConstants(ctx, {
+          ...props,
+          props,
+          __temporary: ctx.local('temporary-scope', () => ({})),
+        }),
+        resolveEffect,
+      ),
     render: (ctx: FragmentContext, props: FragmentProps) =>
-      nodes(ir.body, ctx, { ...props, props, __temporary: ctx.local('temporary-scope', () => ({})) }, ctx.instanceId),
-  });
-}
-
-/** Bind props without inventing a separate component or passage runtime type. */
-export function bindFragment<P extends object>(fragment: Fragment<P>, props: P, id = fragment.id + ':bound'): Fragment {
-  return defineFragment({
-    id,
-    metadata: { nav: false },
-    capabilities: [...fragment.capabilities],
-    render(ctx) {
-      return ctx.include(fragment as AnyFragment, props as FragmentProps);
-    },
+      nodes(
+        ir.body,
+        ctx,
+        withConstants(ctx, { ...props, props, __temporary: ctx.local('temporary-scope', () => ({})) }),
+        ctx.instanceId,
+      ),
   });
 }

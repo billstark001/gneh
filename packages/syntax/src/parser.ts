@@ -2,15 +2,19 @@
 import {
   GnehError,
   safeKey,
-  type ActionIR,
   type ContentKind,
+  type EffectDeclarationIR,
+  type EffectCallIR,
+  type EffectNode,
+  type BindingPattern,
   type Expression,
+  type ImportIR,
   type Metadata,
   type Span,
-  type Statement,
   type StoryNode,
+  type ViewDeclarationIR,
 } from '@gneh/core';
-import { balanced, type Balanced } from './delimiters.js';
+import { balanced, splitTopLevel, type Balanced } from './delimiters.js';
 
 export interface ReadResult {
   nodes: StoryNode[];
@@ -42,40 +46,26 @@ export interface SyntaxOptions {
 
 /**
  * Shared recursive-descent scanner for Inkdown plus the two compatibility dialects.
- * A parser instance owns the passage-level declaration side channels (`enter`,
- * `actions`, and `module`) while every reader returns only renderer-neutral nodes.
+ * A parser instance owns passage-level enter/effect/view declarations and ESM
+ * import/export records while every reader returns only renderer-neutral nodes.
  * Dialect readers plug in at token boundaries and cannot bypass depth/span tracking.
  */
 export class MarkupParser {
-  readonly enter: Statement[] = [];
-  readonly actions: Record<string, ActionIR> = {};
-  module = '';
-  imports: string[] = [];
+  evaluation: 'reactive' | 'materialized' = 'reactive';
+  readonly enter: EffectNode[] = [];
+  readonly effects: Record<string, EffectDeclarationIR> = {};
+  readonly views: Record<string, ViewDeclarationIR> = {};
+  readonly constants: Record<string, Expression> = {};
+  readonly imports: ImportIR[] = [];
+  readonly exports: string[] = [];
   private depth = 0;
   private actionNumber = 0;
-  private readonly enterScopes: Statement[][] = [];
   constructor(readonly options: SyntaxOptions) {}
   get nesting(): number {
     return this.depth;
   }
-  get collectingEnter(): boolean {
-    return this.enterScopes.length > 0;
-  }
-  addEnter(statements: Statement[]): void {
-    (this.enterScopes.at(-1) ?? this.enter).push(...statements);
-  }
-  /**
-   * Keep enter effects found in a structural branch local until the dialect wraps
-   * them in the corresponding conditional or loop statement.
-   */
-  captureEnter<T>(read: () => T): { value: T; statements: Statement[] } {
-    const statements: Statement[] = [];
-    this.enterScopes.push(statements);
-    try {
-      return { value: read(), statements };
-    } finally {
-      this.enterScopes.pop();
-    }
+  addEnter(effects: EffectNode[]): void {
+    this.enter.push(...effects);
   }
   span(start: number, end: number): Span {
     return { file: this.options.file, start, end };
@@ -83,14 +73,34 @@ export class MarkupParser {
   expr(source: string, start: number): Expression {
     return this.options.expression(source, this.span(start, start + source.length));
   }
+  effectCall(source: string, start: number): EffectCallIR {
+    const match = /^([A-Za-z_][\w-]*)(?:\(([\s\S]*)\))?$/.exec(source.trim());
+    if (!match)
+      this.error('EFFECT_CALL', 'Expected an effect name with optional arguments.', start, start + source.length);
+    const args = match[2]?.trim()
+      ? splitTopLevel(match[2]).map((argument) => this.expr(argument, start + source.indexOf(argument)).ast)
+      : [];
+    return { name: match[1], args };
+  }
   error(code: string, message: string, start: number, end = start + 1): never {
     throw new GnehError(code, message, this.span(start, end));
   }
-  addAction(statements: Statement[], source: string, span: Span, name = `__action${this.actionNumber++}`): string {
+  addAction(
+    body: EffectNode[],
+    source: string,
+    span: Span,
+    name = `__action${this.actionNumber++}`,
+    params: BindingPattern[] = [],
+  ): EffectCallIR {
     safeKey(name);
-    if (this.actions[name]) this.error('DUPLICATE_ACTION', `Duplicate action ${name}`, span.start, span.end);
-    this.actions[name] = { name, statements, source, span };
-    return name;
+    if (this.effects[name]) this.error('DUPLICATE_ACTION', `Duplicate action ${name}`, span.start, span.end);
+    this.effects[name] = { phase: 'effect', name, params, body, source, span };
+    return { name, args: [] };
+  }
+  addView(name: string, params: BindingPattern[], body: StoryNode[], source: string, span: Span): void {
+    safeKey(name);
+    if (this.views[name]) this.error('DUPLICATE_VIEW', `Duplicate view ${name}`, span.start, span.end);
+    this.views[name] = { phase: 'view', name, params, body, source, span };
   }
   children(source: string, base: number, inline: boolean): StoryNode[] {
     return inline ? this.inline(source, base) : this.blocks(source, base);
@@ -270,7 +280,13 @@ export class MarkupParser {
           }
           const children = this.inline(label, base + i + 2 + inside.indexOf(label));
           const span = this.span(base + i, base + end + 2);
-          if (action) result.push({ type: 'button', action: target, children, span });
+          if (action)
+            result.push({
+              type: 'button',
+              action: this.effectCall(target, base + i + 2 + inside.indexOf(target)),
+              children,
+              span,
+            });
           else {
             let props: Expression | undefined;
             const m = /^([^()]+)\(([\s\S]*)\)$/.exec(target);

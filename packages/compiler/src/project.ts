@@ -6,6 +6,7 @@ import {
   type CompileResult,
   type Diagnostic,
   type Dialect,
+  type EffectNode,
   type Metadata,
   type ParseResult,
   type PassageIR,
@@ -65,9 +66,17 @@ export function parseSource(
       : selected === 'karlowe'
         ? parseKarlowe(source, file, { lowerings: options.lowerings?.karlowe })
         : parseSugarcast(source, file, { lowerings: options.lowerings?.sugarcast });
-  const fileBindings = new Set(parsed.passages.flatMap((passage) => passage.imports));
+  const fileBindings = parsed.passages.flatMap((passage) => passage.imports);
   for (const passage of parsed.passages) {
-    passage.imports = [...fileBindings];
+    passage.imports = fileBindings.filter(
+      (value, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.source === value.source &&
+            candidate.imported === value.imported &&
+            candidate.local === value.local,
+        ) === index,
+    );
   }
   return parsed;
 }
@@ -130,18 +139,39 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
     if (aliases.has(p.name) && aliases.get(p.name) !== p.id) aliases.set(p.name, '');
     else aliases.set(p.name, p.id);
   }
-  const fileBindings = new Map<string, Set<string>>();
+  const fileBindings = new Map<string, PassageIR['imports']>();
   for (const p of passages) {
-    const set = fileBindings.get(p.span.file) ?? new Set<string>();
-    p.imports.forEach((x) => set.add(x));
-    fileBindings.set(p.span.file, set);
+    const values = fileBindings.get(p.span.file) ?? [];
+    values.push(...p.imports);
+    fileBindings.set(p.span.file, values);
+  }
+  for (const [file, bindings] of fileBindings) {
+    const owner = passages.find((passage) => passage.span.file === file);
+    const reported = new Set<string>();
+    for (const binding of bindings) {
+      const conflict = bindings.find(
+        (candidate) =>
+          candidate.local === binding.local &&
+          (candidate.source !== binding.source || candidate.imported !== binding.imported),
+      );
+      if (conflict && owner && !reported.has(binding.local)) {
+        reported.add(binding.local);
+        error(
+          'IMPORT_CONFLICT',
+          `Import name ${binding.local} refers to both ${binding.source}:${binding.imported} and ${conflict.source}:${conflict.imported}.`,
+          owner.span,
+        );
+      }
+    }
   }
   for (const p of passages) {
-    p.imports = [...(fileBindings.get(p.span.file) ?? [])];
-    if (options.mode === 'vendor' && p.module.trim())
+    p.imports = (fileBindings.get(p.span.file) ?? []).filter(
+      (value, index, all) => all.findIndex((candidate) => candidate.local === value.local) === index,
+    );
+    if (options.mode === 'vendor' && p.imports.length)
       error(
         'VENDOR_MODULE',
-        `@module in ${p.id} requires an ESM/Vite build. Data mode never evaluates module source.`,
+        `@import in ${p.id} requires an ESM/Vite build. Data mode cannot load JavaScript modules.`,
         p.span,
       );
     if (options.live === false && p.capabilities.includes('live'))
@@ -150,10 +180,10 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
         `${p.id} uses buttons or mutable regions but the snapshot context was selected.`,
         p.span,
       );
-    walkNodes(p.body, (n) => {
+    const validateNode = (n: StoryNode) => {
       if (n.type === 'choice' || n.type === 'include') {
         const dest = ids.get(n.target) ?? ids.get(aliases.get(n.target) ?? '');
-        if (!dest && !p.imports.includes(n.target))
+        if (!dest && !p.imports.some((binding) => binding.local === n.target))
           error(
             'PASSAGE_MISSING',
             `Unknown or ambiguous fragment ${JSON.stringify(n.target)} referenced by ${p.id}.`,
@@ -183,8 +213,34 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
           }
         }
       }
-      if ((n.type === 'button' || n.type === 'control') && !p.actions[n.action])
-        error('ACTION_MISSING', `Unknown action: ${n.action}`, n.span);
+      if ((n.type === 'button' || n.type === 'control') && !p.effects[n.action.name])
+        error('ACTION_MISSING', `Unknown action: ${n.action.name}`, n.span);
+      if (n.type === 'view-call' && !p.views[n.name]) {
+        const dest = ids.get(n.name) ?? ids.get(aliases.get(n.name) ?? '');
+        if (!dest && !p.imports.some((binding) => binding.local === n.name))
+          error('VIEW_MISSING', `Unknown view or fragment: ${n.name}`, n.span);
+        if (dest) n.name = dest.id;
+        const params = dest?.metadata.params;
+        const props = n.args[0]?.ast;
+        if (dest && Array.isArray(params) && params.length && (!props || props.type === 'ObjectExpression')) {
+          const provided =
+            props?.type === 'ObjectExpression'
+              ? props.properties.flatMap((property) =>
+                  property.type === 'Property' && !property.computed
+                    ? property.key.type === 'Identifier'
+                      ? [property.key.name]
+                      : property.key.type === 'Literal'
+                        ? [String(property.key.value)]
+                        : []
+                    : [],
+                )
+              : [];
+          const optional = Array.isArray(dest.metadata.optionalParams) ? dest.metadata.optionalParams : [];
+          for (const param of params)
+            if (typeof param === 'string' && !provided.includes(param) && !optional.includes(param))
+              error('PROPS_MISSING', `${n.name} requires prop ${param}.`, n.span);
+        }
+      }
       if (n.type === 'invoke' && !(options.runtimeExtensionIds ?? []).includes(n.id))
         error(
           'RUNTIME_EXTENSION_UNDECLARED',
@@ -200,7 +256,33 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
             'Loop identity uses item.id when present, otherwise its index. Supply ; key ... when order can change.',
           span: n.span,
         });
+    };
+    walkNodes(p.body, (node) => {
+      validateNode(node);
+      if (node.type === 'children')
+        error('CHILDREN_POSITION', '@children is only valid inside an @view body.', node.span);
     });
+    for (const view of Object.values(p.views)) walkNodes(view.body, validateNode);
+
+    const validateEffects = (effects: EffectNode[], span: Span): void => {
+      for (const effect of effects) {
+        if (effect.type === 'invoke' && !p.effects[effect.name])
+          error('ACTION_MISSING', `Unknown action: ${effect.name}`, span);
+        else if (effect.type === 'if') {
+          validateEffects(effect.yes, span);
+          validateEffects(effect.no, span);
+        } else if (effect.type === 'each') validateEffects(effect.body, span);
+      }
+    };
+    validateEffects(p.enter, p.span);
+    for (const declaration of Object.values(p.effects)) validateEffects(declaration.body, declaration.span);
+    walkNodes(p.body, (node) => {
+      if (node.type === 'effect') validateEffects(node.effects, node.span);
+    });
+    for (const view of Object.values(p.views))
+      walkNodes(view.body, (node) => {
+        if (node.type === 'effect') validateEffects(node.effects, node.span);
+      });
   }
   let entry =
     options.entry ??

@@ -1,7 +1,7 @@
 {
   "name": "@gneh/expression",
   "version": "0.1.0",
-  "description": "Shared pure-expr grammar and restricted effect-statement parsing",
+  "description": "Shared pure-expr grammar, binding patterns, scanners, and dialect lexer rules",
   "license": "MIT",
   "files": [
     "dist",
@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@gneh/core": "workspace:*",
-    "acorn": "^8.18.0",
-    "pure-expr": "0.3.0"
+    "pure-expr": "0.4.0"
   }
 }

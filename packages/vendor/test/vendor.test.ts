@@ -20,6 +20,6 @@ describe('@gneh/vendor', () => {
   test('creates pure wikifier fragments and rejects source effects', () => {
     const fragment = createWikifier({ pure: true })('**Hello**');
     expect(fragment.kind).toBe('gneh.fragment');
-    expect(() => createWikifier({ pure: true })('@slot notice { Hi }')).toThrow();
+    expect(() => createWikifier({ pure: true })('@region notice { Hi }')).toThrow();
   });
 });

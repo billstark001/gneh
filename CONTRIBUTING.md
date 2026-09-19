@@ -42,7 +42,6 @@ Never silently accept an incompatible legacy macro as prose. Update `docs/LANGUA
 
 ```sh
 GNEH_TYPESCRIPT_API=/path/to/typescript-package \
-GNEH_ACORN_ROOT=/path/to/acorn-package \
 pnpm build:offline
 ```
 

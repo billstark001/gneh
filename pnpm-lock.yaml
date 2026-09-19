@@ -14,9 +14,6 @@ importers:
       '@types/node':
         specifier: ^22.20.3
         version: 22.20.3
-      acorn:
-        specifier: ^8.18.0
-        version: 8.18.0
       oxfmt:
         specifier: ^0.68.0
         version: 0.68.0
@@ -109,8 +106,8 @@ importers:
   packages/core:
     dependencies:
       pure-expr:
-        specifier: 0.3.0
-        version: 0.3.0
+        specifier: 0.4.0
+        version: 0.4.0
 
   packages/create: {}
 
@@ -119,12 +116,9 @@ importers:
       '@gneh/core':
         specifier: workspace:*
         version: link:../core
-      acorn:
-        specifier: ^8.18.0
-        version: 8.18.0
       pure-expr:
-        specifier: 0.3.0
-        version: 0.3.0
+        specifier: 0.4.0
+        version: 0.4.0
 
   packages/inkdown:
     dependencies:
@@ -1291,8 +1285,8 @@ packages:
     resolution: {integrity: sha512-Ujym7JbxoAqanaxGcHgmTomfhC01HfDCSuGZ8Hs9boHrDjzbNVMnFRJo2KtbDT9LCRgeJoFnkn9JQZ41eEUrLw==}
     engines: {node: '>=22.12.0'}
 
-  pure-expr@0.3.0:
-    resolution: {integrity: sha512-2y4Mj7eIhyDZY3h/awpAmbzxKSQDLt/sinL6xyy9kAr14FZDaPTcQble5Tf5Tx3lzx5IHBGgjWfZvZjU7IfLJg==}
+  pure-expr@0.4.0:
+    resolution: {integrity: sha512-sfgca5gATCDPQhDLOJxrWARzEQrne0frHH/S/zDHw8gfZB3I0DPu8IXPe+LR1Loru81ljs/O4zd5PkaZBngj4Q==}
     engines: {node: '>=18', pnpm: '>=12'}
 
   qified@0.10.1:
@@ -2299,7 +2293,7 @@ snapshots:
       - utf-8-validate
       - yauzl
 
-  pure-expr@0.3.0:
+  pure-expr@0.4.0:
     dependencies:
       '@types/estree': 1.0.9
 

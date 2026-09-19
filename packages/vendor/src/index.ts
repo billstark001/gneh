@@ -78,9 +78,9 @@ export function createWikifier(
     walkNodes(p.body, (node) => {
       if (node.type === 'effect' || node.type === 'region-change' || node.type === 'portal') sourceEffect = true;
     });
-    if (p.module.trim() || p.enter.length || sourceEffect)
-      throw new GnehError('WIKIFY_EFFECT', 'wikify does not accept module declarations or source effects.');
-    if (options.pure && (Object.keys(p.actions).length || p.capabilities.includes('live')))
+    if (p.imports.length || p.enter.length || sourceEffect)
+      throw new GnehError('WIKIFY_EFFECT', 'wikify does not accept ESM imports or source effects.');
+    if (options.pure && (Object.keys(p.effects).length || p.capabilities.includes('live')))
       throw new GnehError('WIKIFY_PURE', 'wikifyPure excludes actions and mutable regions.');
     return defineIRFragment({ ...p, id, metadata: { ...p.metadata, id } });
   };

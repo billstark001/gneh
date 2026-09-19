@@ -1,6 +1,6 @@
 import type { Diagnostic, Span } from './errors.js';
 import type { Json, State } from './json.js';
-import type { ExpressionNode } from 'pure-expr/expr';
+import type { BindingPattern, ExpressionNode } from 'pure-expr/expr';
 
 export const ABI_VERSION = 1 as const;
 
@@ -10,17 +10,40 @@ export interface Expression {
   span: Span;
 }
 
-export type Statement =
+export type EffectNode =
   | { type: 'expression'; expression: ExpressionNode }
-  | { type: 'declare'; name: string; value: ExpressionNode }
-  | { type: 'if'; test: ExpressionNode; yes: Statement[]; no: Statement[] }
-  | { type: 'each'; name: string; items: ExpressionNode; body: Statement[] };
+  | { type: 'bind'; binding: BindingPattern; value: ExpressionNode }
+  | { type: 'if'; test: ExpressionNode; yes: EffectNode[]; no: EffectNode[] }
+  | { type: 'each'; binding: BindingPattern; items: ExpressionNode; body: EffectNode[] }
+  | { type: 'invoke'; name: string; args: ExpressionNode[] };
 
-export interface ActionIR {
+export interface EffectDeclarationIR {
+  phase: 'effect';
   name: string;
-  statements: Statement[];
+  params: BindingPattern[];
+  body: EffectNode[];
   source: string;
   span: Span;
+}
+
+export interface ViewDeclarationIR {
+  phase: 'view';
+  name: string;
+  params: BindingPattern[];
+  body: StoryNode[];
+  source: string;
+  span: Span;
+}
+
+export interface ImportIR {
+  source: string;
+  imported: string;
+  local: string;
+}
+
+export interface EffectCallIR {
+  name: string;
+  args: ExpressionNode[];
 }
 
 export type Dialect = 'inkdown' | 'karlowe' | 'sugarcast';
@@ -47,7 +70,7 @@ export type ContentKind =
 export type StoryNode =
   | { type: 'text'; value: string; span: Span }
   | { type: 'content'; kind: ContentKind; attrs: Metadata; children: StoryNode[]; span: Span }
-  | { type: 'effect'; statements: Statement[]; span: Span }
+  | { type: 'effect'; effects: EffectNode[]; span: Span }
   | { type: 'value'; expression: Expression; span: Span }
   | { type: 'if'; test: Expression; yes: StoryNode[]; no: StoryNode[]; span: Span }
   | {
@@ -60,7 +83,9 @@ export type StoryNode =
     }
   | { type: 'include'; target: string; props?: Expression; span: Span }
   | { type: 'choice'; target: string; props?: Expression; children: StoryNode[]; span: Span }
-  | { type: 'button'; action: string; children: StoryNode[]; span: Span }
+  | { type: 'button'; action: EffectCallIR; children: StoryNode[]; span: Span }
+  | { type: 'view-call'; name: string; args: Expression[]; children: StoryNode[]; span: Span }
+  | { type: 'children'; span: Span }
   | {
       type: 'interaction';
       behavior: 'reveal' | 'repeat';
@@ -86,7 +111,7 @@ export type StoryNode =
   | {
       type: 'control';
       control: 'select' | 'checkbox';
-      action: string;
+      action: EffectCallIR;
       value: Expression;
       options: Expression[];
       label: StoryNode[];
@@ -120,10 +145,12 @@ export interface PassageIR {
   body: StoryNode[];
   /** Reactive documents recompute from state; materialized documents memoize source-order evaluation per mount. */
   evaluation: 'reactive' | 'materialized';
-  enter: Statement[];
-  actions: Record<string, ActionIR>;
-  module: string;
-  imports: string[];
+  enter: EffectNode[];
+  effects: Record<string, EffectDeclarationIR>;
+  views: Record<string, ViewDeclarationIR>;
+  constants: Record<string, Expression>;
+  imports: ImportIR[];
+  exports: string[];
   capabilities: string[];
 }
 

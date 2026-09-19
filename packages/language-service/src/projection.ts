@@ -1,6 +1,6 @@
-import { printExpression } from '@gneh/compiler';
-import type { Expression, PassageIR, Span, State, Statement, StoryNode } from '@gneh/core';
-import type { ExpressionNode } from '@gneh/expression';
+import { printBinding, printExpression } from '@gneh/compiler';
+import type { EffectNode, Expression, PassageIR, Span, State, StoryNode } from '@gneh/core';
+import type { BindingPattern, ExpressionNode } from '@gneh/expression';
 
 /** A generated range paired with the authoring-language range that produced it. */
 export interface ProjectionMapping {
@@ -31,27 +31,39 @@ export function inferType(value: unknown): string {
 }
 
 /** Render portable IR as type-checkable TypeScript, never as executable story code. */
-function typedExpression(expression: ExpressionNode): string {
-  return printExpression(expression, (name) => {
-    if (name.startsWith('$')) return `state[${JSON.stringify(name.slice(1))}]`;
-    if (name.startsWith('_')) return name.slice(1);
-    return name;
-  });
+function typedIdentifier(name: string): string {
+  if (name.startsWith('$')) return `state[${JSON.stringify(name.slice(1))}]`;
+  if (name.startsWith('_')) return name.slice(1);
+  return name;
 }
 
-function typedStatements(statements: Statement[]): string {
+function typedExpression(expression: ExpressionNode): string {
+  return printExpression(expression, typedIdentifier);
+}
+
+function typedParameter(pattern: BindingPattern): string {
+  if (pattern.type === 'Identifier') return `${typedIdentifier(pattern.name)}:any`;
+  if (pattern.type === 'AssignmentPattern')
+    return `${printBinding(pattern.left, typedIdentifier)}:any=${typedExpression(pattern.right)}`;
+  if (pattern.type === 'RestElement') return `...${printBinding(pattern.argument, typedIdentifier)}:any[]`;
+  return `${printBinding(pattern, typedIdentifier)}:any`;
+}
+
+function typedEffects(effects: EffectNode[], effectName: (name: string) => string = (name) => name): string {
   const print = typedExpression;
-  return statements
-    .map((statement) => {
-      switch (statement.type) {
-        case 'declare':
-          return `let ${statement.name}=${print(statement.value)};`;
+  return effects
+    .map((effect) => {
+      switch (effect.type) {
+        case 'bind':
+          return `let ${printBinding(effect.binding, typedIdentifier)}=${print(effect.value)};`;
         case 'expression':
-          return `${print(statement.expression)};`;
+          return `${print(effect.expression)};`;
         case 'if':
-          return `if(${print(statement.test)}){${typedStatements(statement.yes)}}else{${typedStatements(statement.no)}}`;
+          return `if(${print(effect.test)}){${typedEffects(effect.yes, effectName)}}else{${typedEffects(effect.no, effectName)}}`;
         case 'each':
-          return `for(const ${statement.name} of ${print(statement.items)}){${typedStatements(statement.body)}}`;
+          return `for(const ${printBinding(effect.binding, typedIdentifier)} of ${print(effect.items)}){${typedEffects(effect.body, effectName)}}`;
+        case 'invoke':
+          return `${effectName(effect.name)}(${effect.args.map(print).join(',')});`;
       }
     })
     .join('\n');
@@ -71,6 +83,16 @@ export function createVirtualFile(passages: PassageIR[], state: State, stateType
     if (source) mappings.push({ start, end: code.length, source });
   };
   const emitExpression = (expression: Expression) => emit(typedExpression(expression.ast), expression.span);
+  let effectNames = new Map<string, string>();
+  let viewNames = new Map<string, string>();
+  const emitEffectCall = (name: string, args: ExpressionNode[]) => {
+    emit(`${effectNames.get(name) ?? '__missing_effect'}(`);
+    args.forEach((argument, index) => {
+      if (index) emit(',');
+      emit(typedExpression(argument));
+    });
+    emit(');\n');
+  };
   const emitNodes = (nodes: StoryNode[]) => {
     for (const node of nodes) {
       switch (node.type) {
@@ -126,10 +148,13 @@ export function createVirtualFile(passages: PassageIR[], state: State, stateType
           emitNodes(node.children);
           break;
         case 'content':
-        case 'button':
         case 'region':
         case 'region-change':
         case 'portal':
+          emitNodes(node.children);
+          break;
+        case 'button':
+          emitEffectCall(node.action.name, node.action.args);
           emitNodes(node.children);
           break;
         case 'interaction':
@@ -145,10 +170,26 @@ export function createVirtualFile(passages: PassageIR[], state: State, stateType
             emitExpression(option);
             emit(');\n');
           }
+          emitEffectCall(node.action.name, node.action.args);
           emitNodes(node.label);
           break;
         case 'effect':
-          emit(typedStatements(node.statements) + '\n', node.span);
+          emit(typedEffects(node.effects, (name) => effectNames.get(name) ?? '__missing_effect') + '\n', node.span);
+          break;
+        case 'view-call': {
+          const view = viewNames.get(node.name);
+          if (view) emit(`${view}(`);
+          else emit('void([');
+          node.args.forEach((expression, index) => {
+            if (index) emit(',');
+            emitExpression(expression);
+          });
+          emit(view ? ');\n' : ']);\n');
+          emitNodes(node.children);
+          break;
+        }
+        case 'children':
+          emit('void(children);\n');
           break;
         case 'text':
           break;
@@ -158,8 +199,10 @@ export function createVirtualFile(passages: PassageIR[], state: State, stateType
 
   for (let index = 0; index < passages.length; index++) {
     const passage = passages[index];
+    effectNames = new Map(Object.keys(passage.effects).map((name, effectIndex) => [name, `__effect_${effectIndex}`]));
+    viewNames = new Map(Object.keys(passage.views).map((name, viewIndex) => [name, `__view_${viewIndex}`]));
     emit(`function __passage${index}(){\n`);
-    for (const name of passage.imports) emit(`const ${name}: any = undefined;\n`);
+    for (const binding of passage.imports) emit(`const ${binding.local}: any = undefined;\n`);
     const params = Array.isArray(passage.metadata.params)
       ? passage.metadata.params.filter((value): value is string => typeof value === 'string')
       : [];
@@ -179,11 +222,24 @@ export function createVirtualFile(passages: PassageIR[], state: State, stateType
         .join(';')}};\n`,
     );
     for (const name of params) if (/^[a-zA-Z_][\w]*$/.test(name)) emit(`let ${name}=props[${JSON.stringify(name)}];\n`);
-    if (passage.enter.length) emit(typedStatements(passage.enter) + '\n', passage.span);
-    for (const action of Object.values(passage.actions)) {
-      emit(`function __action_${action.name.replace(/\W/g, '_')}(){\n`);
-      emit(typedStatements(action.statements), action.span);
+    for (const [name, expression] of Object.entries(passage.constants)) {
+      emit(`const ${name}=`);
+      emitExpression(expression);
+      emit(';\n');
+    }
+    const resolveEffect = (name: string) => effectNames.get(name) ?? '__missing_effect';
+    if (passage.enter.length) emit(typedEffects(passage.enter, resolveEffect) + '\n', passage.span);
+    for (const action of Object.values(passage.effects)) {
+      emit(`function ${resolveEffect(action.name)}(${action.params.map(typedParameter).join(',')}){\n`);
+      emit(typedEffects(action.body, resolveEffect), action.span);
       emit('\n}\n');
+    }
+    for (const view of Object.values(passage.views)) {
+      emit(
+        `function ${viewNames.get(view.name)}(${view.params.map(typedParameter).join(',')}){\nconst children:unknown=undefined;\n`,
+      );
+      emitNodes(view.body);
+      emit('}\n');
     }
     emitNodes(passage.body);
     emit('}\n');

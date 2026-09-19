@@ -4,7 +4,7 @@ import { Story, defineFragment, v } from '../dist/index.js';
 import { assertJson } from '../../core/dist/index.js';
 
 const source =
-  ':: Start\n@enter { $visits += 1; }\n@action hit { $hp -= 1; }\nHP: $hp / visit $visits\n[[Hit => hit]]\n@slot notice { Empty }\n[[Next->End]]\n:: End\nDone';
+  ':: Start\n@enter { @do $visits += 1; }\n@action hit { @do $hp -= 1; }\nHP: $hp / visit $visits\n[[Hit => hit]]\n@region notice { Empty }\n[[Next->End]]\n:: End\nDone';
 
 test('entry effects run once per mount, not once per reactive render', () => {
   const s = story(source, 'inkdown', { state: { hp: 3, visits: 0 } });
@@ -29,7 +29,7 @@ test('transactions update the full semantic view and checkpoint state', () => {
 
 test('effect expressions commit member assignments and updates through the story transaction', () => {
   const s = story(
-    '@action hurt { $player.hp -= 1; $items[0].count++; }\n{{ $player.hp }} / {{ $items[0].count }}\n[[Hurt => hurt]]',
+    '@action hurt { @do $player.hp -= 1; @do $items[0].count++; }\n{{ $player.hp }} / {{ $items[0].count }}\n[[Hurt => hurt]]',
     'inkdown',
     { state: { player: { hp: 3 }, items: [{ count: 0 }] } },
   );
@@ -37,6 +37,47 @@ test('effect expressions commit member assignments and updates through the story
   assert.deepEqual(s.state, { player: { hp: 2 }, items: [{ count: 1 }] });
   assert.equal(s.undo(), true);
   assert.deepEqual(s.state, { player: { hp: 3 }, items: [{ count: 0 }] });
+});
+
+test('Inkdown effects compose binding patterns, control flow and nested action calls', () => {
+  const s = story(
+    `@action add(amount) {
+  @do $total += amount;
+}
+@action collect({bonus = 2}) {
+  @let [first, ...rest] = $values;
+  @if (first > 0) {
+    @call add(first + bonus);
+    @each (value of rest) {
+      @call add(value);
+    }
+  } @else {
+    @do $total = -1;
+  }
+}
+Total: {{ $total }}
+[[Collect => collect({})]]`,
+    'inkdown',
+    { state: { total: 0, values: [1, 3, 4] } },
+  );
+  click(s, 'Collect');
+  assert.equal(s.state.total, 10);
+  assert.match(text(s.view), /Total: 10/);
+});
+
+test('Inkdown views use the same binding-pattern call convention as actions', () => {
+  const s = story('@view Badge({label = "untitled"}) { **{{ label }}** @children }\n@Badge({label: "Ready"}) { now }');
+  assert.equal(text(s.view).replaceAll(/\s/g, ''), 'Readynow');
+});
+
+test('source-order compatibility effects migrate to native @effect blocks', () => {
+  const s = story('before {{ $value }}\n@effect { @do $value += 1; }\nafter {{ $value }}', 'inkdown', {
+    state: { value: 0 },
+  });
+  assert.equal(s.state.value, 1);
+  assert.equal(text(s.view).replaceAll(/\s/g, ''), 'before0after1');
+  s.mutate((state) => (state.value = 9));
+  assert.equal(text(s.view).replaceAll(/\s/g, ''), 'before0after1');
 });
 
 test('failed mutation rolls state and history back', () => {
@@ -129,7 +170,7 @@ test('keyed includes preserve local lifetime on reordering', () => {
     },
   });
   const data = compiled(
-    ':: Start\n@for (const item of $items; key item.id) {\n@Card({item})\n}\n:: Card {"params":["item"]}\nplaceholder',
+    ':: Start\n@each (item of $items; key item.id) {\n@Card({item})\n}\n:: Card {"params":["item"]}\nplaceholder',
     'inkdown',
     {
       state: {
@@ -163,7 +204,7 @@ test('recursive fragments fail with a bounded, meaningful diagnostic', () => {
 });
 
 test('duplicate structural keys roll back the action', () => {
-  const s = story('@for (const item of $items; key item.id) {\n{{ item.id }}\n}', 'inkdown', {
+  const s = story('@each (item of $items; key item.id) {\n{{ item.id }}\n}', 'inkdown', {
     state: { items: [{ id: 'a' }] },
   });
   assert.throws(() => s.mutate((state) => state.items.push({ id: 'a' })), /Duplicate/);
@@ -194,7 +235,7 @@ test('native .mjs fragment ABI composes with parsed documents', () => {
 });
 
 test('random is deterministic, snapshotted, and forbidden during render', () => {
-  const src = '@enter { $roll = random(1, 1000); }\n$roll';
+  const src = '@enter { @do $roll = random(1, 1000); }\n$roll';
   const a = story(src, 'inkdown', { state: { roll: 0 }, seed: 3 }),
     b = story(src, 'inkdown', { state: { roll: 0 }, seed: 3 });
   assert.equal(a.state.roll, b.state.roll);
@@ -204,7 +245,7 @@ test('random is deterministic, snapshotted, and forbidden during render', () => 
 test('expression iteration consumes a finite execution budget', () => {
   assert.throws(
     () =>
-      story('@for (const x of $items) {\n{{ x }}\n}', 'inkdown', {
+      story('@each (x of $items) {\n{{ x }}\n}', 'inkdown', {
         state: { items: Array(50).fill(1) },
         maxSteps: 10,
       }),

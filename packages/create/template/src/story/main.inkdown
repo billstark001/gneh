@@ -4,7 +4,7 @@
 This interface is ordinary application code. Change it, replace it with React or Vue,
 or mount gneh beside an existing application.
 
-@action visit { $visits += 1; }
+@action visit { @do $visits += 1; }
 
 [[Visit again => visit]]
 

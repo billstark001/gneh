@@ -46,7 +46,7 @@ test('prop types and loop locals participate in semantic diagnostics', options, 
   try {
     service.setDocument(
       '/test/source.inkdown',
-      ":: Start\n@for (const item of $items; key item.name) {\n{{ item.missing }}\n}\n:: Card\n---\nparams: [enemy]\nparamTypes:\n  enemy: '{hp: number}'\n---\n{{ enemy.hpp }}",
+      ":: Start\n@each (item of $items; key item.name) {\n{{ item.missing }}\n}\n:: Card\n---\nparams: [enemy]\nparamTypes:\n  enemy: '{hp: number}'\n---\n{{ enemy.hpp }}",
     );
     const d = service.diagnostics().filter((d) => d.code.startsWith('TS'));
     assert.equal(d.length, 2);

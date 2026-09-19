@@ -1,4 +1,4 @@
-import { GnehError, type Expression, type Span, type Statement } from '@gneh/core';
+import { GnehError, type EffectNode, type Expression, type Span } from '@gneh/core';
 import { parseExpression, type ExpressionNode } from '@gneh/expression';
 import { balanced, harloweMacroName, splitTopLevel } from '@gneh/syntax';
 import { PrattParser, type OperatorConfig, type PrattToken, type PrattASTNode } from './pratt-parser.js';
@@ -245,7 +245,7 @@ function replaceIt(value: ExpressionNode, target: ExpressionNode): ExpressionNod
   return walk(value) as ExpressionNode;
 }
 
-export function karloweAssignments(source: string, span: Span, put = false): Statement[] {
+export function karloweAssignments(source: string, span: Span, put = false): EffectNode[] {
   return splitTopLevel(source).map((part) => {
     const word = put ? ' into ' : ' to ';
     const pieces = splitTopLevel(part, word);

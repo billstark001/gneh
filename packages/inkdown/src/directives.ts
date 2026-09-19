@@ -1,5 +1,5 @@
-import type { StoryNode } from '@gneh/core';
-import { parseModule, parseStatements } from '@gneh/expression';
+import type { ImportIR, StoryNode } from '@gneh/core';
+import { parseBindingPattern, type BindingPattern, type ExpressionNode } from '@gneh/expression';
 import {
   balanced,
   MacroLoweringRegistry,
@@ -8,6 +8,8 @@ import {
   type ReadResult,
   type SpecialReader,
 } from '@gneh/syntax';
+import { parseEffects } from './effects.js';
+import { readConditional, readLoop, readRegion } from './structural.js';
 
 export interface InkdownMacroToken {
   name: string;
@@ -18,13 +20,139 @@ export interface InkdownMacroToken {
 
 export type InkdownLowerings = MacroLoweringRegistry<InkdownMacroToken>;
 
-/**
- * Parse Inkdown's semantic directives.
- *
- * The shared syntax package deliberately knows nothing about these directives.
- * Karlowe and Sugarcast may explicitly compose this reader when they want to
- * expose gneh-native escape hatches alongside their compatibility syntax.
- */
+const spaces = (source: string, start: number) => {
+  let index = start;
+  while (/\s/.test(source[index] ?? '')) index++;
+  return index;
+};
+
+function argumentsAt(
+  source: string,
+  start: number,
+  parser: MarkupParser,
+  base: number,
+): {
+  args: ExpressionNode[];
+  end: number;
+} {
+  if (source[start] !== '(') return { args: [], end: start };
+  const group = balanced(source, start);
+  return {
+    args: group.content.trim()
+      ? splitTopLevel(group.content).map(
+          (argument) => parser.expr(argument, base + group.start + group.content.indexOf(argument)).ast,
+        )
+      : [],
+    end: group.end,
+  };
+}
+
+function paramsAt(
+  source: string,
+  start: number,
+  parser: MarkupParser,
+  base: number,
+): {
+  params: BindingPattern[];
+  end: number;
+} {
+  if (source[start] !== '(') return { params: [], end: start };
+  const group = balanced(source, start);
+  return {
+    params: group.content.trim()
+      ? splitTopLevel(group.content).map((parameter) =>
+          parseBindingPattern(parameter, parser.span(base + group.start, base + group.end)),
+        )
+      : [],
+    end: group.end,
+  };
+}
+
+function topLevelEquals(source: string): number {
+  let quote = '';
+  let depth = 0;
+  for (let index = 0; index < source.length; index++) {
+    const char = source[index];
+    if (quote) {
+      if (char === '\\') index++;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') quote = char;
+    else if ('([{'.includes(char)) depth++;
+    else if (')]}'.includes(char)) depth--;
+    else if (char === '=' && depth === 0 && source[index + 1] !== '>' && source[index + 1] !== '=') return index;
+  }
+  return -1;
+}
+
+function declarationPosition(parser: MarkupParser, token: InkdownMacroToken, base: number, inline: boolean): void {
+  if (parser.nesting > 1 || inline)
+    parser.error('DECLARATION_POSITION', `@${token.name} is a top-level declaration.`, base + token.start);
+}
+
+const reservedBindings = new Set([
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'function',
+  'if',
+  'import',
+  'in',
+  'instanceof',
+  'let',
+  'new',
+  'null',
+  'return',
+  'static',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+]);
+
+const isHostBindingName = (name: string) => /^[A-Za-z][\w$]*$/.test(name) && !reservedBindings.has(name);
+
+function parseImport(text: string, parser: MarkupParser, start: number): ImportIR[] {
+  const match = /^\{([\s\S]*)\}\s+from\s+(["'])([^"']+)\2\s*$/.exec(text);
+  if (!match) parser.error('IMPORT_SYNTAX', 'Use @import { name as local } from "module".', start);
+  return splitTopLevel(match[1]).map((specifier) => {
+    const names = /^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(specifier.trim());
+    if (!names) parser.error('IMPORT_SYNTAX', `Invalid import specifier: ${specifier}`, start);
+    const local = names[2] ?? names[1];
+    if (!isHostBindingName(local)) parser.error('IMPORT_BINDING', `Invalid local import name: ${local}`, start);
+    return { source: match[3], imported: names[1], local };
+  });
+}
+
+function readLine(source: string, start: number): { text: string; end: number } {
+  const newline = source.indexOf('\n', start);
+  const end = newline < 0 ? source.length : newline;
+  return { text: source.slice(start, end).trim().replace(/;$/, ''), end };
+}
+
 function readInkdownDirectiveWith(
   registry: InkdownLowerings,
   source: string,
@@ -36,45 +164,129 @@ function readInkdownDirectiveWith(
   if (source[index] !== '@') return;
   const head = /^@([A-Za-z_][\w-]*)\b/.exec(source.slice(index));
   if (!head) return;
-  const name = head[1];
-  let i = index + head[0].length;
-  while (/\s/.test(source[i] ?? '') && i < source.length) i++;
-  const token = { name, start: index, headEnd: index + head[0].length, argsStart: i };
-  const registered = registry.lower(name, { source, index, base, parser, inline, node: token });
+  const token = {
+    name: head[1],
+    start: index,
+    headEnd: index + head[0].length,
+    argsStart: spaces(source, index + head[0].length),
+  };
+  const registered = registry.lower(token.name, { source, index, base, parser, inline, node: token });
   if (registered) return registered;
-  if (source[i] === '(') {
-    const args = balanced(source, i);
-    return {
-      nodes: [
-        {
-          type: 'include',
-          target: name,
-          props: args.content.trim() ? parser.expr(args.content, base + args.start) : undefined,
-          span: parser.span(base + index, base + args.end),
-        },
-      ],
-      end: args.end,
-      block: true,
-    };
+  let cursor = token.argsStart;
+  const args = argumentsAt(source, cursor, parser, base);
+  cursor = spaces(source, args.end);
+  let children: StoryNode[] = [];
+  let hasBody = false;
+  if (source[cursor] === '{') {
+    hasBody = true;
+    const body = balanced(source, cursor, 'markup');
+    children = parser.children(body.content, base + body.start, inline);
+    cursor = body.end;
   }
+  return {
+    nodes: [
+      {
+        type: 'view-call',
+        name: token.name,
+        args: args.args.map((ast) => ({ ast, source: '', span: parser.span(base + index, base + cursor) })),
+        children,
+        span: parser.span(base + index, base + cursor),
+      },
+    ],
+    end: cursor,
+    block: hasBody,
+  };
 }
 
 export function createInkdownLowerings(): InkdownLowerings {
   const registry = new MacroLoweringRegistry<InkdownMacroToken>();
-  registry.register(['module', 'enter', 'action'], ({ node: token, parser, source, base, inline }) => {
-    assertDeclarationPosition(parser, token.start, base, inline, token.name);
-    const blockStart = findDeclarationBlock(parser, source, token.argsStart, token.name, base);
-    const block = balanced(source, blockStart, 'js');
-    applyDeclaration(parser, token.name, source, token.start, base, blockStart, block);
-    return { nodes: [], end: block.end, block: true };
-  });
-  registry.register('if', ({ node: token, parser, source, base, inline, lowerings: owner }) =>
-    readConditional(parser, source, token.start, base, inline, token.argsStart, owner),
+  registry.register(['module', 'script'], ({ node: token, parser, base }) =>
+    parser.error(
+      'REMOVED_DIRECTIVE',
+      `@${token.name} is not an Inkdown construct. Put JavaScript in an ESM file and use @import.`,
+      base + token.start,
+      base + token.headEnd,
+    ),
   );
-  registry.register(['for', 'each'], ({ node: token, parser, source, base, inline }) =>
+  registry.register(['enter', 'action', 'view'], ({ node: token, parser, source, base, inline }) => {
+    declarationPosition(parser, token, base, inline);
+    let cursor = token.argsStart;
+    let name = '';
+    let params: BindingPattern[] = [];
+    if (token.name !== 'enter') {
+      const identifier = /^[A-Za-z_][\w-]*/.exec(source.slice(cursor));
+      if (!identifier) parser.error('DECLARATION_NAME', `@${token.name} requires a name.`, base + cursor);
+      name = identifier![0];
+      cursor = spaces(source, cursor + name.length);
+      const parsed = paramsAt(source, cursor, parser, base);
+      params = parsed.params;
+      cursor = spaces(source, parsed.end);
+    }
+    if (source[cursor] !== '{') parser.error('DECLARATION_BODY', `@${token.name} requires a body.`, base + cursor);
+    const body = balanced(source, cursor, token.name === 'view' ? 'markup' : 'js');
+    const span = parser.span(base + token.start, base + body.end);
+    if (token.name === 'enter') parser.addEnter(parseEffects(body.content, base + body.start, parser));
+    else if (token.name === 'action')
+      parser.addAction(parseEffects(body.content, base + body.start, parser), body.content, span, name, params);
+    else parser.addView(name, params, parser.children(body.content, base + body.start, false), body.content, span);
+    return { nodes: [], end: body.end, block: true };
+  });
+  registry.register(['import', 'export', 'const'], ({ node: token, parser, source, base, inline }) => {
+    declarationPosition(parser, token, base, inline);
+    const line = readLine(source, token.argsStart);
+    if (token.name === 'import') parser.imports.push(...parseImport(line.text, parser, base + token.argsStart));
+    else if (token.name === 'export') {
+      const match = /^\{([\s\S]*)\}$/.exec(line.text);
+      if (!match) parser.error('EXPORT_SYNTAX', 'Use @export { name, otherName }.', base + token.argsStart);
+      const names = splitTopLevel(match![1]).map((name) => name.trim());
+      if (names.some((name) => !isHostBindingName(name)))
+        parser.error('EXPORT_BINDING', 'Export names must be local ESM binding names.', base + token.argsStart);
+      parser.exports.push(...names);
+    } else {
+      const equals = topLevelEquals(line.text);
+      const name = line.text.slice(0, equals).trim();
+      if (equals < 0 || !isHostBindingName(name))
+        parser.error('CONST_SYNTAX', 'Use @const name = expression.', base + token.argsStart);
+      parser.constants[name] = parser.expr(line.text.slice(equals + 1).trim(), base + token.argsStart + equals + 1);
+    }
+    return { nodes: [], end: line.end, block: true };
+  });
+  registry.register('effect', ({ node: token, parser, source, base, inline }) => {
+    parser.evaluation = 'materialized';
+    let cursor = token.argsStart;
+    if (source[cursor] !== '{') parser.error('EFFECT_BODY', '@effect requires a body.', base + cursor);
+    const body = balanced(source, cursor, 'js');
+    return {
+      nodes: [
+        {
+          type: 'effect',
+          effects: parseEffects(body.content, base + body.start, parser),
+          span: parser.span(base + token.start, base + body.end),
+        },
+      ],
+      end: body.end,
+      block: !inline,
+    };
+  });
+  registry.register('children', ({ node: token, parser, base }) => ({
+    nodes: [{ type: 'children', span: parser.span(base + token.start, base + token.headEnd) }],
+    end: token.headEnd,
+  }));
+  registry.register('if', ({ node: token, parser, source, base, inline, lowerings }) =>
+    readConditional(
+      parser,
+      source,
+      token.start,
+      base,
+      inline,
+      token.argsStart,
+      createInkdownDirectiveReader(lowerings),
+    ),
+  );
+  registry.register('each', ({ node: token, parser, source, base, inline }) =>
     readLoop(parser, source, token.start, base, inline, token.argsStart),
   );
-  registry.register(['slot', 'region'], ({ node: token, parser, source, base, inline }) =>
+  registry.register('region', ({ node: token, parser, source, base, inline }) =>
     readRegion(parser, source, token.start, base, inline, token.argsStart),
   );
   return registry;
@@ -86,177 +298,3 @@ export function createInkdownDirectiveReader(registry: InkdownLowerings = create
 }
 
 export const readInkdownDirective: SpecialReader = createInkdownDirectiveReader();
-
-function assertDeclarationPosition(
-  parser: MarkupParser,
-  index: number,
-  base: number,
-  inline: boolean,
-  name: string,
-): void {
-  if (parser.nesting > 1)
-    parser.error(
-      'DECLARATION_NESTED',
-      `@${name} is a module/instance declaration, not a conditional render effect.`,
-      base + index,
-    );
-  if (inline) parser.error('DECLARATION_INLINE', `@${name} must start a block.`, base + index);
-}
-
-function findDeclarationBlock(
-  parser: MarkupParser,
-  source: string,
-  cursor: number,
-  name: string,
-  base: number,
-): number {
-  let i = cursor;
-  if (name === 'action') {
-    const actionName = /^[\w-]+/.exec(source.slice(i));
-    if (!actionName) parser.error('ACTION_NAME', 'Expected action name', base + i);
-    i += actionName[0].length;
-    while (/\s/.test(source[i] ?? '') && i < source.length) i++;
-  }
-  if (source[i] !== '{') parser.error('DIRECTIVE_BLOCK', `@${name} requires { ... }`, base + i);
-  return i;
-}
-
-function applyDeclaration(
-  parser: MarkupParser,
-  name: string,
-  source: string,
-  index: number,
-  base: number,
-  blockStart: number,
-  block: ReturnType<typeof balanced>,
-): void {
-  if (name === 'module') {
-    if (parser.module)
-      parser.error('MODULE_DUPLICATE', 'Only one @module block is permitted per passage.', base + index);
-    const info = parseModule(block.content);
-    parser.module = block.content;
-    parser.imports = info.bindings;
-    return;
-  }
-  const span = parser.span(base + block.start, base + block.end - 1);
-  if (name === 'enter') {
-    parser.addEnter(parseStatements(block.content, span));
-    return;
-  }
-  const declaration = source.slice(index, blockStart);
-  const actionName = /^@action\s+([\w-]+)/.exec(declaration)?.[1];
-  parser.addAction(parseStatements(block.content, span), block.content, span, actionName);
-}
-
-function readConditional(
-  parser: MarkupParser,
-  source: string,
-  index: number,
-  base: number,
-  inline: boolean,
-  cursor: number,
-  registry: InkdownLowerings,
-): ReadResult {
-  if (source[cursor] !== '(') parser.error('IF_TEST', '@if requires a parenthesized expression', base + cursor);
-  const test = balanced(source, cursor);
-  let i = test.end;
-  while (/\s/.test(source[i] ?? '') && i < source.length) i++;
-  if (source[i] !== '{') parser.error('IF_BODY', '@if requires a { ... } body', base + i);
-  const yes = balanced(source, i, 'markup');
-  i = yes.end;
-  let no: StoryNode[] = [];
-  const tail = /^\s*@else\s*/.exec(source.slice(i));
-  if (tail) {
-    const next = i + tail[0].length;
-    if (source.startsWith('if', next)) {
-      const rest = '@' + source.slice(next);
-      const result = readInkdownDirectiveWith(registry, rest, 0, base + next - 1, parser, inline)!;
-      no = result.nodes;
-      i = next - 1 + result.end;
-    } else {
-      if (source[next] !== '{') parser.error('ELSE_BODY', '@else requires a body', base + next);
-      const body = balanced(source, next, 'markup');
-      no = parser.children(body.content, base + body.start, inline);
-      i = body.end;
-    }
-  }
-  return {
-    nodes: [
-      {
-        type: 'if',
-        test: parser.expr(test.content, base + test.start),
-        yes: parser.children(yes.content, base + yes.start, inline),
-        no,
-        span: parser.span(base + index, base + i),
-      },
-    ],
-    end: i,
-    block: true,
-  };
-}
-
-function readLoop(
-  parser: MarkupParser,
-  source: string,
-  index: number,
-  base: number,
-  inline: boolean,
-  cursor: number,
-): ReadResult {
-  if (source[cursor] !== '(')
-    parser.error('FOR_TEST', '@for requires (const item of expression; key expression)', base + cursor);
-  const argument = balanced(source, cursor);
-  const pieces = splitTopLevel(argument.content, ';');
-  const match = /^(?:const\s+|let\s+)?([A-Za-z_]\w*)\s+of\s+([\s\S]+)$/.exec(pieces[0]);
-  if (!match) parser.error('FOR_SYNTAX', 'Expected const item of expression', base + argument.start);
-  let i = argument.end;
-  while (/\s/.test(source[i] ?? '') && i < source.length) i++;
-  if (source[i] !== '{') parser.error('FOR_BODY', '@for requires a body', base + i);
-  const body = balanced(source, i, 'markup');
-  const itemSource = match[2];
-  const keySource = pieces[1]?.replace(/^key\s+/, '');
-  return {
-    nodes: [
-      {
-        type: 'each',
-        name: match[1].replace(/^_/, ''),
-        items: parser.expr(itemSource, base + argument.start + argument.content.indexOf(itemSource)),
-        key: keySource
-          ? parser.expr(keySource, base + argument.start + argument.content.lastIndexOf(keySource))
-          : undefined,
-        children: parser.children(body.content, base + body.start, inline),
-        span: parser.span(base + index, base + body.end),
-      },
-    ],
-    end: body.end,
-    block: true,
-  };
-}
-
-function readRegion(
-  parser: MarkupParser,
-  source: string,
-  index: number,
-  base: number,
-  inline: boolean,
-  cursor: number,
-): ReadResult {
-  const regionName = /^[A-Za-z_][\w-]*/.exec(source.slice(cursor));
-  if (!regionName) parser.error('REGION_NAME', 'Expected a region name', base + cursor);
-  let i = cursor + regionName[0].length;
-  while (/\s/.test(source[i] ?? '') && i < source.length) i++;
-  if (source[i] !== '{') parser.error('REGION_BODY', 'A region requires a default body', base + i);
-  const body = balanced(source, i, 'markup');
-  return {
-    nodes: [
-      {
-        type: 'region',
-        name: regionName[0],
-        children: parser.children(body.content, base + body.start, inline),
-        span: parser.span(base + index, base + body.end),
-      },
-    ],
-    end: body.end,
-    block: true,
-  };
-}

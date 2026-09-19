@@ -22,6 +22,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "pure-expr": "0.3.0"
+    "pure-expr": "0.4.0"
   }
 }

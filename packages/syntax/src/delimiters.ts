@@ -68,7 +68,7 @@ export function balanced(source: string, index: number, mode: 'js' | 'markup' | 
       continue;
     }
     if (mode === 'markup' && c === '@') {
-      const head = /^@(?:if|for|each)\s*/.exec(source.slice(i));
+      const head = /^@(?:if|each)\s*/.exec(source.slice(i));
       if (head) {
         const p = i + head[0].length;
         if (source[p] === '(') {
@@ -76,10 +76,20 @@ export function balanced(source: string, index: number, mode: 'js' | 'markup' | 
           continue;
         }
       }
-      const statement = /^@(?:action\s+[\w-]+|enter|module)\s*/.exec(source.slice(i));
-      if (statement && source[i + statement[0].length] === '{') {
-        i = balanced(source, i + statement[0].length, 'js').end;
+      const effect = /^@(?:enter|effect)\s*/.exec(source.slice(i));
+      if (effect && source[i + effect[0].length] === '{') {
+        i = balanced(source, i + effect[0].length, 'js').end;
         continue;
+      }
+      const declaration = /^@(action|view)\s+[\w-]+\s*/.exec(source.slice(i));
+      if (declaration) {
+        let body = i + declaration[0].length;
+        if (source[body] === '(') body = balanced(source, body, 'js').end;
+        while (/\s/.test(source[body] ?? '')) body++;
+        if (source[body] === '{') {
+          i = balanced(source, body, declaration[1] === 'view' ? 'markup' : 'js').end;
+          continue;
+        }
       }
     }
     // Markup nesting tracks the current delimiter, not apostrophes in natural-language prose.
