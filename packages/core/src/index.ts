@@ -10,8 +10,8 @@ export * from './json.js';
 
 export * from './ir.js';
 
-export * from './intrinsics.js';
-
 export * from './view.js';
 
-export * from './evaluate.js';
+export * from './expression-runtime.js';
+
+export * from './effects.js';

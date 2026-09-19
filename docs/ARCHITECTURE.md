@@ -5,7 +5,7 @@
 ```text
 Inkdown ─────┐
 Karlowe ─────┼─> semantic IR ─┬─> interpreter ─┐
-Sugarcast ───┘                 └─> ESM emitter ─┤
+Sugarcast ───┘                 └─> ESM module ──┤
 handwritten ESM ────────────────────────────────┤
                                                v
                                           Fragment ABI
@@ -26,16 +26,18 @@ The IR describes story behavior, not DOM behavior. `View.kind = "paragraph"` is 
 Karlowe and Sugarcast do not ask a semantic registry how to tokenize or balance source. Their delimiter-aware scanners first build dialect-owned, lossless CST, including unknown macro names and container bodies. Built-in or caller-provided lowerings then translate those nodes to the shared story IR:
 
 ```text
-source -> dialect CST -> CST-to-IR lowerings -> reference resolution -> StoryIR
-                                                               |
-                                               declared invoke capabilities
-                                                               |
-                                                   RuntimeExtension
+source -> dialect CST -> CST-to-IR lowerings -> StoryIR
+                                                |
+                                declared invoke capabilities
+                                                |
+                                    RuntimeExtension
 ```
 
-Inkdown directives use the same lowering contract, although its native grammar can assemble passage structure directly. A lowering is trusted build code; it is not a runtime callback and cannot add a new evaluator namespace.
+Inkdown directives use the same lowering contract, although its native grammar can assemble passage structure directly. A lowering is trusted build code; it is not a runtime callback. Application values enter evaluation through explicit runtime bindings.
 
-Expressions have one closed core AST. References explicitly identify `state`, `temporary`, `lexical`, `props`, `intrinsic`, or application `binding` namespaces; operators are finite unions rather than unchecked strings. Every parsed expression node may retain its own source origin. Dialect expression parsers normalize into this form before the runtime or ESM emitter sees them, and a project resolution pass classifies module/application bindings without falling back to dynamic name lookup.
+Expressions are the restricted ESTree subset owned by `pure-expr`; gneh has no parallel expression IR. `$name` and `_name` remain ordinary ESTree identifiers whose sigils are interpreted by a runtime `BindingStore`: persistent state, mounted-fragment temporary state, lexical props/loop locals, and application capabilities are layered in one evaluation environment. Sugarcast and Inkdown add lexer-level operator aliases, while Karlowe's Pratt parser emits the same nodes directly.
+
+Render and effect phases select separate evaluator policies. Render denies writes and sees deeply read-only state. Enter/actions enable identifier and member writes, but those writes target the Story transaction's private state copy. Gneh owns only statement control flow (`expression`, `declare`, `if`, and `each`); pure-expr owns expression parsing, calls, property access, optional chains, assignments, and updates.
 
 Unknown compatibility macros lower to `invoke` IR. Compilation requires the application to declare each extension ID; execution requires a matching phase-limited `RuntimeExtension`. This is intentionally parallel to renderer and host boundaries. It does not grant source code the authority to register executable widgets, custom macros, scripts, or DOM operations.
 
@@ -94,7 +96,7 @@ interface Fragment<P extends object = Record<string, unknown>> {
 }
 ```
 
-`defineFragment()` creates a handwritten Fragment. `defineIRFragment()` adapts portable IR. Generated ESM uses the same adapter with generated expression evaluators. There is no second “component” or “passage class”.
+`defineFragment()` creates a handwritten Fragment. `defineIRFragment()` adapts portable IR. Generated ESM embeds that IR and calls the same adapter; it does not generate a second set of expression evaluators. There is no second “component” or “passage class”.
 
 The statement that `.inkdown` and `.mjs` are equivalent means that they meet at this ABI. It does not imply byte-identical output, reversible JavaScript, or identical source maps. Generated modules are normal ESM and do not use string evaluation.
 
@@ -163,6 +165,6 @@ Inspection exposes three versioned boundaries—container records, frontend-lowe
 
 ## Interpreter and generated-code agreement
 
-Portable expressions can be interpreted or emitted as guarded JavaScript. Both paths share property, call, and optional-chain semantics. Tests compare state, visible text, choices, and navigation rather than treating the existence of an ESM file as proof of semantic equivalence.
+Portable expressions are evaluated from their ESTree by pure-expr in both source/IR and generated-ESM workflows. Tests compare state, visible text, choices, and navigation rather than treating the existence of an ESM file as proof of semantic equivalence.
 
 Structural traversal and actions still reuse runtime IR machinery. Source maps are expression-level and do not promise exact columns for every token produced by a dialect alias transformation.

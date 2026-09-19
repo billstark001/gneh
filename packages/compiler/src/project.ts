@@ -6,13 +6,11 @@ import {
   type CompileResult,
   type Diagnostic,
   type Dialect,
-  type Expr,
   type Metadata,
   type ParseResult,
   type PassageIR,
   type Span,
   type State,
-  type Statement,
   type StoryNode,
 } from '@gneh/core';
 import { mergeMetadata, splitPassages } from '@gneh/source';
@@ -70,7 +68,6 @@ export function parseSource(
   const fileBindings = new Set(parsed.passages.flatMap((passage) => passage.imports));
   for (const passage of parsed.passages) {
     passage.imports = [...fileBindings];
-    resolvePassageExpressions(passage);
   }
   return parsed;
 }
@@ -87,113 +84,6 @@ export function walkNodes(nodes: StoryNode[], fn: (node: StoryNode) => void): vo
       if (n.type === 'control') walkNodes(n.label, fn);
     }
   }
-}
-
-function resolveExpression(expr: Expr, lexical: ReadonlySet<string>, bindings: ReadonlySet<string>): void {
-  if (expr.type === 'reference') {
-    if (expr.namespace === 'lexical' && !lexical.has(expr.name) && bindings.has(expr.name)) expr.namespace = 'binding';
-    return;
-  }
-  if (expr.type === 'literal') return;
-  if (expr.type === 'array') expr.items.forEach((item) => resolveExpression(item, lexical, bindings));
-  else if (expr.type === 'object') expr.entries.forEach(([, value]) => resolveExpression(value, lexical, bindings));
-  else if (expr.type === 'unary' || expr.type === 'chain') resolveExpression(expr.value, lexical, bindings);
-  else if (expr.type === 'binary') {
-    resolveExpression(expr.left, lexical, bindings);
-    resolveExpression(expr.right, lexical, bindings);
-  } else if (expr.type === 'conditional') {
-    resolveExpression(expr.test, lexical, bindings);
-    resolveExpression(expr.yes, lexical, bindings);
-    resolveExpression(expr.no, lexical, bindings);
-  } else if (expr.type === 'get') {
-    resolveExpression(expr.object, lexical, bindings);
-    resolveExpression(expr.key, lexical, bindings);
-  } else if (expr.type === 'call') {
-    resolveExpression(expr.callee, lexical, bindings);
-    expr.args.forEach((argument) => resolveExpression(argument, lexical, bindings));
-  } else if (expr.type === 'arrow') {
-    resolveExpression(expr.body, new Set([...lexical, ...expr.params]), bindings);
-  } else if (expr.type === 'template')
-    expr.parts.forEach((part) => {
-      if (typeof part !== 'string') resolveExpression(part, lexical, bindings);
-    });
-}
-
-function resolveStatements(
-  statements: Statement[],
-  inherited: ReadonlySet<string>,
-  bindings: ReadonlySet<string>,
-): void {
-  const lexical = new Set(inherited);
-  for (const statement of statements) {
-    if (statement.type === 'assign') {
-      resolveExpression(statement.target, lexical, bindings);
-      resolveExpression(statement.value, lexical, bindings);
-    } else if (statement.type === 'declare') {
-      resolveExpression(statement.value, lexical, bindings);
-      lexical.add(statement.name);
-    } else if (statement.type === 'call') resolveExpression(statement.expression, lexical, bindings);
-    else if (statement.type === 'if') {
-      resolveExpression(statement.test, lexical, bindings);
-      resolveStatements(statement.yes, lexical, bindings);
-      resolveStatements(statement.no, lexical, bindings);
-    } else {
-      resolveExpression(statement.items, lexical, bindings);
-      resolveStatements(statement.body, new Set([...lexical, statement.name]), bindings);
-    }
-  }
-}
-
-export function resolvePassageExpressions(passage: PassageIR): void {
-  const params = Array.isArray(passage.metadata.params)
-    ? passage.metadata.params.filter((name): name is string => typeof name === 'string')
-    : [];
-  const base = new Set([...params, 'props', 'index', '_index']);
-  const bindings = new Set([
-    ...passage.imports,
-    'navigate',
-    'host',
-    'prompt',
-    'saveGame',
-    'loadGame',
-    'savedGames',
-    'history',
-  ]);
-  resolveStatements(passage.enter, base, bindings);
-  for (const action of Object.values(passage.actions))
-    resolveStatements(action.statements, new Set([...base, 'value']), bindings);
-  const visit = (nodes: StoryNode[], lexical: ReadonlySet<string>) => {
-    for (const node of nodes) {
-      if (node.type === 'value') resolveExpression(node.expression.ast, lexical, bindings);
-      else if (node.type === 'if') {
-        resolveExpression(node.test.ast, lexical, bindings);
-        visit(node.yes, lexical);
-        visit(node.no, lexical);
-      } else if (node.type === 'each') {
-        resolveExpression(node.items.ast, lexical, bindings);
-        const child = new Set([...lexical, node.name, 'index', '_index']);
-        if (node.key) resolveExpression(node.key.ast, child, bindings);
-        visit(node.children, child);
-      } else if (node.type === 'include' || node.type === 'choice') {
-        if (node.props) resolveExpression(node.props.ast, lexical, bindings);
-        if (node.type === 'choice') visit(node.children, lexical);
-      } else if (node.type === 'extension') {
-        Object.values(node.bindings).forEach((value) => resolveExpression(value.ast, lexical, bindings));
-        visit(node.children, lexical);
-      } else if (node.type === 'invoke') {
-        node.args.forEach((value) => resolveExpression(value.ast, lexical, bindings));
-        visit(node.children, lexical);
-      } else if (node.type === 'control') {
-        resolveExpression(node.value.ast, lexical, bindings);
-        node.options.forEach((value) => resolveExpression(value.ast, lexical, bindings));
-        visit(node.label, lexical);
-      } else if (node.type === 'interaction') {
-        visit(node.label, lexical);
-        visit(node.children, lexical);
-      } else if ('children' in node) visit(node.children, lexical);
-    }
-  };
-  visit(passage.body, base);
 }
 
 export function compileProject(sources: SourceInput[], options: CompileOptions = {}): CompileResult {
@@ -248,7 +138,6 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
   }
   for (const p of passages) {
     p.imports = [...(fileBindings.get(p.span.file) ?? [])];
-    resolvePassageExpressions(p);
     if (options.mode === 'vendor' && p.module.trim())
       error(
         'VENDOR_MODULE',
@@ -274,8 +163,19 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
         if (dest) {
           n.target = dest.id;
           const params = dest.metadata.params;
-          if (Array.isArray(params) && params.length && (!n.props || n.props.ast.type === 'object')) {
-            const provided = n.props?.ast.type === 'object' ? n.props.ast.entries.map(([k]) => k) : [];
+          if (Array.isArray(params) && params.length && (!n.props || n.props.ast.type === 'ObjectExpression')) {
+            const provided =
+              n.props?.ast.type === 'ObjectExpression'
+                ? n.props.ast.properties.flatMap((property) =>
+                    property.type === 'Property' && !property.computed
+                      ? property.key.type === 'Identifier'
+                        ? [property.key.name]
+                        : property.key.type === 'Literal'
+                          ? [String(property.key.value)]
+                          : []
+                      : [],
+                  )
+                : [];
             const optional = Array.isArray(dest.metadata.optionalParams) ? dest.metadata.optionalParams : [];
             for (const param of params)
               if (typeof param === 'string' && !provided.includes(param) && !optional.includes(param))

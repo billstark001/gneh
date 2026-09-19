@@ -1,35 +1,97 @@
 /** Portable IR pretty-printer used by the explicit migration command. */
-import { GnehError, type Expr, type PassageIR, type Statement, type StoryNode } from '@gneh/core';
+import { GnehError, type PassageIR, type Statement, type StoryNode } from '@gneh/core';
+import type { BindingPattern, ExpressionNode, Property } from '@gneh/expression';
 
-export function printExpression(e: Expr): string {
-  const p = printExpression;
+export type IdentifierPrinter = (name: string) => string;
+
+function printBinding(binding: BindingPattern, identifier: IdentifierPrinter): string {
+  switch (binding.type) {
+    case 'Identifier':
+      return identifier(binding.name);
+    case 'AssignmentPattern':
+      return `${printBinding(binding.left, identifier)} = ${printExpression(binding.right, identifier)}`;
+    case 'RestElement':
+      return `...${printBinding(binding.argument, identifier)}`;
+    case 'ArrayPattern':
+      return `[${binding.elements.map((element) => (element ? printBinding(element, identifier) : '')).join(', ')}]`;
+    case 'ObjectPattern':
+      return `{${binding.properties
+        .map((property) => {
+          if (property.type === 'RestElement') return `...${printBinding(property.argument, identifier)}`;
+          const key = printPropertyKey(property, identifier);
+          return `${key}: ${printBinding(property.value, identifier)}`;
+        })
+        .join(', ')}}`;
+  }
+}
+
+function printPropertyKey(property: Pick<Property, 'computed' | 'key'>, identifier: IdentifierPrinter): string {
+  if (property.computed) return `[${printExpression(property.key, identifier)}]`;
+  if (property.key.type === 'Identifier') return property.key.name;
+  return printExpression(property.key, (name) => name);
+}
+
+function printTemplateText(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('`', '\\`').replaceAll('${', '\\${');
+}
+
+export function printExpression(e: ExpressionNode, identifier: IdentifierPrinter = (name) => name): string {
+  const p = (node: ExpressionNode) => printExpression(node, identifier);
   switch (e.type) {
-    case 'chain':
-      return '(' + p(e.value) + ')';
-    case 'literal':
-      return JSON.stringify(e.value);
-    case 'reference':
-      if (e.namespace === 'state') return '$' + e.name;
-      if (e.namespace === 'temporary') return '_' + e.name;
-      return e.name;
-    case 'array':
-      return `[${e.items.map(p).join(', ')}]`;
-    case 'object':
-      return `{${e.entries.map(([k, v]) => `${JSON.stringify(k)}: ${p(v)}`).join(', ')}}`;
-    case 'unary':
-      return `(${e.op} ${p(e.value)})`;
-    case 'binary':
-      return `(${p(e.left)} ${e.op} ${p(e.right)})`;
-    case 'conditional':
-      return `(${p(e.test)} ? ${p(e.yes)} : ${p(e.no)})`;
-    case 'get':
-      return `${p(e.object)}${e.optional ? '?.' : ''}[${p(e.key)}]`;
-    case 'call':
-      return `${p(e.callee)}${e.optional ? '?.' : ''}(${e.args.map(p).join(', ')})`;
-    case 'arrow':
-      return `(${e.params.join(',')}) => ${p(e.body)}`;
-    case 'template':
-      return e.parts.map((x) => (typeof x === 'string' ? JSON.stringify(x) : `String(${p(x)})`)).join(' + ');
+    case 'Literal':
+      return typeof e.raw === 'string' ? e.raw : JSON.stringify(e.value);
+    case 'Identifier':
+      return identifier(e.name);
+    case 'TopicReference':
+      return '#';
+    case 'UnaryExpression':
+      return `(${e.operator}${/^[a-z]/i.test(e.operator) ? ' ' : ''}${p(e.argument)})`;
+    case 'UpdateExpression':
+      return e.prefix ? `(${e.operator}${p(e.argument)})` : `(${p(e.argument)}${e.operator})`;
+    case 'AwaitExpression':
+      return `(await ${p(e.argument)})`;
+    case 'BinaryExpression':
+    case 'LogicalExpression':
+      return `(${p(e.left)} ${e.operator} ${p(e.right)})`;
+    case 'AssignmentExpression':
+      return `(${p(e.left)} ${e.operator} ${p(e.right)})`;
+    case 'ConditionalExpression':
+      return `(${p(e.test)} ? ${p(e.consequent)} : ${p(e.alternate)})`;
+    case 'MemberExpression':
+      return e.computed
+        ? `${p(e.object)}${e.optional ? '?.' : ''}[${p(e.property)}]`
+        : `${p(e.object)}${e.optional ? '?.' : '.'}${e.property.type === 'Identifier' ? e.property.name : p(e.property)}`;
+    case 'CallExpression':
+      return `${p(e.callee)}${e.optional ? '?.' : ''}(${e.arguments.map(p).join(', ')})`;
+    case 'ChainExpression':
+      return p(e.expression);
+    case 'ArrayExpression':
+      return `[${e.elements.map((element) => (element ? p(element) : '')).join(', ')}]`;
+    case 'ObjectExpression':
+      return `{${e.properties
+        .map((property) =>
+          property.type === 'SpreadElement'
+            ? `...${p(property.argument)}`
+            : `${printPropertyKey(property, identifier)}: ${p(property.value)}`,
+        )
+        .join(', ')}}`;
+    case 'SpreadElement':
+      return `...${p(e.argument)}`;
+    case 'TemplateLiteral':
+      return `\`${e.quasis
+        .map(
+          (quasi, index) =>
+            `${printTemplateText(quasi.value.raw)}${index < e.expressions.length ? `\${${p(e.expressions[index])}}` : ''}`,
+        )
+        .join('')}\``;
+    case 'TaggedTemplateExpression':
+      return `${p(e.tag)}${p(e.quasi)}`;
+    case 'SequenceExpression':
+      return `(${e.expressions.map(p).join(', ')})`;
+    case 'ArrowFunctionExpression':
+      return `(${e.params.map((param) => printBinding(param, identifier)).join(', ')}) => ${p(e.body)}`;
+    case 'PipelineExpression':
+      return `(${p(e.left)} |> ${p(e.right)})`;
   }
 }
 
@@ -37,11 +99,9 @@ export function printStatements(statements: Statement[], indent = '  '): string 
   return statements
     .map((s) => {
       switch (s.type) {
-        case 'assign':
-          return `${indent}${printExpression(s.target)} ${s.op} ${printExpression(s.value)};`;
         case 'declare':
           return `${indent}let ${s.name} = ${printExpression(s.value)};`;
-        case 'call':
+        case 'expression':
           return `${indent}${printExpression(s.expression)};`;
         case 'if':
           return `${indent}if (${printExpression(s.test)}) {\n${printStatements(s.yes, indent + '  ')}\n${indent}}${s.no.length ? ` else {\n${printStatements(s.no, indent + '  ')}\n${indent}}` : ''}`;

@@ -1,15 +1,34 @@
 import { describe, expect, test } from 'vitest';
-import { emitExpression, parseExpression, parseModule, sugarExpression } from '../dist/index.js';
+import { parseExpression, parseModule, parseStatements } from '../dist/index.js';
 
 describe('@gneh/expression', () => {
-  test('parses state and lexical references into the portable expression AST', () => {
+  test('parses state and lexical identifiers into restricted ESTree', () => {
     const expression = parseExpression('$hp + bonus');
-    expect(expression.ast.type).toBe('binary');
-    expect(emitExpression(expression.ast)).toContain('resolveReference(c,s,"state","hp")');
+    expect(expression.ast).toMatchObject({
+      type: 'BinaryExpression',
+      operator: '+',
+      left: { type: 'Identifier', name: '$hp' },
+      right: { type: 'Identifier', name: 'bonus' },
+    });
   });
 
-  test('rewrites compatibility operators without touching strings', () => {
-    expect(sugarExpression('$a is 1 and "is and"')).toBe('$a === 1 && "is and"');
+  test('parses dialect operator aliases without rewriting strings', () => {
+    expect(parseExpression('$a is 1 and "is and"').ast).toMatchObject({
+      type: 'LogicalExpression',
+      operator: '&&',
+      left: { type: 'BinaryExpression', operator: '===' },
+      right: { type: 'Literal', value: 'is and' },
+    });
+  });
+
+  test('uses the same aliases inside effect control flow', () => {
+    expect(parseStatements('if ($hp gt 0 and ready) { $hp to $hp - 1; }')).toMatchObject([
+      {
+        type: 'if',
+        test: { type: 'LogicalExpression', operator: '&&' },
+        yes: [{ type: 'expression', expression: { type: 'AssignmentExpression', operator: '=' } }],
+      },
+    ]);
   });
 
   test('extracts module bindings and exports', () => {

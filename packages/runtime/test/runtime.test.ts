@@ -27,6 +27,18 @@ test('transactions update the full semantic view and checkpoint state', () => {
   assert.equal(s.state.hp, 2);
 });
 
+test('effect expressions commit member assignments and updates through the story transaction', () => {
+  const s = story(
+    '@action hurt { $player.hp -= 1; $items[0].count++; }\n{{ $player.hp }} / {{ $items[0].count }}\n[[Hurt => hurt]]',
+    'inkdown',
+    { state: { player: { hp: 3 }, items: [{ count: 0 }] } },
+  );
+  click(s, 'Hurt');
+  assert.deepEqual(s.state, { player: { hp: 2 }, items: [{ count: 1 }] });
+  assert.equal(s.undo(), true);
+  assert.deepEqual(s.state, { player: { hp: 3 }, items: [{ count: 0 }] });
+});
+
 test('failed mutation rolls state and history back', () => {
   const s = story(source, 'inkdown', { state: { hp: 3, visits: 0 } });
   assert.throws(() =>

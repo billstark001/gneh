@@ -79,7 +79,6 @@ export interface Fragment<P extends object = FragmentProps> {
   readonly capabilities: readonly string[];
   readonly ir?: PassageIR;
   readonly bindings?: Readonly<Record<string, unknown>>;
-  readonly evaluators?: Readonly<Record<string, (ctx: EvaluationContext, scope: Scope) => unknown>>;
   enter?: (ctx: FragmentContext, props: P) => void;
   render: (ctx: FragmentContext, props: P) => ViewInput;
 }

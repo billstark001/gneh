@@ -8,8 +8,8 @@ gneh 0.1 is a working reference implementation, not an audited game engine or an
 | --- | --- |
 | Authoring | Three portable profiles over shared container and document tools; not full Harlowe or SugarCube |
 | Metadata | JSON plus a JSON-compatible YAML subset; not YAML 1.2 |
-| JavaScript | A closed Acorn-parsed portable AST; ordinary JavaScript only in trusted ESM |
-| Generated code | ESM, expression evaluators, declarations, and maps; structural traversal still uses runtime IR |
+| JavaScript | The restricted ESTree subset parsed and evaluated by pure-expr; ordinary JavaScript only in trusted ESM |
+| Generated code | ESM embeds Story IR plus declarations and maps; the shared runtime evaluates its ESTree expressions |
 | Reactivity | Transaction-level full-view recomputation with keyed identities; not fine-grained signals |
 | Types | Typed Fragment props and state/props projection; external module bindings remain conservative |
 | LSP | Protocol diagnostics, completion, hover, definitions, references, and conservative rename; no editor extension |
@@ -21,7 +21,7 @@ gneh 0.1 is a working reference implementation, not an audited game engine or an
 
 ## Trusted and untrusted code
 
-Portable expressions do not use `eval` or `new Function`. They operate on a checked AST, guarded property/method access, deep read-only render state, finite execution budgets, and post-transaction JSON validation.
+Portable expressions do not use `eval` or `new Function`. They use pure-expr's parser/evaluator and access-policy APIs, deep read-only render state, finite Story execution budgets, and post-transaction JSON validation. gneh is not a hostile-code sandbox: source, imported bindings, and extensions are application-owned, and permissive call access is deliberate.
 
 Imported `.mjs`, module helpers, and renderer extensions are normal trusted host JavaScript. Passing them to the runtime does not sandbox them. Their purity and host permissions remain the application's responsibility.
 

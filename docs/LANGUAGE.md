@@ -39,7 +39,7 @@ Code fences do not open new Twee passages. CRLF and Unicode source offsets are p
 - `$hp` in prose and `{{ $hp }}` produce the same value node.
 - Complex access is explicit: `{{ $player.hp }}`. Bare `$player.hp` interpolates only `$player` and leaves `.hp` as prose.
 - Inline code and `\$hp` remain literal. `$1.50` is currency, not a state reference.
-- `$name` reads persistent story state. Plain names resolve props, loop locals, or module bindings. `props.enemy` is also available.
+- `$name` reads persistent story state; `state.name` exposes the same state object. `_name` addresses mounted-fragment temporary state. Plain names resolve props, loop locals, or module bindings, and `props.enemy` remains available explicitly.
 - Render expressions cannot mutate. Writes occur during enter or action effects.
 - State must remain finite JSON data; functions, DOM nodes, cycles, and unsafe keys are rejected.
 - Effect-time randomness uses a seeded PRNG stored in snapshots. Render-time randomness is rejected.
@@ -112,9 +112,9 @@ A source file has at most one shared `@module`. It uses JavaScript ESM grammar, 
 
 ## Portable JavaScript subset
 
-Acorn parses expressions before gneh lowers them to a closed AST. Supported forms include scalars, arrays/objects, property access, arithmetic and boolean operators, conditionals, short-circuit and optional chains, templates, expression-bodied arrow functions, and approved calls. Actions add assignment, local declarations, calls, `if`, and `for-of`.
+`pure-expr` parses every frontend into its restricted ESTree subset. Supported forms include scalars, arrays/objects, property access, arithmetic and boolean operators, conditionals, short-circuit and optional chains, templates, expression-bodied arrow functions, and calls. Actions additionally enable identifier/member assignment and updates; gneh supplies the small statement layer for local declarations, expression statements, `if`, and `for-of`.
 
-The portable AST excludes `new`, classes, dynamic import, `eval`, `await`, generators, prototype access, and block-bodied arrow functions. Complex trusted behavior belongs in handwritten ESM.
+Render expressions are evaluated with writes denied. Enter/action expressions commit writes into the enclosing Story transaction, so failed member writes, invalid JSON state, or later rendering errors roll back together. The parser still excludes statement-only JavaScript such as `new`, classes, dynamic import, generators, and block-bodied arrow functions; complex trusted behavior belongs in handwritten ESM or an explicit host binding.
 
 ## Karlowe profile
 

@@ -1,247 +1,183 @@
-import { parse, parseExpressionAt } from 'acorn';
+import { parse, tokenizer } from 'acorn';
 import {
-  GnehError,
-  intrinsicByName,
-  safeKey,
-  type AssignmentOp,
-  type BinaryOp,
-  type Expr,
-  type Expression,
-  type Span,
-  type Statement,
-} from '@gneh/core';
+  JSExpressionParser,
+  JSLexer,
+  type ExpressionNode,
+  type JSLexerRule,
+  type JSParserOptions,
+} from 'pure-expr/expr';
+import { GnehError, type Expression, type Span, type Statement } from '@gneh/core';
 
-// The untrusted ESTree adapter is intentionally the only loose boundary; the public IR is closed.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ESTree = any;
+const wordOperators = Object.freeze({
+  isnot: '!==',
+  is: '===',
+  eq: '===',
+  neq: '!==',
+  gt: '>',
+  gte: '>=',
+  lt: '<',
+  lte: '<=',
+  and: '&&',
+  or: '||',
+  not: '!',
+  to: '=',
+});
 
-const binaryOps = new Set<BinaryOp>([
-  '+',
-  '-',
-  '*',
-  '/',
-  '%',
-  '**',
-  '===',
-  '!==',
-  '==',
-  '!=',
-  '<',
-  '<=',
-  '>',
-  '>=',
-  '&&',
-  '||',
-  '??',
-]);
+const operatorRules: readonly JSLexerRule[] = Object.entries(wordOperators)
+  .sort(([left], [right]) => right.length - left.length)
+  .map(([word, operator]) => ({
+    match(source, position, previous) {
+      if (!source.startsWith(word, position)) return false;
+      if (/[A-Za-z0-9_$]/.test(source[position - 1] ?? '')) return false;
+      if (/[A-Za-z0-9_$]/.test(source[position + word.length] ?? '')) return false;
+      if (previous.at(-1)?.value === '.' || previous.at(-1)?.value === '?.') return false;
+      return source.slice(position + word.length).trimStart()[0] !== ':';
+    },
+    advance(_source, position) {
+      return { kind: 'op', value: operator, start: position, end: position + word.length };
+    },
+  }));
 
-function unsupported(node: ESTree): never {
-  throw new GnehError('EXPR_UNSUPPORTED', `Unsupported portable expression: ${node.type}`);
+export interface GnehExpressionOptions {
+  writes?: boolean;
 }
 
-function reference(name: string, origin?: Span): Expr {
-  if (name === 'state') return { type: 'reference', namespace: 'state', name: '*', origin };
-  safeKey(name.replace(/^[$_]/, ''));
-  if (name.startsWith('$')) return { type: 'reference', namespace: 'state', name: name.slice(1), origin };
-  if (name.startsWith('_')) return { type: 'reference', namespace: 'temporary', name: name.slice(1), origin };
-  if (name === 'props') return { type: 'reference', namespace: 'props', name, origin };
-  const intrinsic = intrinsicByName(name);
-  if (intrinsic) return { type: 'reference', namespace: 'intrinsic', name: intrinsic.id, origin };
-  return { type: 'reference', namespace: 'lexical', name, origin };
-}
+const structuralOperators: Readonly<Record<string, string>> = Object.freeze({
+  isnot: '!==  ',
+  is: '==',
+  eq: '==',
+  neq: '!= ',
+  gt: '> ',
+  gte: '>= ',
+  lt: '< ',
+  lte: '<= ',
+  and: '&& ',
+  or: '||',
+  not: '!  ',
+  to: '= ',
+});
 
-export function fromESTree(node: ESTree, sourceSpan?: Span, sourceStart = sourceSpan?.start ?? 0): Expr {
-  const origin =
-    sourceSpan && typeof node.start === 'number' && typeof node.end === 'number'
-      ? { ...sourceSpan, start: sourceStart + node.start, end: sourceStart + node.end }
-      : undefined;
-  const child = (value: ESTree) => fromESTree(value, sourceSpan, sourceStart);
-  switch (node.type) {
-    case 'Literal':
-      if (node.regex || node.bigint) unsupported(node);
-      return { type: 'literal', value: node.value, origin };
-    case 'Identifier':
-      return reference(node.name, origin);
-    case 'ArrayExpression':
-      return {
-        type: 'array',
-        items: node.elements.map((n: ESTree) => (n ? child(n) : { type: 'literal', value: null })),
-        origin,
-      };
-    case 'ObjectExpression':
-      return {
-        type: 'object',
-        entries: node.properties.map((p: ESTree) => {
-          if (p.type !== 'Property' || p.kind !== 'init' || p.method || (p.computed && p.key.type !== 'Literal'))
-            unsupported(p);
-          return [safeKey(p.key.name ?? p.key.value), child(p.value)];
-        }),
-        origin,
-      };
-    case 'UnaryExpression':
-      if (!['!', '+', '-', 'typeof'].includes(node.operator)) unsupported(node);
-      return { type: 'unary', op: node.operator, value: child(node.argument), origin };
-    case 'BinaryExpression':
-    case 'LogicalExpression':
-      if (!binaryOps.has(node.operator)) unsupported(node);
-      return {
-        type: 'binary',
-        op: node.operator as BinaryOp,
-        left: child(node.left),
-        right: child(node.right),
-        origin,
-      };
-    case 'ConditionalExpression':
-      return {
-        type: 'conditional',
-        test: child(node.test),
-        yes: child(node.consequent),
-        no: child(node.alternate),
-        origin,
-      };
-    case 'MemberExpression':
-      return {
-        type: 'get',
-        object: child(node.object),
-        key: node.computed ? child(node.property) : { type: 'literal', value: safeKey(node.property.name) },
-        optional: !!node.optional,
-        origin,
-      };
-    case 'CallExpression':
-      return {
-        type: 'call',
-        callee: child(node.callee),
-        args: node.arguments.map(child),
-        optional: !!node.optional,
-        origin,
-      };
-    case 'ChainExpression':
-      return { type: 'chain', value: child(node.expression), origin };
-    case 'ParenthesizedExpression':
-      return child(node.expression);
-    case 'ArrowFunctionExpression':
-      if (
-        node.async ||
-        node.body.type === 'BlockStatement' ||
-        node.params.some((p: ESTree) => p.type !== 'Identifier' || p.name.startsWith('$'))
-      )
-        unsupported(node);
-      return {
-        type: 'arrow',
-        params: node.params.map((p: ESTree) => safeKey(p.name)),
-        body: child(node.body),
-        origin,
-      };
-    case 'TemplateLiteral':
-      return {
-        type: 'template',
-        parts: node.quasis.flatMap((q: ESTree, i: number) =>
-          i < node.expressions.length ? [q.value.cooked, child(node.expressions[i])] : [q.value.cooked],
-        ),
-        origin,
-      };
-    default:
-      return unsupported(node);
+/** Give Acorn valid, offset-preserving operators while it discovers statement structure. */
+function structuralSource(source: string): string {
+  const replacements: { start: number; end: number; value: string }[] = [];
+  const tokens = tokenizer(source, { ecmaVersion: 'latest', sourceType: 'module' });
+  let previous = '';
+  while (true) {
+    const token = tokens.getToken();
+    if (token.type.label === 'eof') break;
+    const word = source.slice(token.start, token.end);
+    const value = structuralOperators[word];
+    if (value && previous !== '.' && previous !== '?.' && source.slice(token.end).trimStart()[0] !== ':')
+      replacements.push({ start: token.start, end: token.end, value });
+    previous = token.type.label;
   }
+  if (!replacements.length) return source;
+  const output = [...source];
+  for (const replacement of replacements)
+    output.splice(replacement.start, replacement.end - replacement.start, ...replacement.value);
+  return output.join('');
+}
+
+function parseAst(source: string, options: GnehExpressionOptions = {}): ExpressionNode {
+  const tokens = new JSLexer(source, {
+    rules: operatorRules,
+    numbers: { bigint: false },
+  }).tokenize();
+  const parserOptions: JSParserOptions = {
+    allowAssignments: options.writes,
+    allowMemberWrites: options.writes,
+    allowAwait: false,
+    allowRegexLiterals: false,
+    allowTaggedTemplates: false,
+  };
+  return new JSExpressionParser(tokens, parserOptions, source).parse();
 }
 
 export function parseExpression(
   source: string,
   span: Span = { file: '<expression>', start: 0, end: source.length },
+  options: GnehExpressionOptions = {},
 ): Expression {
   try {
-    const ast = parseExpressionAt(source, 0, {
-      ecmaVersion: 'latest',
-      preserveParens: true,
-    }) as ESTree;
-    if (
-      source
-        .slice(ast.end)
-        .replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
-        .trim()
-    )
-      throw new GnehError('EXPR_TRAILING', 'Unexpected text after expression.');
-    return { ast: fromESTree(ast, span, span.start), source, span };
+    return { ast: parseAst(source, options), source, span };
   } catch (error) {
-    if (error instanceof GnehError) throw new GnehError(error.code, error.message, span);
     throw new GnehError('EXPR_SYNTAX', (error as Error).message, span);
   }
 }
 
-function statement(node: ESTree, span?: Span): Statement[] {
-  const expression = (value: ESTree) => fromESTree(value, span, span?.start ?? 0);
+// Acorn remains responsible only for statement and ESM structure. Every embedded
+// expression is reparsed by pure-expr so all dialects share one expression grammar.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ESTree = any;
+
+function statementSource(source: string, node: ESTree): string {
+  return source.slice(node.start, node.end);
+}
+
+function expressionFrom(source: string, node: ESTree, span?: Span): ExpressionNode {
+  const text = statementSource(source, node);
+  const start = (span?.start ?? 0) + node.start;
+  return parseExpression(text, span ? { ...span, start, end: start + text.length } : undefined, { writes: true }).ast;
+}
+
+function lowerStatement(source: string, node: ESTree, span?: Span): Statement[] {
   switch (node.type) {
     case 'EmptyStatement':
       return [];
     case 'BlockStatement':
-      return node.body.flatMap((value: ESTree) => statement(value, span));
+      return node.body.flatMap((value: ESTree) => lowerStatement(source, value, span));
     case 'VariableDeclaration':
-      return node.declarations.map((d: ESTree) => {
-        if (d.id.type !== 'Identifier' || d.id.name.startsWith('$')) unsupported(d);
+      return node.declarations.map((declaration: ESTree) => {
+        if (declaration.id.type !== 'Identifier' || declaration.id.name.startsWith('$'))
+          throw new GnehError('ACTION_UNSUPPORTED', 'Action declarations require a plain identifier.', span);
         return {
-          type: 'declare',
-          name: safeKey(d.id.name.replace(/^_/, '')),
-          value: d.init ? expression(d.init) : { type: 'literal', value: null },
+          type: 'declare' as const,
+          name: declaration.id.name.replace(/^_/, ''),
+          value: declaration.init
+            ? expressionFrom(source, declaration.init, span)
+            : parseExpression('undefined', span).ast,
         };
       });
-    case 'ExpressionStatement': {
-      const e = node.expression;
-      if (e.type === 'AssignmentExpression') {
-        if (!['=', '+=', '-=', '*=', '/=', '%=', '**='].includes(e.operator)) unsupported(e);
-        return [
-          {
-            type: 'assign',
-            target: expression(e.left),
-            op: e.operator as AssignmentOp,
-            value: expression(e.right),
-          },
-        ];
-      }
-      if (e.type === 'UpdateExpression')
-        return [
-          {
-            type: 'assign',
-            target: expression(e.argument),
-            op: e.operator === '++' ? '+=' : '-=',
-            value: { type: 'literal', value: 1 },
-          },
-        ];
-      if (e.type === 'CallExpression') return [{ type: 'call', expression: expression(e) }];
-      return unsupported(e);
-    }
+    case 'ExpressionStatement':
+      return [{ type: 'expression', expression: expressionFrom(source, node.expression, span) }];
     case 'IfStatement':
       return [
         {
           type: 'if',
-          test: expression(node.test),
-          yes: statement(node.consequent, span),
-          no: node.alternate ? statement(node.alternate, span) : [],
+          test: expressionFrom(source, node.test, span),
+          yes: lowerStatement(source, node.consequent, span),
+          no: node.alternate ? lowerStatement(source, node.alternate, span) : [],
         },
       ];
     case 'ForOfStatement': {
       const variable = node.left.type === 'VariableDeclaration' ? node.left.declarations[0]?.id : node.left;
-      if (node.await || variable?.type !== 'Identifier' || variable.name.startsWith('$')) unsupported(node);
+      if (node.await || variable?.type !== 'Identifier' || variable.name.startsWith('$'))
+        throw new GnehError('ACTION_UNSUPPORTED', 'Action loops require a plain local identifier.', span);
       return [
         {
           type: 'each',
-          name: safeKey(variable.name.replace(/^_/, '')),
-          items: expression(node.right),
-          body: statement(node.body, span),
+          name: variable.name.replace(/^_/, ''),
+          items: expressionFrom(source, node.right, span),
+          body: lowerStatement(source, node.body, span),
         },
       ];
     }
     default:
-      return unsupported(node);
+      throw new GnehError('ACTION_UNSUPPORTED', `Unsupported action statement: ${node.type}`, span);
   }
 }
 
 export function parseStatements(source: string, span?: Span): Statement[] {
   try {
-    return (parse(source, { ecmaVersion: 'latest', sourceType: 'module' }) as ESTree).body.flatMap((node: ESTree) =>
-      statement(node, span),
-    );
-  } catch (e) {
-    throw new GnehError(e instanceof GnehError ? e.code : 'ACTION_SYNTAX', (e as Error).message, span);
+    try {
+      return [{ type: 'expression', expression: parseAst(source, { writes: true }) }];
+    } catch {
+      // A complete action block needs the restricted statement grammar below.
+    }
+    const program = parse(structuralSource(source), { ecmaVersion: 'latest', sourceType: 'module' }) as ESTree;
+    return program.body.flatMap((node: ESTree) => lowerStatement(source, node, span));
+  } catch (error) {
+    throw new GnehError(error instanceof GnehError ? error.code : 'ACTION_SYNTAX', (error as Error).message, span);
   }
 }
 
@@ -268,97 +204,31 @@ export function parseModule(source: string): {
             : node.type === 'ArrayPattern'
               ? node.elements.flatMap(pattern)
               : node.type === 'ObjectPattern'
-                ? node.properties.flatMap((p: ESTree) => pattern(p.value ?? p.argument))
+                ? node.properties.flatMap((property: ESTree) => pattern(property.value ?? property.argument))
                 : [];
   const declaration = (node: ESTree): string[] =>
     node?.type === 'VariableDeclaration'
-      ? node.declarations.flatMap((d: ESTree) => pattern(d.id))
+      ? node.declarations.flatMap((value: ESTree) => pattern(value.id))
       : node?.id
         ? [node.id.name]
         : [];
   for (const node of ast.body) {
     if (node.type === 'ImportDeclaration') {
-      const names = node.specifiers.map((s: ESTree) => s.local.name);
+      const names = node.specifiers.map((specifier: ESTree) => specifier.local.name);
       imports.push(...names);
-      names.forEach((n: string) => bindings.add(n));
+      names.forEach((name: string) => bindings.add(name));
     }
     if (node.type === 'ExportDefaultDeclaration')
       throw new GnehError('MODULE_DEFAULT', 'The document body owns the default export. Use named exports in @module.');
-    const decl = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
-    for (const name of declaration(decl)) bindings.add(name);
+    const declared = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+    for (const name of declaration(declared)) bindings.add(name);
     if (node.type === 'ExportNamedDeclaration') {
       exports.push(
-        ...declaration(decl),
-        ...node.specifiers.map((spec: ESTree) => spec.exported.name ?? spec.exported.value),
+        ...declaration(declared),
+        ...node.specifiers.map((specifier: ESTree) => specifier.exported.name ?? specifier.exported.value),
       );
-      if (decl?.type === 'FunctionDeclaration') functions.push(decl.id.name);
+      if (declared?.type === 'FunctionDeclaration') functions.push(declared.id.name);
     }
   }
   return { imports, exports, bindings: [...bindings], functions };
-}
-
-/** Token-aware aliases, never replacements inside strings, comments or member names. */
-export function sugarExpression(source: string): string {
-  const aliases: Record<string, string> = {
-    is: '===',
-    isnot: '!==',
-    eq: '===',
-    neq: '!==',
-    gt: '>',
-    gte: '>=',
-    lt: '<',
-    lte: '<=',
-    and: '&&',
-    or: '||',
-    not: '!',
-    to: '=',
-  };
-  let out = '',
-    i = 0;
-  while (i < source.length) {
-    const c = source[i];
-    if (c === '"' || c === "'" || c === '`') {
-      const q = c;
-      let end = i + 1;
-      while (end < source.length) {
-        if (source[end] === '\\') {
-          end += 2;
-          continue;
-        }
-        if (source[end++] === q) break;
-      }
-      out += source.slice(i, end);
-      i = end;
-      continue;
-    }
-    if (source.startsWith('//', i)) {
-      const end = source.indexOf('\n', i);
-      if (end < 0) {
-        out += source.slice(i);
-        break;
-      }
-      out += source.slice(i, end);
-      i = end;
-      continue;
-    }
-    if (source.startsWith('/*', i)) {
-      const e = source.indexOf('*/', i + 2);
-      if (e < 0) throw new GnehError('EXPR_SYNTAX', 'Unclosed comment');
-      out += source.slice(i, e + 2);
-      i = e + 2;
-      continue;
-    }
-    const word = /^[A-Za-z_$][\w$]*/.exec(source.slice(i));
-    if (word) {
-      const w = word[0],
-        previous = out.trimEnd().slice(-1),
-        after = source.slice(i + w.length).trimStart();
-      out += previous === '.' || after.startsWith(':') ? w : (aliases[w] ?? w);
-      i += w.length;
-    } else {
-      out += c;
-      i++;
-    }
-  }
-  return out;
 }

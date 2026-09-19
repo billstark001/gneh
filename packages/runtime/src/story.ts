@@ -288,11 +288,6 @@ export class Story {
           ...frame.fragment.bindings,
           navigate: (id: string, props?: FragmentProps) => context.navigate(id, props),
           host: (operation: string, ...args: unknown[]) => context.host(operation, args),
-          prompt: (...args: unknown[]) => context.host('prompt', args),
-          saveGame: (...args: unknown[]) => context.host('save', args),
-          loadGame: (...args: unknown[]) => context.host('load', args),
-          savedGames: (...args: unknown[]) => context.host('saved-games', args),
-          history: (...args: unknown[]) => context.host('history', args),
         };
       },
       live: this.live,

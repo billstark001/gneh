@@ -1,4 +1,6 @@
-import type { Expression, Expr, PassageIR, Span, State, Statement, StoryNode } from '@gneh/core';
+import { printExpression } from '@gneh/compiler';
+import type { Expression, PassageIR, Span, State, Statement, StoryNode } from '@gneh/core';
+import type { ExpressionNode } from '@gneh/expression';
 
 /** A generated range paired with the authoring-language range that produced it. */
 export interface ProjectionMapping {
@@ -29,40 +31,12 @@ export function inferType(value: unknown): string {
 }
 
 /** Render portable IR as type-checkable TypeScript, never as executable story code. */
-function typedExpression(expression: Expr): string {
-  const print = typedExpression;
-  switch (expression.type) {
-    case 'chain':
-      return print(expression.value);
-    case 'literal':
-      return JSON.stringify(expression.value);
-    case 'reference':
-      if (expression.namespace === 'state') return `state[${JSON.stringify(expression.name)}]`;
-      if (expression.namespace === 'props') return 'props';
-      return expression.name;
-    case 'array':
-      return `[${expression.items.map(print).join(',')}]`;
-    case 'object':
-      return `{${expression.entries.map(([key, value]) => `${JSON.stringify(key)}:${print(value)}`).join(',')}}`;
-    case 'unary':
-      return `(${expression.op} ${print(expression.value)})`;
-    case 'binary':
-      return `(${print(expression.left)} ${expression.op} ${print(expression.right)})`;
-    case 'conditional':
-      return `(${print(expression.test)}?${print(expression.yes)}:${print(expression.no)})`;
-    case 'get':
-      return `${print(expression.object)}${expression.optional ? '?.' : ''}[${print(expression.key)}]`;
-    case 'call':
-      return `${print(expression.callee)}${expression.optional ? '?.' : ''}(${expression.args.map(print).join(',')})`;
-    case 'arrow':
-      return `(${expression.params.join(',')})=>(${print(expression.body)})`;
-    case 'template':
-      return (
-        expression.parts
-          .map((part) => (typeof part === 'string' ? JSON.stringify(part) : `String(${print(part)})`))
-          .join(' + ') || '""'
-      );
-  }
+function typedExpression(expression: ExpressionNode): string {
+  return printExpression(expression, (name) => {
+    if (name.startsWith('$')) return `state[${JSON.stringify(name.slice(1))}]`;
+    if (name.startsWith('_')) return name.slice(1);
+    return name;
+  });
 }
 
 function typedStatements(statements: Statement[]): string {
@@ -70,11 +44,9 @@ function typedStatements(statements: Statement[]): string {
   return statements
     .map((statement) => {
       switch (statement.type) {
-        case 'assign':
-          return `${print(statement.target)} ${statement.op} ${print(statement.value)};`;
         case 'declare':
           return `let ${statement.name}=${print(statement.value)};`;
-        case 'call':
+        case 'expression':
           return `${print(statement.expression)};`;
         case 'if':
           return `if(${print(statement.test)}){${typedStatements(statement.yes)}}else{${typedStatements(statement.no)}}`;
@@ -91,7 +63,7 @@ function typedStatements(statements: Statement[]): string {
  * belongs to the real ESM/Vite project, while this layer checks portable story code.
  */
 export function createVirtualFile(passages: PassageIR[], state: State, stateTypes?: string): VirtualFile {
-  let code = `export {};\ntype State = ${stateTypes ?? inferType(state)};\ndeclare let state: State;\ndeclare let value: unknown;\ndeclare function display(value: string|number|boolean|null|undefined): void;\ndeclare function contains(container: unknown, value: unknown): boolean;\ndeclare function random(min:number,max:number):number;\ndeclare function either<T>(...values:T[]):T;\ndeclare function array<T>(...values:T[]):T[];\ndeclare function datamap(...values:unknown[]):Record<string,unknown>;\ndeclare function navigate(id:string,props?:object):void;\ndeclare function host(operation:string,...args:unknown[]):unknown;\ndeclare function prompt(...args:unknown[]):unknown;\ndeclare function saveGame(...args:unknown[]):unknown;\ndeclare function loadGame(...args:unknown[]):unknown;\ndeclare function savedGames(...args:unknown[]):unknown;\ndeclare function history(...args:unknown[]):unknown;\n`;
+  let code = `export {};\ntype State = ${stateTypes ?? inferType(state)};\ndeclare let state: State;\ndeclare let value: unknown;\ndeclare function display(value: string|number|boolean|null|undefined): void;\ndeclare function contains(container: unknown, value: unknown): boolean;\ndeclare function random(min:number,max:number):number;\ndeclare function either<T>(...values:T[]):T;\ndeclare function array<T>(...values:T[]):T[];\ndeclare function datamap(...values:unknown[]):Record<string,unknown>;\ndeclare function navigate(id:string,props?:object):void;\ndeclare function host(operation:string,...args:unknown[]):unknown;\n`;
   const mappings: ProjectionMapping[] = [];
   const emit = (text: string, source?: Span) => {
     const start = code.length;

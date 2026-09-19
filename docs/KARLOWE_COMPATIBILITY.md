@@ -14,7 +14,7 @@ source
   -> shared runtime and renderer protocol
 ```
 
-The lexer is a new single-pass scanner. It owns balanced macros, hooks, strings, comments, verbatim spans, and the `[[`/`[[[` ambiguity, but deliberately does not classify expression operators. This keeps `/` and `%` distinct and prevents markup token rules from becoming expression semantics. The small attributed Pratt parser is retained only for precedence after atoms have been parsed into the closed gneh expression AST.
+The lexer is a new single-pass scanner. It owns balanced macros, hooks, strings, comments, verbatim spans, and the `[[`/`[[[` ambiguity, but deliberately does not classify expression operators. This keeps `/` and `%` distinct and prevents markup token rules from becoming expression semantics. The small attributed Pratt parser is retained only for Karlowe precedence and lowers directly into the same restricted ESTree subset used by `pure-expr`.
 
 ## Semantic compatibility classes
 

@@ -80,7 +80,7 @@ function requireHook(value: KarloweAttachment, p: MarkupParser, base: number): K
 
 function literalString(source: string, p: MarkupParser, start: number): string {
   const ast = p.expr(source, start).ast;
-  if (ast.type !== 'literal' || typeof ast.value !== 'string')
+  if (ast.type !== 'Literal' || typeof ast.value !== 'string')
     p.error('STATIC_TARGET', 'Expected a literal string.', start, start + source.length);
   return ast.value as string;
 }
@@ -96,7 +96,7 @@ function presentationExpression(property: string, macro: KarloweMacroToken, p: M
     /^(?:#[\da-f]{3,8}|[a-z][\w-]*)(?:\s*\+\s*(?:#[\da-f]{3,8}|[a-z][\w-]*))*$/i.test(raw)
   )
     return {
-      ast: { type: 'literal', value: raw },
+      ast: { type: 'Literal', value: raw },
       source: raw,
       span: p.span(base + macro.argsStart, base + macro.end - 1),
     };
@@ -104,8 +104,8 @@ function presentationExpression(property: string, macro: KarloweMacroToken, p: M
   if (args.length > 1)
     return {
       ast: {
-        type: 'array',
-        items: args.map((arg) => p.expr(arg, base + macro.argsStart + macro.args.indexOf(arg)).ast),
+        type: 'ArrayExpression',
+        elements: args.map((arg) => p.expr(arg, base + macro.argsStart + macro.args.indexOf(arg)).ast),
       },
       source: macro.args,
       span: p.span(base + macro.argsStart, base + macro.end - 1),
@@ -142,7 +142,7 @@ function wrapPresentation(
 
 function labelNodes(macro: KarloweMacroToken, p: MarkupParser, base: number): StoryNode[] {
   const value = expression(macro, p, base);
-  if (value.ast.type === 'literal' && typeof value.ast.value === 'string')
+  if (value.ast.type === 'Literal' && typeof value.ast.value === 'string')
     return [
       {
         type: 'text',
@@ -161,11 +161,11 @@ function labelNodes(macro: KarloweMacroToken, p: MarkupParser, base: number): St
 
 function hostStatement(operation: string, args: Expression[]): Statement {
   return {
-    type: 'call',
+    type: 'expression',
     expression: {
-      type: 'call',
-      callee: { type: 'reference', namespace: 'binding', name: 'host' },
-      args: [{ type: 'literal', value: operation }, ...args.map((item) => item.ast)],
+      type: 'CallExpression',
+      callee: { type: 'Identifier', name: 'host' },
+      arguments: [{ type: 'Literal', value: operation }, ...args.map((item) => item.ast)],
       optional: false,
     },
   };
@@ -200,14 +200,24 @@ function parseControl(
       base + macro.end - 1,
     );
   const target = p.expr(binding[1], base + macro.argsStart + macro.args.indexOf(binding[1]));
+  if (target.ast.type !== 'Identifier' && target.ast.type !== 'MemberExpression')
+    p.error(
+      'KARLOWE_BINDING',
+      `(${macro.name}:) binding must be an identifier or member expression.`,
+      base + macro.argsStart,
+      base + macro.end - 1,
+    );
   const values = args.slice(1).map((arg) => p.expr(arg, base + macro.argsStart + macro.args.indexOf(arg)));
   const action = p.addAction(
     [
       {
-        type: 'assign',
-        target: target.ast,
-        op: '=',
-        value: { type: 'reference', namespace: 'lexical', name: 'value' },
+        type: 'expression',
+        expression: {
+          type: 'AssignmentExpression',
+          operator: '=',
+          left: target.ast,
+          right: { type: 'Identifier', name: 'value' },
+        },
       },
     ],
     macro.args,
@@ -318,7 +328,8 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
       ];
     }
     let test = expression(first, p, base);
-    if (name === 'unless') test = { ...test, ast: { type: 'unary', op: '!', value: test.ast } };
+    if (name === 'unless')
+      test = { ...test, ast: { type: 'UnaryExpression', operator: '!', prefix: true, argument: test.ast } };
     return {
       nodes: [{ type: 'if', test, yes, no, span: p.span(span.start, base + end) }],
       end,
@@ -389,8 +400,8 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
         ? p.expr(args[1], base + first.argsStart + first.args.indexOf(args[1]))
         : {
             ast: {
-              type: 'array' as const,
-              items: args.slice(1).map((arg) => p.expr(arg, base + first.argsStart + first.args.indexOf(arg)).ast),
+              type: 'ArrayExpression' as const,
+              elements: args.slice(1).map((arg) => p.expr(arg, base + first.argsStart + first.args.indexOf(arg)).ast),
             },
             source: itemSource,
             span: p.span(base + first.argsStart, base + first.end - 1),
@@ -442,11 +453,11 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
         effect(
           [
             {
-              type: 'call',
+              type: 'expression',
               expression: {
-                type: 'call',
-                callee: { type: 'reference', namespace: 'binding', name: 'navigate' },
-                args: [target.ast],
+                type: 'CallExpression',
+                callee: { type: 'Identifier', name: 'navigate' },
+                arguments: [target.ast],
                 optional: false,
               },
             },
@@ -619,7 +630,7 @@ export function createKarloweMacroReader(registry: KarloweLowerings = createKarl
         } catch {
           args = [
             {
-              ast: { type: 'literal', value: macro.args },
+              ast: { type: 'Literal', value: macro.args },
               source: macro.args,
               span: parser.span(base + macro.argsStart, base + macro.end - 1),
             },

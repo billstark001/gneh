@@ -1,6 +1,6 @@
 # @gneh/expression
 
-Acorn-based portable JavaScript expressions and code generation.
+Shared `pure-expr` grammar, dialect operator lexer rules, ESTree traversal, and restricted effect-statement parsing. Runtime evaluation belongs to `@gneh/core`; this package has no second expression IR or JavaScript emitter.
 
 Part of gneh 0.1.0. See the workspace README and docs for the supported language profile and verification limitations.
 

@@ -52,33 +52,21 @@ test('dialect frontends do not expose aliases or interpret Inkdown directives', 
 test('bare sigils and explicit interpolation have the same semantic AST', () => {
   const p = compiled('$hp {{ $hp }}').passages[0];
   const nodes = p.body[0].children.filter((n) => n.type === 'value');
-  const semantic = ({ origin: _origin, ...ast }) => ast;
-  assert.deepEqual(semantic(nodes[0].expression.ast), semantic(nodes[1].expression.ast));
-  assert.notDeepEqual(nodes[0].expression.ast.origin, nodes[1].expression.ast.origin);
+  assert.deepEqual(nodes[0].expression.ast, nodes[1].expression.ast);
+  assert.notDeepEqual(nodes[0].expression.span, nodes[1].expression.span);
 });
 
-test('expression references carry explicit namespaces and precise origins', () => {
+test('expression identifiers preserve sigils while the expression wrapper carries source location', () => {
   const span = { file: 'story.inkdown', start: 100, end: 130 };
-  for (const [source, namespace, name] of [
-    ['$hp', 'state', 'hp'],
-    ['_scratch', 'temporary', 'scratch'],
-    ['props', 'props', 'props'],
-    ['Math', 'intrinsic', 'math'],
-    ['enemy', 'lexical', 'enemy'],
-  ]) {
+  for (const source of ['$hp', '_scratch', 'props', 'Math', 'enemy']) {
     const ast = parseExpression(source, span).ast;
-    assert.equal(ast.type, 'reference');
-    assert.equal(ast.namespace, namespace);
-    assert.equal(ast.name, name);
-    assert.deepEqual(ast.origin, {
-      file: span.file,
-      start: span.start,
-      end: span.start + source.length,
-    });
+    assert.equal(ast.type, 'Identifier');
+    assert.equal(ast.name, source);
+    assert.deepEqual(parseExpression(source, span).span, span);
   }
   const passage = compiled('@module {\nexport const helper = () => 1;\n}\n{{ helper() }}').passages[0];
   const call = passage.body[0].children.find((node) => node.type === 'value').expression.ast;
-  assert.equal(call.callee.namespace, 'binding');
+  assert.deepEqual(call.callee, { type: 'Identifier', name: 'helper' });
 });
 
 test('inline escapes, code and currency do not execute variables', () => {

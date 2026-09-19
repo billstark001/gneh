@@ -2,7 +2,7 @@
 
 **Know how a story behaves without deciding how it must look.**
 
-`gneh` is named after the Proto-Indo-European root _*ǵneh₃-_ (“to know”). It is a renderer-neutral narrative toolkit with three authoring frontends, one semantic IR, one Fragment ABI, and one transactional story runtime. It is not a drop-in Harlowe or SugarCube engine.
+`gneh` is named after the Proto-Indo-European root _\*ǵneh₃-_ (“to know”). It is a renderer-neutral narrative toolkit with three authoring frontends, one semantic IR, one Fragment ABI, and one transactional story runtime. It is not a drop-in Harlowe or SugarCube engine.
 
 - **Inkdown** combines Markdown-like prose with portable JavaScript expressions, actions, and ESM bindings.
 - **Karlowe** is an explicit, portable Harlowe-like subset. It supports anonymous and semantic named hooks, source-order effects, interactions, and portable presentation changers; selectors that depend on Harlowe's DOM runtime are rejected.
@@ -126,9 +126,9 @@ A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScr
 
 | Package | Responsibility |
 | --- | --- |
-| `@gneh/core` | JSON state, expression/action IR, semantic views, Fragment and renderer protocols |
+| `@gneh/core` | JSON state, Story/effect IR, pure-expr runtime integration, semantic views, and Fragment protocols |
 | `@gneh/source` | Twee containers, front matter, metadata, and source locations |
-| `@gneh/expression` | Portable JavaScript parsing, validation, evaluation support, and code generation |
+| `@gneh/expression` | Shared pure-expr grammar, dialect lexer rules, ESTree traversal, and restricted effect statements |
 | `@gneh/syntax` | Dialect-neutral scanning, CST-to-IR lowering, and passage assembly |
 | `@gneh/inkdown` | Inkdown directives and frontend assembly |
 | `@gneh/karlowe` | Harlowe-like syntax and expression lowering |

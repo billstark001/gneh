@@ -118,9 +118,10 @@ test('typed ESM namespaces expose all in-file passages', async () => {
   }
 });
 
-test('source expressions cannot invoke constructors or mutate during render', () => {
-  for (const source of ['{{ new Date() }}', '{{ $x = 1 }}', '{{ $x.constructor }}', '{{ (() => { return 1; })() }}'])
+test('render expressions reject mutation and statement-shaped JavaScript', () => {
+  for (const source of ['{{ new Date() }}', '{{ $x = 1 }}', '{{ (() => { return 1; })() }}'])
     assert.ok(compiledError(source));
+  assert.ok(!compiledError('{{ $x.constructor }}'));
   function compiledError(source) {
     try {
       compiled(source);

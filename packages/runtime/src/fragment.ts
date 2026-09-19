@@ -1,11 +1,10 @@
 /** Fragment constructors and semantic-IR rendering adapter. */
 import {
   display,
-  evaluate,
-  execute,
+  evaluateExpression,
+  executeStatements,
   invariant,
   type AnyFragment,
-  type EvaluationContext,
   type Expression,
   type Fragment,
   type FragmentContext,
@@ -40,20 +39,13 @@ export function defineFragment<P extends object = FragmentProps>(definition: Fra
   });
 }
 
-const expressionKey = (e: Expression) => `${e.span.file}:${e.span.start}:${e.span.end}:${e.source}`;
-
 export function defineIRFragment(
   ir: PassageIR,
   options: {
     bindings?: Record<string, unknown>;
-    evaluators?: Record<string, (ctx: EvaluationContext, scope: Scope) => unknown>;
   } = {},
 ): Fragment {
-  // Do not use ?? to select evaluator results: undefined/null are legitimate values.
-  const evaluateValue = (e: Expression, ctx: FragmentContext, scope: Scope) => {
-    const compiled = options.evaluators?.[expressionKey(e)];
-    return compiled ? compiled(ctx, scope) : evaluate(e.ast, ctx, scope);
-  };
+  const evaluateValue = (e: Expression, ctx: FragmentContext, scope: Scope) => evaluateExpression(e.ast, ctx, scope);
   const valueAt = (e: Expression, ctx: FragmentContext, scope: Scope, key: string) =>
     ir.evaluation === 'materialized'
       ? ctx.local(`value:${key}`, (initial) => evaluateValue(e, initial, scope))
@@ -75,7 +67,7 @@ export function defineIRFragment(
             },
           ];
         case 'effect':
-          ctx.effect(key, (initial) => execute(node.statements, initial, { ...scope }));
+          ctx.effect(key, (initial) => executeStatements(node.statements, initial, { ...scope }));
           return [];
         case 'value':
           return [{ kind: 'text', key, text: display(valueAt(node.expression, ctx, scope, key)) }];
@@ -131,7 +123,7 @@ export function defineIRFragment(
                 ctx.dispatch((actionCtx) => {
                   const action = ir.actions[node.action];
                   invariant(action, 'ACTION_MISSING', `Unknown action: ${node.action}`);
-                  execute(action.statements, actionCtx, { ...scope });
+                  executeStatements(action.statements, actionCtx, { ...scope });
                 }),
             },
           ];
@@ -197,7 +189,7 @@ export function defineIRFragment(
               attrs: { options, value, checked: Boolean(value) },
               children: nodes(node.label, ctx, scope, key + '/label'),
               change: (value) =>
-                ctx.dispatch((actionCtx) => execute(action.statements, actionCtx, { ...scope, value })),
+                ctx.dispatch((actionCtx) => executeStatements(action.statements, actionCtx, { ...scope, value })),
             },
           ];
         }
@@ -244,9 +236,8 @@ export function defineIRFragment(
     capabilities: ir.capabilities,
     ir,
     bindings: options.bindings,
-    evaluators: options.evaluators,
     enter: (ctx: FragmentContext, props: FragmentProps) =>
-      execute(ir.enter, ctx, {
+      executeStatements(ir.enter, ctx, {
         ...props,
         props,
         __temporary: ctx.local('temporary-scope', () => ({})),

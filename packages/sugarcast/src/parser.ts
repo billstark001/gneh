@@ -1,6 +1,6 @@
 import { GnehError, type ParseResult, type Statement, type StoryNode, type Span } from '@gneh/core';
 import { splitPassages, diag } from '@gneh/source';
-import { parseExpression, parseStatements, sugarExpression } from '@gneh/expression';
+import { parseExpression, parseStatements } from '@gneh/expression';
 import {
   caseInsensitiveMacroName,
   MacroLoweringRegistry,
@@ -271,8 +271,7 @@ function extendParagraph(source: string, start: number, initialEnd: number, regi
 }
 
 function expr(source: string, span: Span) {
-  const parsed = parseExpression(sugarExpression(source), span);
-  return { ...parsed, source };
+  return parseExpression(source, span);
 }
 
 function firstString(
@@ -286,7 +285,7 @@ function firstString(
   const m = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*/.exec(source);
   if (!m) p.error('SUGARCAST_LITERAL', 'Expected a literal string argument.', start);
   const ast = parseExpression(m[1]).ast;
-  if (ast.type !== 'literal' || typeof ast.value !== 'string') p.error('SUGARCAST_LITERAL', 'Expected string', start);
+  if (ast.type !== 'Literal' || typeof ast.value !== 'string') p.error('SUGARCAST_LITERAL', 'Expected string', start);
   return { value: ast.value as string, rest: source.slice(m[0].length) };
 }
 
@@ -345,7 +344,7 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
         nodes: [
           {
             type: 'effect',
-            statements: parseStatements(sugarExpression(m.args), p.span(base + m.argStart, base + m.end - 2)),
+            statements: parseStatements(m.args, p.span(base + m.argStart, base + m.end - 2)),
             span,
           },
         ],
@@ -459,11 +458,11 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
       const statements = actionBody(body.body, base + body.base, p, registry);
       if (target)
         statements.push({
-          type: 'call',
+          type: 'expression',
           expression: {
-            type: 'call',
-            callee: { type: 'reference', namespace: 'binding', name: 'navigate' },
-            args: [{ type: 'literal', value: target }],
+            type: 'CallExpression',
+            callee: { type: 'Identifier', name: 'navigate' },
+            arguments: [{ type: 'Literal', value: target }],
             optional: false,
           },
         });
@@ -491,19 +490,29 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
           base + m.end - 2,
         );
       const target = expr(variable.value, p.span(base + m.argStart, base + m.end - 2));
+      if (target.ast.type !== 'Identifier' && target.ast.type !== 'MemberExpression')
+        return p.error(
+          'SUGARCAST_CHECKBOX',
+          'Checkbox binding must be an identifier or member expression.',
+          base + m.argStart,
+          base + m.end - 2,
+        );
       const unchecked = expr(values[0], p.span(base + m.argStart, base + m.end - 2));
       const checked = expr(values[1], p.span(base + m.argStart, base + m.end - 2));
       const action = p.addAction(
         [
           {
-            type: 'assign',
-            target: target.ast,
-            op: '=',
-            value: {
-              type: 'conditional',
-              test: { type: 'reference', namespace: 'lexical', name: 'value' },
-              yes: checked.ast,
-              no: unchecked.ast,
+            type: 'expression',
+            expression: {
+              type: 'AssignmentExpression',
+              operator: '=',
+              left: target.ast,
+              right: {
+                type: 'ConditionalExpression',
+                test: { type: 'Identifier', name: 'value' },
+                consequent: checked.ast,
+                alternate: unchecked.ast,
+              },
             },
           },
         ],
@@ -533,11 +542,11 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
             type: 'effect',
             statements: [
               {
-                type: 'call',
+                type: 'expression',
                 expression: {
-                  type: 'call',
-                  callee: { type: 'reference', namespace: 'binding', name: 'navigate' },
-                  args: [target.ast],
+                  type: 'CallExpression',
+                  callee: { type: 'Identifier', name: 'navigate' },
+                  arguments: [target.ast],
                   optional: false,
                 },
               },
@@ -614,7 +623,7 @@ export function createSugarcastMacroReader(registry: SugarcastLowerings = create
       } catch {
         args = [
           {
-            ast: { type: 'literal', value: token.args },
+            ast: { type: 'Literal', value: token.args },
             source: token.args,
             span: parser.span(base + token.argStart, base + token.end - 2),
           },

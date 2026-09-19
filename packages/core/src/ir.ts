@@ -1,64 +1,20 @@
 import type { Diagnostic, Span } from './errors.js';
-import type { Json, Scalar, State } from './json.js';
+import type { Json, State } from './json.js';
+import type { ExpressionNode } from 'pure-expr/expr';
 
 export const ABI_VERSION = 1 as const;
 
-export type ReferenceNamespace = 'state' | 'temporary' | 'lexical' | 'props' | 'intrinsic' | 'binding';
-
-export type UnaryOp = '!' | '+' | '-' | 'typeof';
-
-export type BinaryOp =
-  | '+'
-  | '-'
-  | '*'
-  | '/'
-  | '%'
-  | '**'
-  | '==='
-  | '!=='
-  | '=='
-  | '!='
-  | '<'
-  | '<='
-  | '>'
-  | '>='
-  | '&&'
-  | '||'
-  | '??';
-
-export type AssignmentOp = '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '**=';
-
-interface ExprOrigin {
-  /** Exact authoring range for this node when the frontend can provide one. */
-  origin?: Span;
-}
-
-export type Expr =
-  | ({ type: 'literal'; value: Scalar } & ExprOrigin)
-  | ({ type: 'reference'; namespace: ReferenceNamespace; name: string } & ExprOrigin)
-  | ({ type: 'array'; items: Expr[] } & ExprOrigin)
-  | ({ type: 'object'; entries: [string, Expr][] } & ExprOrigin)
-  | ({ type: 'unary'; op: UnaryOp; value: Expr } & ExprOrigin)
-  | ({ type: 'binary'; op: BinaryOp; left: Expr; right: Expr } & ExprOrigin)
-  | ({ type: 'conditional'; test: Expr; yes: Expr; no: Expr } & ExprOrigin)
-  | ({ type: 'get'; object: Expr; key: Expr; optional: boolean } & ExprOrigin)
-  | ({ type: 'call'; callee: Expr; args: Expr[]; optional: boolean } & ExprOrigin)
-  | ({ type: 'arrow'; params: string[]; body: Expr } & ExprOrigin)
-  | ({ type: 'template'; parts: (string | Expr)[] } & ExprOrigin)
-  | ({ type: 'chain'; value: Expr } & ExprOrigin);
-
 export interface Expression {
-  ast: Expr;
+  ast: ExpressionNode;
   source: string;
   span: Span;
 }
 
 export type Statement =
-  | { type: 'assign'; target: Expr; op: AssignmentOp; value: Expr }
-  | { type: 'declare'; name: string; value: Expr }
-  | { type: 'call'; expression: Expr }
-  | { type: 'if'; test: Expr; yes: Statement[]; no: Statement[] }
-  | { type: 'each'; name: string; items: Expr; body: Statement[] };
+  | { type: 'expression'; expression: ExpressionNode }
+  | { type: 'declare'; name: string; value: ExpressionNode }
+  | { type: 'if'; test: ExpressionNode; yes: Statement[]; no: Statement[] }
+  | { type: 'each'; name: string; items: ExpressionNode; body: Statement[] };
 
 export interface ActionIR {
   name: string;

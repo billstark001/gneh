@@ -1,5 +1,5 @@
 /** Stable package entry point. */
-export { v, ops } from '@gneh/core';
+export { v } from '@gneh/core';
 
 export type { Fragment, FragmentContext, FragmentProps, View, ViewInput, Renderer } from '@gneh/core';
 

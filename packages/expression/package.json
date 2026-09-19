@@ -1,7 +1,7 @@
 {
   "name": "@gneh/expression",
   "version": "0.1.0",
-  "description": "Acorn-based portable JavaScript expressions and code generation",
+  "description": "Shared pure-expr grammar and restricted effect-statement parsing",
   "license": "MIT",
   "files": [
     "dist",
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@gneh/core": "workspace:*",
-    "acorn": "^8.18.0"
+    "acorn": "^8.18.0",
+    "pure-expr": "0.3.0"
   }
 }

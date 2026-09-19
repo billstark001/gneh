@@ -1,6 +1,6 @@
 # @gneh/core
 
-Renderer-neutral narrative types, guarded evaluation and Fragment ABI.
+Renderer-neutral narrative IR, pure-expr evaluation integration and Fragment ABI.
 
 Part of gneh 0.1.0. See the workspace README and docs for the supported language profile and verification limitations.
 
