@@ -15,9 +15,6 @@ import {
   type StoryNode,
 } from '@gneh/core';
 import { mergeMetadata, splitPassages } from '@gneh/source';
-import { parseInkdown, type InkdownLowerings } from '@gneh/inkdown';
-import { parseKarlowe, type KarloweLowerings } from '@gneh/karlowe';
-import { parseSugarcast, type SugarcastLowerings } from '@gneh/sugarcast';
 
 export interface SourceInput {
   path: string;
@@ -25,10 +22,9 @@ export interface SourceInput {
   dialect?: Dialect;
 }
 
-export interface DialectLowerings {
-  inkdown?: InkdownLowerings;
-  karlowe?: KarloweLowerings;
-  sugarcast?: SugarcastLowerings;
+export interface DialectFrontend {
+  dialect: Dialect;
+  parse(source: string, file: string): ParseResult;
 }
 
 export interface CompileOptions {
@@ -37,8 +33,8 @@ export interface CompileOptions {
   live?: boolean;
   mode?: 'esm' | 'vendor';
   metadata?: Metadata;
-  /** Caller-owned CST-to-IR lowerings, reused across every matching source file. */
-  lowerings?: DialectLowerings;
+  /** Explicitly registered authoring frontends. */
+  dialects?: readonly DialectFrontend[];
   /** Runtime extension IDs that the application promises to install. */
   runtimeExtensionIds?: readonly string[];
 }
@@ -51,7 +47,7 @@ export function parseSource(
   source: string,
   file = 'story.inkdown',
   dialect?: Dialect,
-  options: { lowerings?: DialectLowerings } = {},
+  options: { dialects?: readonly DialectFrontend[] } = {},
 ): ParseResult {
   const header = splitPassages(source, file);
   const configured = header.metadata.dialect;
@@ -60,12 +56,13 @@ export function parseSource(
     (configured === 'inkdown' || configured === 'karlowe' || configured === 'sugarcast'
       ? configured
       : detectDialect(file));
-  const parsed =
-    selected === 'inkdown'
-      ? parseInkdown(source, file, { lowerings: options.lowerings?.inkdown })
-      : selected === 'karlowe'
-        ? parseKarlowe(source, file, { lowerings: options.lowerings?.karlowe })
-        : parseSugarcast(source, file, { lowerings: options.lowerings?.sugarcast });
+  const frontend = options.dialects?.find((candidate) => candidate.dialect === selected);
+  if (!frontend)
+    throw new GnehError(
+      'DIALECT_NOT_CONFIGURED',
+      `Dialect ${JSON.stringify(selected)} is not configured. Install and register its frontend explicitly.`,
+    );
+  const parsed = frontend.parse(source, file);
   const fileBindings = parsed.passages.flatMap((passage) => passage.imports);
   for (const passage of parsed.passages) {
     passage.imports = fileBindings.filter(
@@ -101,7 +98,7 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
   let metadata = options.metadata ?? {};
   for (const input of sources) {
     const parsed = parseSource(input.source, input.path, input.dialect, {
-      lowerings: options.lowerings,
+      dialects: options.dialects,
     });
     diagnostics.push(...parsed.diagnostics);
     for (const p of parsed.passages) {
@@ -284,8 +281,10 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
         if (node.type === 'effect') validateEffects(node.effects, node.span);
       });
   }
+  const sourceEntry = passages.map((p) => p.metadata.start).find((value): value is string => typeof value === 'string');
   let entry =
     options.entry ??
+    sourceEntry ??
     (typeof metadata.start === 'string' ? metadata.start : undefined) ??
     passages.find((p) => Array.isArray(p.metadata.tags) && p.metadata.tags.includes('start'))?.id ??
     (ids.has('Start') ? 'Start' : (passages[0]?.id ?? ''));

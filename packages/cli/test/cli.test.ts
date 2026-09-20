@@ -79,17 +79,28 @@ test('CLI extracts and imports Twine HTML with fidelity and compatibility report
     assert.match(await fs.readFile(path.join(extracted, 'twine-user-script-1.js'), 'utf8'), /authored/);
 
     const imported = path.join(parent, 'imported');
-    const result = run('import-twine', html, '-o', imported);
+    const reportPath = path.join(parent, 'report.json');
+    const result = run('import-twine', html, '-o', imported, '--report', reportPath, '--preserve-container');
     assert.equal(result.status, 0, result.stderr);
-    const config = JSON.parse(await fs.readFile(path.join(imported, 'gneh.config.json')));
-    assert.equal(config.entry, 'Start');
-    assert.equal(config.dialect, 'karlowe');
-    const report = JSON.parse(await fs.readFile(path.join(imported, 'import-report.json')));
+    await assert.rejects(() => fs.readFile(path.join(imported, 'gneh.config.json')), /ENOENT/);
+    await assert.rejects(() => fs.readFile(path.join(imported, 'story.d.karlowe.ts')), /ENOENT/);
+    const report = JSON.parse(await fs.readFile(reportPath));
     assert.deepEqual(report.summary, { portable: 2, unsupported: 0, warnings: 0 });
     assert.equal(report.fidelity.embeddedUserCodeAutomaticallyLoaded, false);
-    assert.equal(report.fidelity.typeDeclarationsWrittenTo, 'story.d.karlowe.ts');
-    assert.match(await fs.readFile(path.join(imported, 'story.d.karlowe.ts'), 'utf8'), /readonly "Start": Fragment/);
+    assert.equal(report.fidelity.encodedPassageSourcePreservedIn, '.gneh/import/twine-story.json');
+    assert.equal(
+      JSON.parse(await fs.readFile(path.join(imported, '.gneh/import/twine-story.json'))).story.attributes.name,
+      'Imported & Story',
+    );
+    assert.match(await fs.readFile(path.join(imported, 'story.karlowe'), 'utf8'), /start: "Start"/);
     assert.equal(run('check', imported).status, 0);
+    const lean = path.join(parent, 'lean-import');
+    assert.equal(run('import-twine', html, '-o', lean).status, 0);
+    assert.deepEqual((await fs.readdir(lean)).sort(), [
+      'story.karlowe',
+      'twine-user-script-1.js',
+      'twine-user-stylesheet-1.css',
+    ]);
     const overwrite = run('import-twine', html, '-o', imported);
     assert.equal(overwrite.status, 1);
     assert.match(overwrite.stderr, /non-empty/);

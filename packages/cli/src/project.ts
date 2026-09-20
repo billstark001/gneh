@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { assertJson, type CompileResult, type Dialect, type State } from '@gneh/core';
 import { compileProject, type SourceInput } from '@gneh/compiler';
+import { karlowe } from '@gneh/karlowe';
+import { sugarcast } from '@gneh/sugarcast';
+import { inkdown } from '@gneh/inkdown';
 import { offsetToPosition } from '@gneh/source';
 
 export interface ProjectOptions {
@@ -76,6 +79,7 @@ export function loadProject(input: string, options: ProjectOptions = {}): Projec
   if (!sources.length) throw new Error(`No story sources in ${input}`);
 
   const result = compileProject(sources, {
+    dialects: [inkdown(), karlowe(), sugarcast()],
     entry: config.entry,
     state: config.state,
     live: options.snapshot ? false : config.live,

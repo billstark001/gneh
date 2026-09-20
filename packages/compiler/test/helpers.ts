@@ -1,8 +1,21 @@
 import assert from 'node:assert/strict';
-import { compileSource, compileProject } from '../dist/index.js';
+import { compileSource as compile, compileProject as compileMany } from '../dist/index.js';
+import { karlowe } from '../../karlowe/dist/index.js';
+import { sugarcast } from '../../sugarcast/dist/index.js';
+import { inkdown } from '../../inkdown/dist/index.js';
 import { Story } from '../../runtime/dist/index.js';
 
-export { compileSource, compileProject, Story, assert };
+const dialects = [inkdown(), karlowe(), sugarcast()];
+
+export function compileSource(source, file, options = {}) {
+  return compile(source, file, { ...options, dialects: options.dialects ?? dialects });
+}
+
+export function compileProject(sources, options = {}) {
+  return compileMany(sources, { ...options, dialects: options.dialects ?? dialects });
+}
+
+export { Story, assert };
 
 export function compiled(source, dialect = 'inkdown', options = {}) {
   const result = compileSource(source, `test.${dialect}`, { ...options, dialect });

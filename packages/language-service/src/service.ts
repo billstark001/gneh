@@ -1,6 +1,9 @@
 /** TypeScript-backed projections and cross-passage editor operations. */
 import ts from 'typescript-language-service';
 import { compileProject, printExpression, type SourceInput, type CompileOptions } from '@gneh/compiler';
+import { karlowe } from '@gneh/karlowe';
+import { sugarcast } from '@gneh/sugarcast';
+import { inkdown } from '@gneh/inkdown';
 import { splitPassages, offsetToPosition } from '@gneh/source';
 import type { Diagnostic, Span, StoryNode } from '@gneh/core';
 import { createVirtualFile, inferType, type VirtualFile } from './projection.js';
@@ -25,6 +28,8 @@ interface Document {
 export interface ServiceOptions extends CompileOptions {
   stateTypes?: string;
 }
+
+const compatibilityDialects = [inkdown(), karlowe(), sugarcast()];
 
 function wordAt(
   source: string,
@@ -51,7 +56,7 @@ export class GnehLanguageService {
   private virtuals = new Map<string, VirtualFile>();
   private revision = 0;
   private cachedRevision = -1;
-  private result = compileProject([]);
+  private result = compileProject([], { dialects: compatibilityDialects });
   private language: ts.LanguageService;
   constructor(public options: ServiceOptions = {}) {
     const settings: ts.CompilerOptions = {
@@ -100,7 +105,10 @@ export class GnehLanguageService {
       path,
       source: document.source,
     }));
-    this.result = compileProject(sources, this.options);
+    this.result = compileProject(sources, {
+      ...this.options,
+      dialects: this.options.dialects ?? compatibilityDialects,
+    });
     this.virtuals.clear();
     for (const [file] of this.documents) {
       const passages = this.result.passages.filter((p) => p.span.file === file);

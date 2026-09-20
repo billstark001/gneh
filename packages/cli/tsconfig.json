@@ -14,6 +14,15 @@
       "path": "../compiler"
     },
     {
+      "path": "../inkdown"
+    },
+    {
+      "path": "../karlowe"
+    },
+    {
+      "path": "../sugarcast"
+    },
+    {
       "path": "../source"
     },
     {

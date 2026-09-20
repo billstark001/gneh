@@ -25,7 +25,10 @@
     "@gneh/compiler": "workspace:*",
     "@gneh/core": "workspace:*",
     "@gneh/expression": "workspace:*",
+    "@gneh/inkdown": "workspace:*",
+    "@gneh/karlowe": "workspace:*",
     "@gneh/source": "workspace:*",
+    "@gneh/sugarcast": "workspace:*",
     "typescript-language-service": "npm:typescript@^6.0.3"
   }
 }

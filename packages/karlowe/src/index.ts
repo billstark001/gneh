@@ -18,3 +18,13 @@ export { karloweMarkup } from './markup.js';
 export { lexKarlowe, parseKarloweCST, readKarloweHook, readKarloweMacro } from './lexer.js';
 
 export type { KarloweCSTNode, KarloweDocumentCST, KarloweToken, KarloweMacroToken, KarloweHookToken } from './lexer.js';
+
+import { parseKarlowe, type KarloweLowerings } from './parser.js';
+
+/** Explicit compiler/Vite registration; compatibility syntax is never enabled implicitly. */
+export function karlowe(lowerings?: KarloweLowerings) {
+  return {
+    dialect: 'karlowe' as const,
+    parse: (source: string, file: string) => parseKarlowe(source, file, { lowerings }),
+  };
+}

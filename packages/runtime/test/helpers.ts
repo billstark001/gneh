@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import { compileSource } from '../../compiler/dist/index.js';
+import { karlowe } from '../../karlowe/dist/index.js';
+import { sugarcast } from '../../sugarcast/dist/index.js';
+import { inkdown } from '../../inkdown/dist/index.js';
 import { Story } from '../dist/index.js';
 
 export { assert };
 
 export function compiled(source: string, dialect = 'inkdown', options: Record<string, unknown> = {}) {
-  const result = compileSource(source, `test.${dialect}`, { ...options, dialect });
+  const result = compileSource(source, `test.${dialect}`, {
+    ...options,
+    dialect,
+    dialects: [inkdown(), karlowe(), sugarcast()],
+  });
   assert.deepEqual(
     result.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'),
     [],

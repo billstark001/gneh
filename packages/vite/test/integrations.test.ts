@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { inkdown } from '../../inkdown/dist/index.js';
 
 let plugin;
 
@@ -16,15 +17,14 @@ try {
 const hooks = { skip: !plugin ? 'Workspace build/link is not available.' : false };
 
 test('Vite hooks generate scoped ESM with typed in-file passages', hooks, async () => {
-  const gneh = plugin({ declarations: false });
-  gneh.configResolved({ root: '/project' });
+  const gneh = plugin({ dialects: [inkdown()] });
   const ctx = {
     error(message) {
       throw new Error(message);
     },
   };
   const result = await gneh.transform.call(ctx, ':: Start\n@Card()\n:: Card\nHello', '/project/story/main.inkdown');
-  assert.match(result.code, /story\/main\.inkdown#Start/);
+  assert.match(result.code, /"Start"/);
   assert.match(result.code, /"Card":__f1/);
   assert.equal(result.map.version, 3);
   assert.equal(
@@ -34,8 +34,8 @@ test('Vite hooks generate scoped ESM with typed in-file passages', hooks, async 
   );
 });
 
-test('Vite hooks enforce snapshot capability and emit concrete declarations', hooks, async () => {
-  const gneh = plugin({ live: false });
+test('Vite hooks enforce snapshot capability without mutating sources', hooks, async () => {
+  const gneh = plugin({ dialects: [inkdown()], live: false });
   await assert.rejects(
     () =>
       gneh.transform.call(
@@ -51,14 +51,13 @@ test('Vite hooks enforce snapshot capability and emit concrete declarations', ho
   );
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-vite-types-'));
   try {
-    const typed = plugin({ declarations: true });
-    typed.configResolved({ root: dir });
+    const typed = plugin({ dialects: [inkdown()] });
     await typed.transform.call(
       {},
       ':: Card {"params":["label"],"paramTypes":{"label":"string"}}\n{{ label }}',
       path.join(dir, 'card.inkdown'),
     );
-    assert.match(await fs.readFile(path.join(dir, 'card.d.inkdown.ts'), 'utf8'), /"label": string/);
+    await assert.rejects(() => fs.readFile(path.join(dir, 'card.d.inkdown.ts')), /ENOENT/);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }

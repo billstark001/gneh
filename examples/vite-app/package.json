@@ -12,6 +12,7 @@
     "@gneh/runtime": "workspace:*"
   },
   "devDependencies": {
+    "@gneh/inkdown": "workspace:*",
     "@gneh/vite": "workspace:*",
     "vite": "^8.3.0"
   }

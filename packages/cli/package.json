@@ -27,9 +27,12 @@
   "dependencies": {
     "@gneh/compiler": "workspace:*",
     "@gneh/core": "workspace:*",
+    "@gneh/inkdown": "workspace:*",
+    "@gneh/karlowe": "workspace:*",
     "@gneh/language-service": "workspace:*",
     "@gneh/lsp": "workspace:*",
     "@gneh/source": "workspace:*",
+    "@gneh/sugarcast": "workspace:*",
     "commander": "^15.0.0",
     "parse5": "^8.0.1"
   }

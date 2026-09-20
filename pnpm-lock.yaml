@@ -48,6 +48,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/runtime
     devDependencies:
+      '@gneh/inkdown':
+        specifier: workspace:*
+        version: link:../../packages/inkdown
       '@gneh/vite':
         specifier: workspace:*
         version: link:../../packages/vite
@@ -63,6 +66,12 @@ importers:
       '@gneh/core':
         specifier: workspace:*
         version: link:../core
+      '@gneh/inkdown':
+        specifier: workspace:*
+        version: link:../inkdown
+      '@gneh/karlowe':
+        specifier: workspace:*
+        version: link:../karlowe
       '@gneh/language-service':
         specifier: workspace:*
         version: link:../language-service
@@ -72,6 +81,9 @@ importers:
       '@gneh/source':
         specifier: workspace:*
         version: link:../source
+      '@gneh/sugarcast':
+        specifier: workspace:*
+        version: link:../sugarcast
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -87,21 +99,12 @@ importers:
       '@gneh/expression':
         specifier: workspace:*
         version: link:../expression
-      '@gneh/inkdown':
-        specifier: workspace:*
-        version: link:../inkdown
-      '@gneh/karlowe':
-        specifier: workspace:*
-        version: link:../karlowe
       '@gneh/runtime':
         specifier: workspace:*
         version: link:../runtime
       '@gneh/source':
         specifier: workspace:*
         version: link:../source
-      '@gneh/sugarcast':
-        specifier: workspace:*
-        version: link:../sugarcast
 
   packages/core:
     dependencies:
@@ -161,9 +164,18 @@ importers:
       '@gneh/expression':
         specifier: workspace:*
         version: link:../expression
+      '@gneh/inkdown':
+        specifier: workspace:*
+        version: link:../inkdown
+      '@gneh/karlowe':
+        specifier: workspace:*
+        version: link:../karlowe
       '@gneh/source':
         specifier: workspace:*
         version: link:../source
+      '@gneh/sugarcast':
+        specifier: workspace:*
+        version: link:../sugarcast
       typescript-language-service:
         specifier: npm:typescript@^6.0.3
         version: typescript@6.0.3

@@ -1,21 +1,13 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import type { Plugin } from 'vite';
-import { assertValid, generateModule, parseSource, type DialectLowerings } from '@gneh/compiler';
-import type { Dialect } from '@gneh/core';
+import { assertValid, generateModule, parseSource, type DialectFrontend } from '@gneh/compiler';
 
 export interface GnehViteOptions {
-  dialect?: Dialect;
+  /** Every authoring dialect is explicit, including Inkdown. */
+  dialects: readonly DialectFrontend[];
   live?: boolean;
-  /** Emit adjacent `file.d.<dialect>.ts` modules for TypeScript's arbitrary-extension resolver. */
-  declarations?: boolean;
-  namespace?: boolean;
-  /** Caller-owned CST-to-IR lowerings shared by transformed files. */
-  lowerings?: DialectLowerings;
   runtimeExtensionIds?: readonly string[];
 }
-
-const directExtension = /\.(?:inkdown|karlowe|sugarcast)$/i;
 
 const optInExtension = /\.(?:md|twee|tw)$/i;
 
@@ -27,45 +19,30 @@ function request(id: string): { file: string; params: URLSearchParams } {
   };
 }
 
-function isStoryRequest(id: string): boolean {
+function dialectFor(file: string, dialects: readonly DialectFrontend[]): DialectFrontend | undefined {
+  const lower = file.toLowerCase();
+  return dialects.find((frontend) => lower.endsWith('.' + frontend.dialect));
+}
+
+function isStoryRequest(id: string, dialects: readonly DialectFrontend[]): boolean {
   const { file, params } = request(id);
-  return directExtension.test(file) || (optInExtension.test(file) && params.has('gneh'));
+  return Boolean(dialectFor(file, dialects)) || (optInExtension.test(file) && params.has('gneh'));
 }
 
-function declarationFile(file: string): string {
-  const dot = file.lastIndexOf('.');
-  return `${file.slice(0, dot)}.d.${file.slice(dot + 1)}.ts`;
-}
-
-async function writeIfChanged(file: string, contents: string): Promise<void> {
-  try {
-    if ((await fs.readFile(file, 'utf8')) === contents) return;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  await fs.writeFile(file, contents, 'utf8');
-}
-
-/**
- * Compile story files as ordinary ESM modules. Native gneh extensions are automatic;
- * ambiguous `.md`, `.twee` and `.tw` files require `?gneh`, so other Vite plugins can
- * continue to own those extensions.
- */
-export function gneh(options: GnehViteOptions = {}): Plugin {
-  let root = process.cwd();
+/** Transform only story modules imported explicitly by application code. */
+export function gneh(options: GnehViteOptions): Plugin {
+  if (!options.dialects.length) throw new Error('gneh requires at least one explicitly registered dialect.');
   return {
     name: 'gneh',
     enforce: 'pre',
-    configResolved(config) {
-      root = config.root;
-    },
     async load(id) {
-      if (isStoryRequest(id)) return await fs.readFile(request(id).file, 'utf8');
+      if (isStoryRequest(id, options.dialects)) return await fs.readFile(request(id).file, 'utf8');
     },
     async transform(code, id) {
-      if (!isStoryRequest(id)) return;
+      if (!isStoryRequest(id, options.dialects)) return;
       const file = request(id).file;
-      const parsed = parseSource(code, file, options.dialect, { lowerings: options.lowerings });
+      const frontend = dialectFor(file, options.dialects);
+      const parsed = parseSource(code, file, frontend?.dialect, { dialects: options.dialects });
       assertValid(parsed);
       const unresolved = parsed.passages
         .flatMap((passage) => passage.capabilities)
@@ -79,10 +56,7 @@ export function gneh(options: GnehViteOptions = {}): Plugin {
         const live = parsed.passages.find((passage) => passage.capabilities.includes('live'));
         if (live) this.error(`${live.id} requires a live context.`);
       }
-      const output = generateModule(parsed.passages, code, file, {
-        namespace: options.namespace === false ? undefined : path.relative(root, file).replaceAll('\\', '/'),
-      });
-      if (options.declarations !== false) await writeIfChanged(declarationFile(file), output.declarations);
+      const output = generateModule(parsed.passages, code, file);
       return { code: output.code, map: output.map as never };
     },
   };

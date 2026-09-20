@@ -20,3 +20,13 @@ export type {
 } from './parser.js';
 
 export { sugarcastMarkup } from './markup.js';
+
+import { parseSugarcast, type SugarcastLowerings } from './parser.js';
+
+/** Explicit compiler/Vite registration; compatibility syntax is never enabled implicitly. */
+export function sugarcast(lowerings?: SugarcastLowerings) {
+  return {
+    dialect: 'sugarcast' as const,
+    parse: (source: string, file: string) => parseSugarcast(source, file, { lowerings }),
+  };
+}

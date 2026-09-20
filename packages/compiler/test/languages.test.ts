@@ -1,12 +1,14 @@
 import { test } from 'vitest';
-import { assert, compiled, compileSource, story, text, click, all } from './helpers.js';
-import { toInkdown, compileProject, walkNodes } from '../dist/index.js';
+import { assert, compiled, compileProject, compileSource, story, text, click, all } from './helpers.js';
+import { toInkdown, walkNodes } from '../dist/index.js';
 import { createWikifier, readPassageData } from '../../vendor/dist/index.js';
 import { Story } from '../../runtime/dist/index.js';
 import { parseExpression } from '../../expression/dist/index.js';
-import { createKarloweLowerings, lexKarlowe, parseKarloweCST } from '../../karlowe/dist/index.js';
-import { createInkdownLowerings } from '../../inkdown/dist/index.js';
-import { createSugarcastLowerings, parseSugarcastCST } from '../../sugarcast/dist/index.js';
+import { createKarloweLowerings, karlowe, lexKarlowe, parseKarloweCST } from '../../karlowe/dist/index.js';
+import { createInkdownLowerings, inkdown } from '../../inkdown/dist/index.js';
+import { createSugarcastLowerings, parseSugarcastCST, sugarcast } from '../../sugarcast/dist/index.js';
+
+const vendorDialects = [inkdown(), karlowe(), sugarcast()];
 
 test('native documents stay reactive while compatibility dialects materialize their passage', () => {
   const sources = {
@@ -227,7 +229,9 @@ test('dialects expose caller-owned CST-to-IR lowerings through the compiler', ()
       ],
       end: end(node),
     }));
-    const s = story(source, dialect, { lowerings: { [dialect]: registry } });
+    const frontend =
+      dialect === 'inkdown' ? inkdown(registry) : dialect === 'karlowe' ? karlowe(registry) : sugarcast(registry);
+    const s = story(source, dialect, { dialects: [frontend] });
     assert.equal(text(s.view), dialect.toUpperCase());
   }
 });
@@ -257,8 +261,8 @@ test('karlowe macro names ignore ASCII case and internal hyphens', () => {
     }),
     { replace: true },
   );
-  assert.equal(text(story('(print: 1)', 'karlowe', { lowerings: { karlowe: overridden } }).view), 'override');
-  assert.equal(text(story('(print: 1)', 'karlowe', { lowerings: { karlowe: original } }).view), '1');
+  assert.equal(text(story('(print: 1)', 'karlowe', { dialects: [karlowe(overridden)] }).view), 'override');
+  assert.equal(text(story('(print: 1)', 'karlowe', { dialects: [karlowe(original)] }).view), '1');
 });
 
 test('karlowe resolves triple-bracket hook and link ambiguity in prose', () => {
@@ -437,22 +441,25 @@ test('migration spells compatibility effects as Inkdown effects', () => {
 });
 
 test('vendor data compiler and optional wikifier use the same ABI', () => {
-  const ir = readPassageData({
-    entry: 'Start',
-    state: { hp: 2 },
-    passages: [{ id: 'Start', dialect: 'inkdown', text: 'HP: $hp' }],
-  });
+  const ir = readPassageData(
+    {
+      entry: 'Start',
+      state: { hp: 2 },
+      passages: [{ id: 'Start', dialect: 'inkdown', text: 'HP: $hp' }],
+    },
+    { dialects: vendorDialects },
+  );
   assert.equal(text(new Story(ir).view), 'HP: 2');
-  const f = createWikifier()('**{{ $hp }}**');
+  const f = createWikifier({ dialects: vendorDialects })('**{{ $hp }}**');
   assert.equal(text(new Story([f], { state: { hp: 9 } }).view), '9');
 });
 
 test('wikify rejects module and source effects; pure excludes actions/regions', () => {
-  assert.throws(() => createWikifier()('@enter { @do $hp=1; }'));
-  assert.throws(() => createWikifier()('(set: $hp to 1)', 'karlowe'));
-  assert.throws(() => createWikifier()('@import { x } from "./x.mjs"'));
-  assert.throws(() => createWikifier({ pure: true })('@region x { hello }'));
-  assert.throws(() => createWikifier()(':: A\na\n:: B\nb'));
+  assert.throws(() => createWikifier({ dialects: vendorDialects })('@enter { @do $hp=1; }'));
+  assert.throws(() => createWikifier({ dialects: vendorDialects })('(set: $hp to 1)', 'karlowe'));
+  assert.throws(() => createWikifier({ dialects: vendorDialects })('@import { x } from "./x.mjs"'));
+  assert.throws(() => createWikifier({ dialects: vendorDialects, pure: true })('@region x { hello }'));
+  assert.throws(() => createWikifier({ dialects: vendorDialects })(':: A\na\n:: B\nb'));
 });
 
 test('snapshot target rejects live requirements but retains navigation', () => {

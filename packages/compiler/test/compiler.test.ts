@@ -113,6 +113,18 @@ test('metadata creates concrete required props in declaration output', () => {
   assert.ok(String(output.map.mappings).replaceAll(';', '').length > 0);
 });
 
+test('generated runtime IR omits compiler-only source and full spans', () => {
+  const source = `:: Start {"source":"author","span":{"label":"wide"}}\n${'A long authored paragraph that must not be duplicated in runtime IR. '.repeat(200)} {{ $name }}`;
+  const passages = compiled(source, 'inkdown', { state: { name: 'Ada' } }).passages;
+  const output = generateModule(passages, source, 'story.inkdown');
+  assert.match(output.code, /"source":"author"/);
+  assert.match(output.code, /"span":\{"label":"wide"\}/);
+  assert.doesNotMatch(output.code, /"source":"\$name"/);
+  assert.doesNotMatch(output.code, /"span":\{"file":/);
+  assert.ok(output.code.length < JSON.stringify(passages).length * 0.75);
+  assert.equal(output.map.sourcesContent[0], source);
+});
+
 test('typed ESM namespaces expose all in-file passages', async () => {
   const output = await emittedStory(':: Alpha\nA\n:: Beta\nB');
   try {

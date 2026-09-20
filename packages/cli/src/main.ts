@@ -206,7 +206,7 @@ export function createProgram(): Command {
   addOutput(
     program
       .command('import-twine')
-      .description('Create a gneh project and compatibility report from Twine HTML.')
+      .description('Import editable gneh source from Twine HTML.')
       .argument('<html>', 'compiled Twine HTML file')
       .addOption(
         new Option('--dialect <dialect>', 'override the inferred gneh dialect').choices([
@@ -216,10 +216,15 @@ export function createProgram(): Command {
         ]),
       ),
     'new project directory',
-  ).action((html: string, options: { output?: string; dialect?: string }) => {
-    const output = importTwineFile(html, options.output, options.dialect);
-    console.log(`Imported Twine project with a compatibility report → ${output}`);
-  });
+  )
+    .option('--report <path>', 'write the detailed compatibility report')
+    .option('--preserve-container', 'preserve the lossless Twine container below .gneh/import')
+    .action(
+      (html: string, options: { output?: string; dialect?: string; report?: string; preserveContainer?: boolean }) => {
+        const output = importTwineFile(html, options);
+        console.log(`Imported editable Twine source → ${output}`);
+      },
+    );
 
   addOutput(
     program

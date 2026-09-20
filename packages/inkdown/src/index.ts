@@ -43,3 +43,11 @@ export function parseInkdown(source: string, file = 'story.inkdown', options: In
   }
   return result;
 }
+
+/** Explicit compiler/Vite registration; no authoring dialect is enabled implicitly. */
+export function inkdown(lowerings?: InkdownLowerings) {
+  return {
+    dialect: 'inkdown' as const,
+    parse: (source: string, file: string) => parseInkdown(source, file, { lowerings }),
+  };
+}

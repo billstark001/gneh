@@ -32,6 +32,27 @@ export interface ModuleOutput {
   map: Record<string, unknown>;
 }
 
+function runtimePassage(passage: PassageIR, id: string): string {
+  const {
+    name: _name,
+    dialect: _dialect,
+    source: _source,
+    span: _span,
+    imports: _imports,
+    exports: _exports,
+    ...runtime
+  } = passage;
+  return JSON.stringify({ ...runtime, id }, function (key, value) {
+    const compilerRecord =
+      this &&
+      typeof this === 'object' &&
+      ('ast' in this || 'phase' in this || ('type' in this && typeof this.type === 'string'));
+    if (key === 'source' && compilerRecord) return undefined;
+    if (key === 'span' && compilerRecord && value && typeof value === 'object') return { start: value.start };
+    return value;
+  });
+}
+
 /** A file is one ESM namespace; passage ids live in the typed `fragments` export. */
 export function generateModule(
   passages: PassageIR[],
@@ -81,9 +102,7 @@ export function generateModule(
   );
   for (let i = 0; i < passages.length; i++) {
     const p = passages[i];
-    code.push(
-      `const __ir${i} = ${JSON.stringify({ ...p, id: options.namespace ? options.namespace + '#' + p.id : p.id })};`,
-    );
+    code.push(`const __ir${i} = ${runtimePassage(p, options.namespace ? options.namespace + '#' + p.id : p.id)};`);
     mapping.push({ line: code.join('\n').split('\n').length, span: p.span });
     code.push(`const __f${i} = __gneh(__ir${i}, {bindings:${bindings}});`);
   }
@@ -97,7 +116,7 @@ export function generateModule(
       throw new GnehError('EXPORT_UNKNOWN', `@export can only expose an imported binding; ${name} is not imported.`);
   if (exported.length) code.push(`export { ${exported.join(', ')} };`);
   code.push(
-    `export const metadata = Object.freeze(${JSON.stringify(Object.fromEntries(passages.map((p) => [p.id, p.metadata])))});`,
+    'export const metadata = Object.freeze(Object.fromEntries(Object.entries(fragments).map(([id, fragment]) => [id, fragment.metadata])));',
   );
   code.push('export default __f0;');
   const generated = code.join('\n') + '\n';

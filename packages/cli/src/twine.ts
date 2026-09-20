@@ -2,9 +2,14 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Diagnostic, Dialect } from '@gneh/core';
-import { compileProject, generateModule, parseSource } from '@gneh/compiler';
+import { compileProject, parseSource } from '@gneh/compiler';
+import { karlowe } from '@gneh/karlowe';
+import { sugarcast } from '@gneh/sugarcast';
+import { inkdown } from '@gneh/inkdown';
 import { writeFile } from './files.js';
 import { emitTwineTwee, parseTwineHTML, twineDialect, twineEntry, type TwineStoryData } from './twine-html.js';
+
+const compatibilityDialects = [inkdown(), karlowe(), sugarcast()];
 
 function outputDirectory(input: string, output: string | undefined, suffix: string): string {
   const directory = output
@@ -50,7 +55,9 @@ function compatibility(
   summary: { portable: number; unsupported: number; warnings: number };
 } {
   const passages = story.passages.map((passage) => {
-    const parsed = parseSource(passage.source, `twine-import/${passage.name}.${dialect}`, dialect);
+    const parsed = parseSource(passage.source, `twine-import/${passage.name}.${dialect}`, dialect, {
+      dialects: compatibilityDialects,
+    });
     const unsupported = parsed.diagnostics.some((diagnostic) => diagnostic.severity === 'error');
     return {
       name: passage.name,
@@ -88,11 +95,13 @@ function writeEmbeddedSources(directory: string, story: TwineStoryData): string[
     ['stylesheet', story.stylesheets, 'css'],
     ['script', story.scripts, 'js'],
   ] as const)
-    records.forEach((record, index) => {
-      const name = `twine-user-${kind}-${index + 1}.${extension}`;
-      writeFile(path.join(directory, name), record.source);
-      files.push(name);
-    });
+    records
+      .filter((record) => record.source.trim())
+      .forEach((record, index) => {
+        const name = `twine-user-${kind}-${index + 1}.${extension}`;
+        writeFile(path.join(directory, name), record.source);
+        files.push(name);
+      });
   return files;
 }
 
@@ -128,77 +137,69 @@ export function extractTwineFile(input: string, output?: string): string {
   return directory;
 }
 
-export function importTwineFile(input: string, output?: string, dialectOption?: unknown): string {
+export interface ImportTwineOptions {
+  output?: string;
+  dialect?: unknown;
+  report?: string;
+  preserveContainer?: boolean;
+}
+
+export function importTwineFile(input: string, options: ImportTwineOptions = {}): string {
   const file = path.resolve(input);
   const html = fs.readFileSync(file, 'utf8');
   const story = parseTwineHTML(html);
-  const dialect = requestedDialect(dialectOption) ?? twineDialect(story);
+  const dialect = requestedDialect(options.dialect) ?? twineDialect(story);
   if (!dialect)
     throw new Error(
       `Cannot infer a gneh dialect from Twine format ${JSON.stringify(story.format || '(missing)')}; pass --dialect explicitly.`,
     );
-  const directory = outputDirectory(file, output, '-gneh');
+  const directory = outputDirectory(file, options.output, '-gneh');
   const sourceName = `story.${dialect}`;
-  const source = emitTwineTwee(story);
+  const title = typeof story.attributes.name === 'string' ? story.attributes.name : undefined;
+  const source = `---\nstart: ${JSON.stringify(twineEntry(story) ?? 'Start')}\n${title ? `title: ${JSON.stringify(title)}\n` : ''}---\n${emitTwineTwee(story)}`;
   const checked = compatibility(story, dialect);
   const containerDiagnostics = collisions(story);
   const entry = twineEntry(story) ?? 'Start';
-  const project = compileProject([{ path: sourceName, source, dialect }], { entry });
-  const declarationName = `story.d.${dialect}.ts`;
-  const declarations = project.passages.length
-    ? generateModule(project.passages, source, sourceName).declarations
-    : undefined;
-  const title = typeof story.attributes.name === 'string' ? story.attributes.name : undefined;
-
-  writeFile(
-    path.join(directory, 'twine-story.json'),
-    JSON.stringify(extractionRecord(story, file, html), null, 2) + '\n',
-  );
+  const project = compileProject([{ path: sourceName, source, dialect }], {
+    entry,
+    dialects: compatibilityDialects,
+  });
   writeFile(path.join(directory, sourceName), source);
-  if (declarations) writeFile(path.join(directory, declarationName), declarations);
   const embeddedFiles = writeEmbeddedSources(directory, story);
-  writeFile(
-    path.join(directory, 'gneh.config.json'),
-    JSON.stringify(
-      {
-        ...(title ? { title } : {}),
-        entry,
-        sources: [sourceName],
-        dialect,
-      },
-      null,
-      2,
-    ) + '\n',
-  );
-  writeFile(
-    path.join(directory, 'import-report.json'),
-    JSON.stringify(
-      {
-        schema: 'gneh.twine-import-report/v1',
-        mode: 'import-twine',
-        format: story.format,
-        formatVersion: story.formatVersion,
-        dialect,
-        entry,
-        summary: checked.summary,
-        passages: checked.passages,
-        containerDiagnostics,
-        projectDiagnostics: project.diagnostics,
-        embeddedFiles,
-        fidelity: {
-          exactHtmlPreserved: false,
-          encodedPassageSourcePreservedIn: 'twine-story.json',
-          decodedAuthoringSourceWrittenTo: sourceName,
-          typeDeclarationsWrittenTo: declarations ? declarationName : null,
-          allOpeningTagAttributesPreserved: true,
-          tagDefinitionsPreservedIn: 'twine-story.json',
-          embeddedUserCodeAutomaticallyLoaded: false,
+  if (options.preserveContainer)
+    writeFile(
+      path.join(directory, '.gneh', 'import', 'twine-story.json'),
+      JSON.stringify(extractionRecord(story, file, html), null, 2) + '\n',
+    );
+  if (options.report)
+    writeFile(
+      path.resolve(options.report),
+      JSON.stringify(
+        {
+          schema: 'gneh.twine-import-report/v1',
+          mode: 'import-twine',
+          format: story.format,
+          formatVersion: story.formatVersion,
+          dialect,
+          entry,
+          summary: checked.summary,
+          passages: checked.passages,
+          containerDiagnostics,
+          projectDiagnostics: project.diagnostics,
+          embeddedFiles,
+          fidelity: {
+            exactHtmlPreserved: false,
+            encodedPassageSourcePreservedIn: options.preserveContainer ? '.gneh/import/twine-story.json' : null,
+            decodedAuthoringSourceWrittenTo: sourceName,
+            allOpeningTagAttributesPreserved: true,
+            tagDefinitionsPreservedIn: options.preserveContainer ? '.gneh/import/twine-story.json' : null,
+            embeddedUserCodeAutomaticallyLoaded: false,
+          },
+          note: 'Portable status means accepted by the documented gneh dialect, not behavioral equivalence with the original story format.',
         },
-        note: 'Portable status means accepted by the documented gneh dialect, not behavioral equivalence with the original story format.',
-      },
-      null,
-      2,
-    ) + '\n',
-  );
+        null,
+        2,
+      ) + '\n',
+    );
   return directory;
 }

@@ -4,7 +4,7 @@ import {
   parseSource,
   assertValid,
   walkNodes,
-  type DialectLowerings,
+  type DialectFrontend,
   type SourceInput,
 } from '@gneh/compiler';
 import { defineIRFragment } from '@gneh/runtime';
@@ -36,9 +36,9 @@ export interface VendorData {
 export function readPassageData(
   data: VendorData,
   options: {
-    lowerings?: DialectLowerings;
+    dialects: readonly DialectFrontend[];
     runtimeExtensionIds?: readonly string[];
-  } = {},
+  },
 ): StoryIR {
   const sources: SourceInput[] = data.passages.map((p, i) => ({
     path: `passage-${i}.${p.dialect}`,
@@ -50,26 +50,22 @@ export function readPassageData(
     state: data.state,
     metadata: data.metadata,
     mode: 'vendor',
-    lowerings: options.lowerings,
     runtimeExtensionIds: options.runtimeExtensionIds,
+    dialects: options.dialects,
   });
   assertValid(result);
   return result.story;
 }
 
-export function createWikifier(
-  options: {
-    dialect?: Dialect;
-    pure?: boolean;
-    lowerings?: DialectLowerings;
-  } = {},
-): (source: string, dialect?: Dialect) => Fragment {
+export function createWikifier(options: {
+  dialects: readonly DialectFrontend[];
+  dialect?: Dialect;
+  pure?: boolean;
+}): (source: string, dialect?: Dialect) => Fragment {
   let counter = 0;
   return (source, dialect = options.dialect ?? 'inkdown') => {
     const id = `wikify_${++counter}`;
-    const parsed = parseSource(source, `${id}.${dialect}`, dialect, {
-      lowerings: options.lowerings,
-    });
+    const parsed = parseSource(source, `${id}.${dialect}`, dialect, { dialects: options.dialects });
     assertValid(parsed);
     if (parsed.passages.length !== 1)
       throw new GnehError('WIKIFY_FRAGMENT', 'wikify accepts one fragment, not a multi-passage file.');
@@ -90,15 +86,15 @@ export function startVendor(
   host: HTMLElement,
   data: VendorData | StoryIR,
   options: DOMStoryOptions & {
+    dialects: readonly DialectFrontend[];
     wikifyEnabled?: boolean;
-    lowerings?: DialectLowerings;
-  } = {},
+  },
 ): DOMStoryMount {
-  const { wikifyEnabled, lowerings, ...storyOptions } = options;
+  const { wikifyEnabled, dialects, ...storyOptions } = options;
   const runtimeExtensionIds = Object.keys(options.runtimeExtensions ?? {});
-  const story = 'abi' in data ? data : readPassageData(data, { lowerings, runtimeExtensionIds });
+  const story = 'abi' in data ? data : readPassageData(data, { dialects, runtimeExtensionIds });
   return mountStory(host, story, {
     ...storyOptions,
-    wikify: wikifyEnabled ? createWikifier({ lowerings }) : undefined,
+    wikify: wikifyEnabled ? createWikifier({ dialects }) : undefined,
   });
 }

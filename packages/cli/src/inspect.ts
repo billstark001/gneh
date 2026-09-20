@@ -1,4 +1,7 @@
 import { parseSource } from '@gneh/compiler';
+import { karlowe } from '@gneh/karlowe';
+import { sugarcast } from '@gneh/sugarcast';
+import { inkdown } from '@gneh/inkdown';
 import { splitPassages } from '@gneh/source';
 import type { Project } from './project.js';
 
@@ -32,7 +35,9 @@ export function inspectProject(project: Project, level: InspectionLevel, passage
   }
   if (level === 'syntax') {
     const sources = project.sources.map((source) => {
-      const parsed = parseSource(source.source, source.path, source.dialect);
+      const parsed = parseSource(source.source, source.path, source.dialect, {
+        dialects: [inkdown(), karlowe(), sugarcast()],
+      });
       return {
         path: source.path,
         passages: selected(parsed.passages, passage),

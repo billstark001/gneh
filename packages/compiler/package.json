@@ -24,10 +24,7 @@
   "dependencies": {
     "@gneh/core": "workspace:*",
     "@gneh/expression": "workspace:*",
-    "@gneh/inkdown": "workspace:*",
-    "@gneh/karlowe": "workspace:*",
-    "@gneh/source": "workspace:*",
-    "@gneh/sugarcast": "workspace:*"
+    "@gneh/source": "workspace:*"
   },
   "peerDependencies": {
     "@gneh/runtime": "workspace:*"

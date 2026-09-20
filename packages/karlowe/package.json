@@ -5,6 +5,7 @@
   "license": "MIT AND Zlib",
   "files": [
     "dist",
+    "client.d.ts",
     "README.md",
     "LICENSE",
     "NOTICE.md",
@@ -16,6 +17,9 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./client.d.ts"
     }
   },
   "scripts": {
