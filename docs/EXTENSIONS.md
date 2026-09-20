@@ -6,7 +6,7 @@ gneh deliberately separates two extension boundaries:
 dialect CST -- trusted lowering --> semantic IR -- RuntimeExtension --> View[] / effect
 ```
 
-A `MacroLoweringRegistry` is build-time configuration. It maps a dialect CST node to renderer-neutral IR and never participates in story execution. A `RuntimeExtension` is application-owned runtime behavior invoked by an explicit `invoke` IR node. Neither API is a SugarCube widget engine or a Harlowe custom-macro runtime.
+A `MacroLoweringRegistry` is build-time configuration. It maps a dialect CST node to renderer-neutral IR and never participates in story execution. A `RuntimeExtension` is application-owned runtime behavior invoked by an explicit `invoke` IR node. Neither API is a runtime SugarCube macro engine or a Harlowe custom-macro runtime.
 
 ## CST-to-IR lowerings
 
@@ -67,6 +67,6 @@ The compiler emits `RUNTIME_EXTENSION_UNDECLARED` when an invocation has no decl
 
 ## Deferred source-defined declarations
 
-SugarCube `<<widget>>`, `Macro.add`, Harlowe custom macros, and equivalent source-defined facilities are intentionally not implemented. A future declaration layer may let all three dialects introduce named extensions, but those declarations must resolve to the same `invoke`/`RuntimeExtension` contract instead of creating a second privileged runtime. Scripts, DOM queries, and runtime code injection remain outside the portable profiles.
+Sugarcast supports the declarative part of SugarCube `<<widget>>`: static literal names, `_args`, and container `_contents` lower to the shared view IR. This is not an extension registration API and provides no `MacroContext`, DOM output, or JavaScript callback. `Macro.add`, Harlowe custom macros, and equivalent runtime facilities remain intentionally unimplemented. New executable host behavior must use the same explicit `invoke`/`RuntimeExtension` contract instead of creating a second privileged runtime. Scripts, DOM queries, and runtime code injection remain outside the portable profiles.
 
 The story ABI remains version 1. It was never a production ABI, so the old registry option and type names are removed rather than retained as aliases.

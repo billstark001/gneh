@@ -2,9 +2,9 @@
 /**
  * Staged compatibility audit for compiled Twine HTML.
  *
- * This never executes story JavaScript or source-defined macros. Static widget and
- * Macro.add declarations are inventory only: calls may resolve to those names, but
- * runtime satisfaction still requires an application-provided RuntimeExtension.
+ * This never executes story JavaScript. Static SugarCube widget declarations can
+ * resolve through Sugarcast's portable view lowering; Macro.add declarations remain
+ * inventory only and require an application-provided RuntimeExtension.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -201,8 +201,10 @@ export function auditTwineHTML(html, file = 'story.html', options = {}) {
       occurrenceKinds.total++;
       increment(occurrencesById, id);
       if (builtins.has(id)) occurrenceKinds.builtin++;
-      else if (inventory.declarations.has(id)) occurrenceKinds.sourceDeclared++;
-      else if (configured.has(id)) occurrenceKinds.configured++;
+      else if (inventory.declarations.has(id)) {
+        occurrenceKinds.sourceDeclared++;
+        if (inventory.declarations.get(id).kind !== 'widget') unresolved.push(id);
+      } else if (configured.has(id)) occurrenceKinds.configured++;
       else if (declarationForms.has(id)) {
         occurrenceKinds.declarationForm++;
         unresolved.push(id);
@@ -224,9 +226,12 @@ export function auditTwineHTML(html, file = 'story.html', options = {}) {
       walkNodes(parsedPassage.body, (node) => {
         if (node.type === 'invoke') invocations.push(node.id);
       });
-    invokeNodes += invocations.length;
+    const genericInvocations = invocations.filter(
+      (id) => !(dialect === 'sugarcast' && inventory.declarations.get(id)?.kind === 'widget'),
+    );
+    invokeNodes += genericInvocations.length;
     const lowered = resolved && errors.length === 0;
-    const runtimeMissing = lowered ? invocations.filter((id) => !implemented.has(id)) : [];
+    const runtimeMissing = lowered ? genericInvocations.filter((id) => !implemented.has(id)) : [];
     for (const id of runtimeMissing) increment(runtimeMissingById, id);
     const runtimeSatisfied = lowered && runtimeMissing.length === 0;
     const outcomes = {

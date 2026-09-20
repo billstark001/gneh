@@ -193,7 +193,7 @@ export class LanguageServer {
           .filter((s) => s.name.toLowerCase().includes(q))
           .map((s) => ({
             name: s.name,
-            kind: s.kind === 'action' ? 12 : 2,
+            kind: s.kind === 'fragment' ? 2 : 12,
             location: this.location(s.span),
           })),
       );
@@ -283,7 +283,7 @@ export class LanguageServer {
       case 'textDocument/documentSymbol':
         return this.service.symbols(file).map((s) => ({
           name: s.name,
-          kind: s.kind === 'action' ? 12 : 2,
+          kind: s.kind === 'fragment' ? 2 : 12,
           range: this.range(s.span),
           selectionRange: this.range(s.span),
         }));

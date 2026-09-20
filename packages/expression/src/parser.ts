@@ -79,6 +79,15 @@ export function parseBindingPattern(source: string, span?: Span): BindingPattern
   return pattern;
 }
 
+/** Parse one formal parameter, including a top-level rest parameter. */
+export function parseParameterPattern(source: string, span?: Span): BindingPattern {
+  if (!source.trimStart().startsWith('...')) return parseBindingPattern(source, span);
+  const list = parseBindingPattern(`[${source}]`, span);
+  if (list.type !== 'ArrayPattern' || list.elements.length !== 1 || !list.elements[0])
+    throw new GnehError('BINDING_SYNTAX', 'Invalid rest parameter.', span);
+  return list.elements[0];
+}
+
 /** Scan a binding prefix embedded in a host construct such as `@let pattern = value`. */
 export function scanBindingPattern(
   source: string,
@@ -156,6 +165,30 @@ export function parseSugarExpression(
     return new JSExpressionParser(tokens, parserOptions(options), source).parse();
   });
   return { ast, source, span };
+}
+
+/** Parse SugarCube's whitespace-or-comma separated macro argument list. */
+export function parseSugarArguments(
+  source: string,
+  span: Span = { file: '<sugarcast>', start: 0, end: source.length },
+): Expression[] {
+  return wrap(span, 'EXPR_SYNTAX', () => {
+    const tokens = new JSLexer(source, { rules: sugarRules, numbers: { bigint: false } }).tokenize();
+    const expressions: Expression[] = [];
+    let tokenIndex = 0;
+    while (tokenIndex < tokens.length) {
+      const parsed = new JSExpressionParser(tokens.slice(tokenIndex), parserOptions({}), source).parsePrefix('error');
+      const nodes =
+        parsed.expression.type === 'SequenceExpression' ? parsed.expression.expressions : [parsed.expression];
+      for (const ast of nodes)
+        expressions.push({ ast, source: source.slice(tokens[tokenIndex].start, parsed.end), span });
+      if (!parsed.nextToken) break;
+      const next = tokens.indexOf(parsed.nextToken);
+      if (next <= tokenIndex) throw new Error('Sugarcast argument scanner made no progress.');
+      tokenIndex = next;
+    }
+    return expressions;
+  });
 }
 
 export function expressionEffect(expression: ExpressionNode): import('@gneh/core').EffectNode {

@@ -1,5 +1,5 @@
 import type { ImportIR, StoryNode } from '@gneh/core';
-import { parseBindingPattern, type BindingPattern, type ExpressionNode } from '@gneh/expression';
+import { parseParameterPattern, type BindingPattern, type ExpressionNode } from '@gneh/expression';
 import {
   balanced,
   MacroLoweringRegistry,
@@ -47,23 +47,18 @@ function argumentsAt(
   };
 }
 
-function paramsAt(
-  source: string,
-  start: number,
-  parser: MarkupParser,
-  base: number,
-): {
-  params: BindingPattern[];
-  end: number;
-} {
+function paramsAt(source: string, start: number, parser: MarkupParser, base: number) {
   if (source[start] !== '(') return { params: [], end: start };
   const group = balanced(source, start);
+  const parameters = group.content.trim() ? splitTopLevel(group.content) : [];
+  const params = parameters.map((parameter) =>
+    parseParameterPattern(parameter, parser.span(base + group.start, base + group.end)),
+  );
+  const rest = params.findIndex((parameter) => parameter.type === 'RestElement');
+  if (rest >= 0 && rest !== params.length - 1)
+    parser.error('BINDING_REST', 'A rest parameter must be the last parameter.', base + group.start, base + group.end);
   return {
-    params: group.content.trim()
-      ? splitTopLevel(group.content).map((parameter) =>
-          parseBindingPattern(parameter, parser.span(base + group.start, base + group.end)),
-        )
-      : [],
+    params,
     end: group.end,
   };
 }

@@ -39,7 +39,7 @@ Expressions are the restricted ESTree subset owned by `pure-expr`; gneh has no p
 
 Render and effect phases select separate evaluator policies. Render denies writes and sees deeply read-only state. Enter/actions enable identifier and member writes, but those writes target the Story transaction's private state copy. Gneh owns a small effect IR (`expression`, `bind`, `if`, `each`, and named effect invocation), not JavaScript statements. pure-expr owns expression and binding-pattern parsing, calls, property access, optional chains, assignments, and updates.
 
-Unknown compatibility macros lower to `invoke` IR. Compilation requires the application to declare each extension ID; execution requires a matching phase-limited `RuntimeExtension`. This is intentionally parallel to renderer and host boundaries. It does not grant source code the authority to register executable widgets, custom macros, scripts, or DOM operations.
+Unknown compatibility macros lower to `invoke` IR. Compilation requires the application to declare each extension ID; execution requires a matching phase-limited `RuntimeExtension`. This is intentionally parallel to renderer and host boundaries. Sugarcast's static `<<widget>>` declarations are resolved during lowering and become ordinary view declarations; source code still cannot register runtime extensions, scripts, or DOM operations.
 
 ## Dependency direction
 

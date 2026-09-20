@@ -55,7 +55,7 @@ test('Twine audit separates structure, declarations, lowering and runtime satisf
   assert.deepEqual(satisfied.stages['runtime-satisfied'], { passed: 1, failed: 0 });
 });
 
-test('Twine audit inventories source macro declarations without enabling their runtime', () => {
+test('Twine audit resolves portable widgets but does not enable script registrations', () => {
   const source =
     '<!doctype html><tw-storydata name="Example" format="SugarCube" format-version="2">' +
     '<script role="script">Macro.add(["scripted", "scripted-two"], {})</script>' +
@@ -68,7 +68,7 @@ test('Twine audit inventories source macro declarations without enabling their r
   assert.equal(audit.occurrences.sourceDeclared, 2);
   assert.deepEqual(audit.stages.structured, { passed: 2, failed: 0 });
   assert.deepEqual(audit.stages.resolved, { passed: 1, failed: 1 });
-  assert.deepEqual(audit.stages['runtime-satisfied'], { passed: 0, failed: 2 });
+  assert.deepEqual(audit.stages['runtime-satisfied'], { passed: 1, failed: 1 });
 });
 
 test('Twine extraction follows HTML parsing and character-reference rules', () => {

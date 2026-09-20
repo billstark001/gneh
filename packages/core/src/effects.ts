@@ -63,6 +63,22 @@ export function bindPattern(pattern: BindingPattern, value: unknown, ctx: Evalua
 
 export type EffectResolver = (name: string) => EffectDeclarationIR | undefined;
 
+export function bindParameters(
+  patterns: readonly BindingPattern[],
+  values: readonly unknown[],
+  ctx: EvaluationContext,
+  scope: Scope,
+): void {
+  for (let index = 0; index < patterns.length; index++) {
+    const pattern = patterns[index];
+    if (pattern.type === 'RestElement') {
+      bindPattern(pattern, values.slice(index), ctx, scope);
+      break;
+    }
+    bindPattern(pattern, values[index], ctx, scope);
+  }
+}
+
 /** Execute Inkdown effect control flow; expression semantics belong to pure-expr. */
 export function executeEffects(
   effects: EffectNode[],
@@ -97,13 +113,12 @@ export function executeEffects(
         const declaration = resolve(effect.name);
         invariant(declaration, 'E_EFFECT', `Unknown effect: ${effect.name}`);
         const child = { ...scope };
-        for (let index = 0; index < declaration.params.length; index++)
-          bindPattern(
-            declaration.params[index],
-            effect.args[index] ? evaluateExpression(effect.args[index], ctx, scope) : undefined,
-            ctx,
-            child,
-          );
+        bindParameters(
+          declaration.params,
+          effect.args.map((argument) => evaluateExpression(argument, ctx, scope)),
+          ctx,
+          child,
+        );
         executeEffects(declaration.body, ctx, child, resolve);
         break;
       }

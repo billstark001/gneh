@@ -1,8 +1,10 @@
-import type { Dialect, ParsedPassage, PassageIR, StoryNode } from '@gneh/core';
+import type { Dialect, ParsedPassage, PassageIR, StoryNode, ViewDeclarationIR } from '@gneh/core';
 import type { MarkupParser } from './parser.js';
 
-export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: MarkupParser): PassageIR {
-  const body = parser.blocks(parsed.body, parsed.bodyOffset);
+export function storyCapabilities(
+  body: StoryNode[],
+  views: Readonly<Record<string, ViewDeclarationIR>> = {},
+): string[] {
   const capabilities = new Set<string>();
   function visit(nodes: StoryNode[]) {
     for (const n of nodes) {
@@ -22,7 +24,12 @@ export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: Mar
     }
   }
   visit(body);
-  for (const view of Object.values(parser.views)) visit(view.body);
+  for (const view of Object.values(views)) visit(view.body);
+  return [...capabilities];
+}
+
+export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: MarkupParser): PassageIR {
+  const body = parser.blocks(parsed.body, parsed.bodyOffset);
   return {
     id: parsed.id,
     name: parsed.name,
@@ -38,6 +45,6 @@ export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: Mar
     constants: parser.constants,
     imports: parser.imports,
     exports: parser.exports,
-    capabilities: [...capabilities],
+    capabilities: storyCapabilities(body, parser.views),
   };
 }

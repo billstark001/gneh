@@ -135,20 +135,29 @@ export class GnehLanguageService {
   symbols(file: string): {
     name: string;
     span: Span;
-    kind: 'fragment' | 'action';
+    kind: 'fragment' | 'action' | 'view';
   }[] {
     const parsed = splitPassages(this.documents.get(file)?.source ?? '', file);
     this.analyze();
-    return parsed.passages.flatMap((p) => [
-      { name: p.id, span: p.span, kind: 'fragment' as const },
-      ...(this.result.passages.find((x) => x.id === p.id)?.effects
-        ? Object.values(this.result.passages.find((x) => x.id === p.id)!.effects).map((a) => ({
-            name: a.name,
-            span: a.span,
-            kind: 'action' as const,
-          }))
-        : []),
-    ]);
+    const symbols = parsed.passages.flatMap((passage) => {
+      const compiled = this.result.passages.find((candidate) => candidate.id === passage.id);
+      return [
+        { name: passage.id, span: passage.span, kind: 'fragment' as const },
+        ...Object.values(compiled?.effects ?? {}).map((action) => ({
+          name: action.name,
+          span: action.span,
+          kind: 'action' as const,
+        })),
+        ...Object.values(compiled?.views ?? {}).map((view) => ({
+          name: view.name,
+          span: view.span,
+          kind: 'view' as const,
+        })),
+      ];
+    });
+    return [
+      ...new Map(symbols.map((symbol) => [`${symbol.kind}:${symbol.span.start}:${symbol.name}`, symbol])).values(),
+    ];
   }
   private sourceOffset(
     file: string,

@@ -3,6 +3,8 @@ import {
   parseBindingPattern,
   parseExpression,
   parseIterationClause,
+  parseParameterPattern,
+  parseSugarArguments,
   parseSugarExpression,
   scanBindingPattern,
 } from '../dist/index.js';
@@ -27,12 +29,25 @@ describe('@gneh/expression', () => {
     });
   });
 
+  test('parses SugarCube whitespace-or-comma separated macro arguments', () => {
+    const arguments_ = parseSugarArguments('"ready" $value, 3');
+    expect(arguments_.map((argument) => argument.ast)).toMatchObject([
+      { type: 'Literal', value: 'ready' },
+      { type: 'Identifier', name: '$value' },
+      { type: 'Literal', value: 3 },
+    ]);
+  });
+
   test('parses binding patterns for Inkdown declarations', () => {
     expect(parseBindingPattern('{ hp, inventory: [first, ...rest] }')).toMatchObject({
       type: 'ObjectPattern',
       properties: [{ value: { type: 'Identifier', name: 'hp' } }, { value: { type: 'ArrayPattern' } }],
     });
     expect(() => parseBindingPattern('$hp')).toThrow(/Persistent state/);
+    expect(parseParameterPattern('...items')).toMatchObject({
+      type: 'RestElement',
+      argument: { type: 'Identifier', name: 'items' },
+    });
   });
 
   test('parses DSL iteration clauses without a JavaScript Program parser', () => {

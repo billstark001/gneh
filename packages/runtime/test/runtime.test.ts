@@ -70,6 +70,22 @@ test('Inkdown views use the same binding-pattern call convention as actions', ()
   assert.equal(text(s.view).replaceAll(/\s/g, ''), 'Readynow');
 });
 
+test('view and action rest parameters receive every call argument', () => {
+  const s = story(
+    `@view Join(first, ...rest) { {{ first + rest.join("") }} }
+@action add(...values) {
+  @each (value of values) { @do $total += value; }
+}
+@Join("A", "B", "C")
+[[Add => add(1, 2, 3)]]`,
+    'inkdown',
+    { state: { total: 0 } },
+  );
+  assert.match(text(s.view).replaceAll(/\s/g, ''), /ABC/);
+  click(s, 'Add');
+  assert.equal(s.state.total, 6);
+});
+
 test('source-order compatibility effects migrate to native @effect blocks', () => {
   const s = story('before {{ $value }}\n@effect { @do $value += 1; }\nafter {{ $value }}', 'inkdown', {
     state: { value: 0 },

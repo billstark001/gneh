@@ -6,7 +6,7 @@
 
 - **Inkdown** combines Markdown-like prose with portable JavaScript expressions, actions, and ESM bindings.
 - **Karlowe** is an explicit, portable Harlowe-like subset. It supports anonymous and semantic named hooks, source-order effects, interactions, and portable presentation changers; selectors that depend on Harlowe's DOM runtime are rejected.
-- **Sugarcast** is an explicit, portable SugarCube-like subset. Source-defined widgets, runtime macro injection, and DOM injection are rejected.
+- **Sugarcast** is an explicit, portable SugarCube-like subset. Declarative `<<widget>>` definitions lower to the same view IR as Inkdown; runtime macro injection, scripts, and DOM injection are rejected.
 
 All three languages use the same Twee 3 passage container and metadata merger. A navigable passage and an embedded component are the same typed `Fragment`.
 

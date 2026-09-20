@@ -6,9 +6,16 @@ or mount gneh beside an existing application.
 
 @action visit { @do $visits += 1; }
 
+@view VisitCount(label = "Visits") {
+  **{{ label }}:** $visits
+  @children
+}
+
 [[Visit again => visit]]
 
-Visits: $visits
+@VisitCount("Visits") {
+  *The count is stored in story state.*
+}
 
 [[Continue -> End]]
 

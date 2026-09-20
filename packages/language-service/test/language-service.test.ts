@@ -88,3 +88,21 @@ test('virtual files are inspectable and invalidate on edit', options, () => {
     service.dispose();
   }
 });
+
+test('document symbols include actions and reusable views', options, () => {
+  const service = new Service();
+  try {
+    const file = '/test/symbols.inkdown';
+    service.setDocument(file, ':: Start\n@action save { @do $saved = true; }\n@view Badge(label) { {{ label }} }');
+    assert.deepEqual(
+      service.symbols(file).map(({ name, kind }) => ({ name, kind })),
+      [
+        { name: 'Start', kind: 'fragment' },
+        { name: 'save', kind: 'action' },
+        { name: 'Badge', kind: 'view' },
+      ],
+    );
+  } finally {
+    service.dispose();
+  }
+});

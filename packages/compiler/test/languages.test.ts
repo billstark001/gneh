@@ -119,7 +119,6 @@ test('DOM-coupled changers and arbitrary script macros explicitly fail', () => {
   for (const [source, dialect] of [
     ['(enchant: ?page, (text-colour: red))', 'karlowe'],
     ['<<script>>alert(1)<</script>>', 'sugarcast'],
-    ['<<widget "x">>hi<</widget>>', 'sugarcast'],
   ])
     assert.ok(compileSource(source, 'test.' + dialect, { dialect }).diagnostics.some((d) => d.severity === 'error'));
 });

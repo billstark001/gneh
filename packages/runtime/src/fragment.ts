@@ -1,6 +1,6 @@
 import {
   display,
-  bindPattern,
+  bindParameters,
   evaluateExpression,
   executeEffects,
   invariant,
@@ -213,13 +213,12 @@ export function defineIRFragment(
             ...scope,
             __children: () => nodes(node.children, ctx, scope, `${key}/children`),
           };
-          for (let argument = 0; argument < declaration.params.length; argument++)
-            bindPattern(
-              declaration.params[argument],
-              node.args[argument] ? valueAt(node.args[argument], ctx, scope, `${key}/argument:${argument}`) : undefined,
-              ctx,
-              child,
-            );
+          bindParameters(
+            declaration.params,
+            node.args.map((argument, index) => valueAt(argument, ctx, scope, `${key}/argument:${index}`)),
+            ctx,
+            child,
+          );
           return nodes(declaration.body, ctx, child, `${key}/view:${node.name}`);
         }
         case 'children': {

@@ -1,6 +1,6 @@
-import { GnehError, type EffectNode, type ParseResult, type StoryNode, type Span } from '@gneh/core';
+import { GnehError, type ParseResult, type StoryNode, type ViewDeclarationIR } from '@gneh/core';
 import { splitPassages, diag } from '@gneh/source';
-import { parseSugarExpression } from '@gneh/expression';
+import { parseSugarArguments, parseSugarExpression } from '@gneh/expression';
 import {
   caseInsensitiveMacroName,
   MacroLoweringRegistry,
@@ -8,9 +8,13 @@ import {
   balanced,
   basePassage,
   splitTopLevel,
+  storyCapabilities,
   type MacroLowering,
   type SpecialReader,
 } from '@gneh/syntax';
+import { firstString, sugarExpression as expr, wikiLink } from './arguments.js';
+import { actionBody } from './actions.js';
+import { discoverWidgets, referencedWidgets, widgetHeader } from './widgets.js';
 
 export interface SugarcastMacroToken {
   name: string;
@@ -271,62 +275,6 @@ function extendParagraph(source: string, start: number, initialEnd: number, regi
   return end;
 }
 
-function expr(source: string, span: Span) {
-  return parseSugarExpression(source, span);
-}
-
-function firstString(
-  source: string,
-  p: MarkupParser,
-  start: number,
-): {
-  value: string;
-  rest: string;
-} {
-  const m = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*/.exec(source);
-  if (!m) p.error('SUGARCAST_LITERAL', 'Expected a literal string argument.', start);
-  const ast = parseSugarExpression(m[1]).ast;
-  if (ast.type !== 'Literal' || typeof ast.value !== 'string') p.error('SUGARCAST_LITERAL', 'Expected string', start);
-  return { value: ast.value as string, rest: source.slice(m[0].length) };
-}
-
-function actionBody(source: string, base: number, p: MarkupParser, registry: SugarcastLowerings): EffectNode[] {
-  let i = 0;
-  const bodyEffects: EffectNode[] = [];
-  while (i < source.length) {
-    if (/\s/.test(source[i])) {
-      i++;
-      continue;
-    }
-    const m = readSugarcastMacro(source, i);
-    if (!m)
-      p.error(
-        'SUGARCAST_ACTION',
-        'Button bodies contain <<set>>, <<run>> or <<goto>> in the portable profile.',
-        base + i,
-      );
-    const result = registry.lower(m.name, {
-      source,
-      index: i,
-      base,
-      parser: p,
-      inline: true,
-      node: { ...m, type: 'macro', fullEnd: m.end, children: [] },
-    });
-    const effects = result?.nodes.filter((node) => node.type === 'effect') ?? [];
-    if (!result || effects.length !== result.nodes.length)
-      p.error(
-        'SUGARCAST_ACTION',
-        `<<${m.name}>> is not an effect macro and cannot be used in an event body.`,
-        base + i,
-        base + m.end,
-      );
-    for (const node of effects) bodyEffects.push(...node.effects);
-    i = result.end;
-  }
-  return bodyEffects;
-}
-
 const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
   source,
   index,
@@ -360,6 +308,7 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
       };
     case 'print':
     case '=':
+      if (m.args.trim() === '_contents') return { nodes: [{ type: 'children', span }], end: m.end };
       return {
         nodes: [
           {
@@ -444,13 +393,24 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
     }
     case 'link':
     case 'button': {
-      const { value: label, rest } = firstString(m.args, p, base + m.argStart);
-      const target = rest.trim()
-        ? firstString(rest.trim(), p, base + m.argStart + m.args.indexOf(rest)).value
-        : undefined;
+      const wiki = wikiLink(m.args);
+      const quoted = wiki ? undefined : firstString(m.args, p, base + m.argStart);
+      const label = wiki?.label ?? quoted!.value;
+      const targetSource = wiki?.target ?? quoted!.rest.trim();
+      let target: string | undefined;
+      let targetExpression: ReturnType<typeof expr>['ast'] | undefined;
+      if (targetSource) {
+        try {
+          const parsed = expr(targetSource, p.span(base + m.argStart, base + m.end - 2));
+          if (parsed.ast.type === 'Literal' && typeof parsed.ast.value === 'string') target = parsed.ast.value;
+          else targetExpression = parsed.ast;
+        } catch {
+          target = targetSource;
+        }
+      }
       const b = readSugarcastBlock(source, m, registry),
         body = b.sections[0];
-      if (target && !body.body.trim())
+      if (target && !targetExpression && !body.body.trim())
         return {
           nodes: [
             {
@@ -462,14 +422,21 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
           ],
           end: b.end,
         };
-      const bodyEffects = actionBody(body.body, base + body.base, p, registry);
-      if (target)
+      const bodyEffects = actionBody(
+        body.body,
+        base + body.base,
+        p,
+        registry,
+        readSugarcastMacro,
+        (bodySource, opening) => readSugarcastBlock(bodySource, opening, registry),
+      );
+      if (target || targetExpression)
         bodyEffects.push({
           type: 'expression',
           expression: {
             type: 'CallExpression',
             callee: { type: 'Identifier', name: 'navigate' },
-            arguments: [{ type: 'Literal', value: target }],
+            arguments: [targetExpression ?? { type: 'Literal', value: target! }],
             optional: false,
           },
         });
@@ -565,6 +532,17 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
         block: true,
       };
     }
+    case 'widget': {
+      if (!widgetHeader(m.args))
+        return p.error(
+          'SUGARCAST_WIDGET',
+          'Portable widgets use <<widget "name" [container]>>...<</widget>>.',
+          base + m.argStart,
+          base + m.end - 2,
+        );
+      const block = readSugarcastBlock(source, m, registry);
+      return { nodes: [], end: block.end, block: true };
+    }
   }
 };
 
@@ -577,10 +555,14 @@ export function createSugarcastLowerings(): SugarcastLowerings {
   registry.register(['for', 'link', 'button'], expandSugarcast, {
     meta: { container: true },
   });
+  registry.register('widget', expandSugarcast, { meta: { container: true } });
   return registry;
 }
 
-export function createSugarcastMacroReader(registry: SugarcastLowerings = createSugarcastLowerings()): SpecialReader {
+export function createSugarcastMacroReader(
+  registry: SugarcastLowerings = createSugarcastLowerings(),
+  viewContainers: ReadonlySet<string> = new Set(),
+): SpecialReader {
   const documents = new Map<string, SugarcastDocumentCST>();
   const find = (nodes: SugarcastCSTNode[], start: number): SugarcastMacroCST | undefined => {
     for (const node of nodes) {
@@ -620,9 +602,28 @@ export function createSugarcastMacroReader(registry: SugarcastLowerings = create
         base + token.start,
         base + token.end,
       );
+    const declaredView = parser.views[registry.normalize(token.name)];
     const containers = sugarcastContainerNames(source);
-    const container = containers.has(registry.normalize(token.name));
+    const container = declaredView
+      ? viewContainers.has(registry.normalize(token.name))
+      : containers.has(registry.normalize(token.name));
     const block = container ? readSugarcastBlock(source, token, registry, containers) : undefined;
+    if (declaredView)
+      return {
+        nodes: [
+          {
+            type: 'view-call',
+            name: declaredView.name,
+            args: parseSugarArguments(token.args, parser.span(base + token.argStart, base + token.end - 2)),
+            children: block
+              ? parser.children(block.sections[0]?.body ?? '', base + (block.sections[0]?.base ?? token.end), inline)
+              : [],
+            span: parser.span(base + token.start, base + (block?.end ?? token.end)),
+          },
+        ],
+        end: block?.end ?? token.end,
+        block: !!block || !inline,
+      };
     let args: ReturnType<typeof expr>[] = [];
     if (token.args.trim()) {
       try {
@@ -670,22 +671,60 @@ export function parseSugarcast(
   const lowerings = options.lowerings ?? createSugarcastLowerings();
   const split = splitPassages(source, file),
     result: ParseResult = { passages: [], diagnostics: [...split.diagnostics] };
+  const widgets = discoverWidgets(split.passages, file, parseSugarcastCST);
+  const widgetContainers = new Set(
+    [...widgets.values()].filter((widget) => widget.container).map((widget) => widget.name),
+  );
   for (const passage of split.passages)
     try {
-      const parsed = basePassage(
-        passage,
-        'sugarcast',
-        new MarkupParser({
-          file,
-          expression: expr,
-          special: createSugarcastMacroReader(lowerings),
-          isBlockStart: (line) => {
-            const match = /^\s*<<\s*(\/?[A-Za-z][\w-]*|=)/.exec(line);
-            return !!match;
-          },
-          extendParagraph: (source, start, end) => extendParagraph(source, start, end, lowerings),
-        }),
-      );
+      const parser = new MarkupParser({
+        file,
+        expression: expr,
+        special: createSugarcastMacroReader(lowerings, widgetContainers),
+        isBlockStart: (line) => {
+          const match = /^\s*<<\s*(\/?[A-Za-z][\w-]*|=)/.exec(line);
+          return !!match;
+        },
+        extendParagraph: (source, start, end) => extendParagraph(source, start, end, lowerings),
+      });
+      const ensureView = (name: string): ViewDeclarationIR => {
+        const existing = parser.views[name];
+        if (existing) return existing;
+        const widget = widgets.get(name)!;
+        return (parser.views[name] = {
+          phase: 'view',
+          name: widget.name,
+          params: [{ type: 'RestElement', argument: { type: 'Identifier', name: '_args' } }],
+          body: [],
+          source: widget.source,
+          span: widget.span,
+        } satisfies ViewDeclarationIR);
+      };
+      for (const name of referencedWidgets(passage.body, widgets, parseSugarcastCST)) ensureView(name);
+      const parsed = basePassage(passage, 'sugarcast', parser);
+      const reachable = new Set<string>();
+      const loadViews = (nodes: StoryNode[]): void => {
+        for (const node of nodes) {
+          if (node.type === 'view-call' && widgets.has(node.name) && !reachable.has(node.name)) {
+            reachable.add(node.name);
+            const widget = widgets.get(node.name)!;
+            const declaration = ensureView(node.name);
+            for (const name of referencedWidgets(widget.body, widgets, parseSugarcastCST)) ensureView(name);
+            declaration.body = parser.children(widget.body, widget.bodyOffset, false);
+            loadViews(declaration.body);
+          }
+          if (node.type === 'if') {
+            loadViews(node.yes);
+            loadViews(node.no);
+          } else {
+            if ('children' in node) loadViews(node.children);
+            if (node.type === 'interaction' || node.type === 'control') loadViews(node.label);
+          }
+        }
+      };
+      loadViews(parsed.body);
+      for (const name of Object.keys(parsed.views)) if (!reachable.has(name)) delete parsed.views[name];
+      parsed.capabilities = storyCapabilities(parsed.body, parsed.views);
       parsed.evaluation = 'materialized';
       result.passages.push(parsed);
     } catch (e) {

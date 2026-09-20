@@ -166,13 +166,20 @@ Anonymous hooks are structural containers. `|name>[...]` and `[...]<name|` creat
 <<include "EnemyCard" {enemy: $enemy}>>
 <<button "Heal">><<set $hp += 1>><</button>>
 <<print $hp + 1>>
+
+<<widget "badge">>Status: <<print _args[0]>><</widget>>
+<<widget "panel" container>>[<<print _contents>>]<</widget>>
+<<badge "ready">>
+<<panel>>portable body<</panel>>
 ```
 
-Supported constructs include `set`/`run`, `print`, `if`/`elseif`/`else`, `include`, `button`/`link`, a basic `for-of`, basic checkbox binding, and parser-level aliases such as `is`/`isnot`/`and`/`or`/`not`. Alias words inside strings are not rewritten.
+Supported constructs include `set`/`run`, `print`, `if`/`elseif`/`else`, `include`, `button`/`link`, a basic `for-of`, basic checkbox binding, SugarCube wiki-link headers, and parser-level aliases such as `is`/`isnot`/`and`/`or`/`not`. Link and button bodies are effect-only; their portable subset includes nested conditional and `for-of` control flow. Alias words inside strings are not rewritten.
 
-Sugarcast also materializes in source order. Writes are explicit IR effect nodes, not hoisted entry code, so output before and after a write observes the corresponding state. It remains a compatibility profile, not a SugarCube widget engine.
+Sugarcast also materializes in source order. Writes are explicit IR effect nodes, not hoisted entry code, so output before and after a write observes the corresponding state.
 
-Range and C-style loops, widget and capture scope semantics, scripts, source-level `Macro.add`, Wikifier, jQuery, and DOM macros are outside the profile. Sugarcast does not recognize Inkdown directives. Trusted build tooling may register additional IR lowerings without enabling those runtime APIs.
+Static `<<widget "name">>` declarations are file-wide and lower to the same portable view declarations used by Inkdown. `_args` is an array of evaluated call arguments. A `container` widget may render its caller body with `<<print _contents>>` or `<<= _contents>>`. Widget bodies may use the supported Sugarcast constructs, including state-writing effect macros; they do not receive SugarCube's `MacroContext`, shadow store, DOM output object, or JavaScript callback APIs.
+
+Range and C-style loops, `<<capture>>` shadowing, scripts, source-level `Macro.add`, Wikifier, jQuery, and DOM macros are outside the profile. Widget names must be literal strings and definitions are declarative rather than runtime mutations. Sugarcast does not recognize Inkdown directives. Trusted build tooling may register additional IR lowerings without enabling those runtime APIs.
 
 ## Migration
 
