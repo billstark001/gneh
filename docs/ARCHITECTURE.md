@@ -151,6 +151,8 @@ The repository implements one DOM backend. Other hosts may implement the protoco
 
 Navigation chrome, history controls, persistence and Wiki/story-flow/visual-novel layouts belong to the editable initializer template. Moving that code out of a runtime package makes the customization boundary honest and lets React, Vue or an existing application use `Story` directly. Extensions and imported JavaScript are trusted host code.
 
+[DOM behavior and host integration](DOM_BEHAVIORS.md) gives concrete patterns for root-scoped event delegation, browser capabilities, post-render behavior, portals, and lifecycle-aware custom widgets.
+
 ## Vite coexistence boundary
 
 Native story extensions are unambiguous and compile automatically. `.md`, `.twee` and `.tw` may belong to documentation systems or other plugins, so gneh only handles them with an explicit `?gneh` query. The plugin does not inject global CSS, mount an application, aggregate story files behind a virtual alias, or force full-page reloads. Native story files are ordinary ESM modules; applications compose multiple modules explicitly or with Vite's standard `import.meta.glob`.

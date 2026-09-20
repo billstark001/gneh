@@ -149,6 +149,7 @@ The package count follows optional dependency and runtime boundaries. Stable `sr
 - [Getting started](docs/GETTING_STARTED.md)
 - [Language and compatibility profile](docs/LANGUAGE.md)
 - [Syntax and runtime extensions](docs/EXTENSIONS.md)
+- [DOM behavior and host integration](docs/DOM_BEHAVIORS.md)
 - [Karlowe compatibility design](docs/KARLOWE_COMPATIBILITY.md)
 - [Architecture and ownership](docs/ARCHITECTURE.md)
 - [CLI reference](docs/CLI.md)

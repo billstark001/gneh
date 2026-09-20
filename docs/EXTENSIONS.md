@@ -70,3 +70,5 @@ The compiler emits `RUNTIME_EXTENSION_UNDECLARED` when an invocation has no decl
 Sugarcast supports the declarative part of SugarCube `<<widget>>`: static literal names, `_args`, and container `_contents` lower to the shared view IR. This is not an extension registration API and provides no `MacroContext`, DOM output, or JavaScript callback. `Macro.add`, Harlowe custom macros, and equivalent runtime facilities remain intentionally unimplemented. New executable host behavior must use the same explicit `invoke`/`RuntimeExtension` contract instead of creating a second privileged runtime. Scripts, DOM queries, and runtime code injection remain outside the portable profiles.
 
 The story ABI remains version 1. It was never a production ABI, so the old registry option and type names are removed rather than retained as aliases.
+
+For DOM-specific results, keep the runtime extension renderer-neutral and return an `extension:<name>` View, then install the matching application-owned extension renderer. The complete story-to-DOM bridge is shown in [DOM behavior and host integration](DOM_BEHAVIORS.md).
