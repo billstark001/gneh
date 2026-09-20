@@ -33,6 +33,56 @@ export interface ModuleOutput {
 }
 
 function runtimePassage(passage: PassageIR, id: string): string {
+  const sourceOwners = new WeakSet<object>();
+  const spanOwners = new WeakSet<object>();
+  const markExpression = (expression: object) => {
+    sourceOwners.add(expression);
+    spanOwners.add(expression);
+  };
+  const markNodes = (nodes: PassageIR['body']): void => {
+    for (const node of nodes) {
+      spanOwners.add(node);
+      if (node.type === 'value') markExpression(node.expression);
+      else if (node.type === 'if') {
+        markExpression(node.test);
+        markNodes(node.yes);
+        markNodes(node.no);
+      } else if (node.type === 'each') {
+        markExpression(node.items);
+        if (node.key) markExpression(node.key);
+        markNodes(node.children);
+      } else if (node.type === 'include') {
+        if (node.props) markExpression(node.props);
+      } else if (node.type === 'choice') {
+        if (node.props) markExpression(node.props);
+        markNodes(node.children);
+      } else if (node.type === 'view-call' || node.type === 'invoke') {
+        for (const argument of node.args) markExpression(argument);
+        markNodes(node.children);
+      } else if (node.type === 'control') {
+        markExpression(node.value);
+        for (const option of node.options) markExpression(option);
+        markNodes(node.label);
+      } else if (node.type === 'extension') {
+        for (const expression of Object.values(node.bindings)) markExpression(expression);
+        markNodes(node.children);
+      } else {
+        if ('children' in node) markNodes(node.children);
+        if (node.type === 'interaction') markNodes(node.label);
+      }
+    }
+  };
+  markNodes(passage.body);
+  for (const expression of Object.values(passage.constants)) markExpression(expression);
+  for (const declaration of Object.values(passage.effects)) {
+    sourceOwners.add(declaration);
+    spanOwners.add(declaration);
+  }
+  for (const declaration of Object.values(passage.views)) {
+    sourceOwners.add(declaration);
+    spanOwners.add(declaration);
+    markNodes(declaration.body);
+  }
   const {
     name: _name,
     dialect: _dialect,
@@ -43,12 +93,8 @@ function runtimePassage(passage: PassageIR, id: string): string {
     ...runtime
   } = passage;
   return JSON.stringify({ ...runtime, id }, function (key, value) {
-    const compilerRecord =
-      this &&
-      typeof this === 'object' &&
-      ('ast' in this || 'phase' in this || ('type' in this && typeof this.type === 'string'));
-    if (key === 'source' && compilerRecord) return undefined;
-    if (key === 'span' && compilerRecord && value && typeof value === 'object') return { start: value.start };
+    if (key === 'source' && sourceOwners.has(this)) return undefined;
+    if (key === 'span' && spanOwners.has(this) && value && typeof value === 'object') return { start: value.start };
     return value;
   });
 }
