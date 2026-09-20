@@ -15,6 +15,7 @@
     "@gneh/runtime": "^0.1.0"
   },
   "devDependencies": {
+    "@gneh/inkdown": "^0.1.0",
     "@gneh/vite": "^0.1.0",
     "@types/node": "^22.0.0",
     "typescript": "^7.0.0",

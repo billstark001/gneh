@@ -1,47 +1,11 @@
-import type { AnyFragment, State, View } from '@gneh/core';
-import { Story, type StoryOptions } from '@gneh/runtime';
+import type { AnyFragment, View } from '@gneh/core';
 import { DOMRenderer, type DOMMount } from '@gneh/renderer-dom';
+import { createStory, type StoryAppOptions } from './story';
 
 type Environment = 'wiki' | 'story-flow' | 'visual-novel';
 
-export interface AppOptions {
-  entry: string;
-  state?: State;
+export interface AppOptions extends StoryAppOptions {
   environment?: Environment;
-  host?: StoryOptions['host'];
-}
-
-function browserHost(operation: string, args: readonly unknown[], story: Story): unknown {
-  const slot = String(args[0] ?? 'default');
-  switch (operation) {
-    case 'prompt':
-      try {
-        return window.prompt(String(args[0] ?? ''), String(args[1] ?? '')) ?? String(args[1] ?? '');
-      } catch {
-        return String(args[1] ?? '');
-      }
-    case 'open-external':
-      return window.open(String(args[0] ?? ''), '_blank', 'noopener,noreferrer');
-    case 'restart':
-      window.location.reload();
-      return;
-    case 'save':
-      localStorage.setItem(`gneh:slot:${slot}`, story.save());
-      return true;
-    case 'load': {
-      const saved = localStorage.getItem(`gneh:slot:${slot}`);
-      if (saved) story.load(saved);
-      return Boolean(saved);
-    }
-    case 'saved-games':
-      return Object.keys(localStorage)
-        .filter((key) => key.startsWith('gneh:slot:'))
-        .map((key) => key.slice('gneh:slot:'.length));
-    case 'undo':
-      return story.undo();
-    default:
-      throw new Error(`Host operation is unavailable: ${operation}`);
-  }
 }
 
 function text(nodes: View[]): string {
@@ -67,7 +31,7 @@ function visualNovelView(view: View[]): { beats: View[][]; choices: View[] } {
 
 /** Application code, intentionally kept in the generated project for editing or replacement. */
 export function createApp(host: HTMLElement, fragments: readonly AnyFragment[], options: AppOptions) {
-  const story = new Story([...fragments], { ...options, host: options.host ?? browserHost });
+  const story = createStory(fragments, options);
   const renderer = new DOMRenderer({
     onError(error) {
       status.textContent = error instanceof Error ? error.message : String(error);

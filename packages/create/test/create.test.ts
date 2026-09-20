@@ -23,25 +23,32 @@ test('@gneh/create copies an editable Vite application and never overwrites file
   }
 });
 
-test('@gneh/create derives Preact and Vue projects from the shared template', async () => {
+test('@gneh/create emits distinct native React, Preact and Vue projects', async () => {
   const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'create-gneh-frameworks-'));
   try {
+    const react = path.join(parent, 'React Story');
     const preact = path.join(parent, 'Preact Story');
     const vue = path.join(parent, 'Vue Story');
+    createProject(react, 'react');
     createProject(preact, 'preact');
     createProject(vue, 'vue');
+    const reactManifest = JSON.parse(await fs.readFile(path.join(react, 'package.json'), 'utf8'));
     const preactManifest = JSON.parse(await fs.readFile(path.join(preact, 'package.json'), 'utf8'));
     const vueManifest = JSON.parse(await fs.readFile(path.join(vue, 'package.json'), 'utf8'));
+    assert.match(reactManifest.dependencies.react, /^\^19\./);
+    assert.match(reactManifest.dependencies['react-dom'], /^\^19\./);
+    assert.equal(reactManifest.dependencies.preact, undefined);
+    assert.match(await fs.readFile(path.join(react, 'src/App.tsx'), 'utf8'), /from 'react'/);
+    assert.match(await fs.readFile(path.join(react, 'vite.config.ts'), 'utf8'), /plugin-react/);
     assert.match(preactManifest.dependencies.preact, /^\^10\./);
     assert.equal(preactManifest.dependencies.vue, undefined);
-    assert.match(await fs.readFile(path.join(preact, 'src/main.ts'), 'utf8'), /from 'preact'/);
+    assert.match(await fs.readFile(path.join(preact, 'src/App.tsx'), 'utf8'), /preact\/hooks/);
+    assert.doesNotMatch(await fs.readFile(path.join(preact, 'src/App.tsx'), 'utf8'), /preact\/compat/);
     assert.match(vueManifest.dependencies.vue, /^\^3\./);
     assert.equal(vueManifest.dependencies.preact, undefined);
-    assert.match(await fs.readFile(path.join(vue, 'src/main.ts'), 'utf8'), /from 'vue'/);
-    assert.equal(
-      await fs.readFile(path.join(preact, 'src/ui.ts'), 'utf8'),
-      await fs.readFile(path.join(vue, 'src/ui.ts'), 'utf8'),
-    );
+    assert.match(await fs.readFile(path.join(vue, 'src/App.vue'), 'utf8'), /<template>/);
+    await assert.rejects(() => fs.readFile(path.join(preact, 'src/ui.ts')), /ENOENT/);
+    await assert.rejects(() => fs.readFile(path.join(vue, 'src/ui.ts')), /ENOENT/);
   } finally {
     await fs.rm(parent, { recursive: true, force: true });
   }

@@ -1,1 +1,1 @@
-/// <reference types="@gneh/vite/client" />
+/// <reference types="@gneh/inkdown/client" />

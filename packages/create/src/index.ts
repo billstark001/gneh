@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type TemplateKind = 'vanilla' | 'preact' | 'vue';
+export type TemplateKind = 'vanilla' | 'react' | 'preact' | 'vue';
 
-const frameworkEntries: Record<Exclude<TemplateKind, 'vanilla'>, URL> = {
-  preact: new URL('../overlays/main.preact.ts', import.meta.url),
-  vue: new URL('../overlays/main.vue.ts', import.meta.url),
+const frameworkOverlays: Record<Exclude<TemplateKind, 'vanilla'>, URL> = {
+  react: new URL('../overlays/react/', import.meta.url),
+  preact: new URL('../overlays/preact/', import.meta.url),
+  vue: new URL('../overlays/vue/', import.meta.url),
 };
 
 function packageName(value: string): string {
@@ -30,13 +31,32 @@ export function createProject(destination: string, template: TemplateKind = 'van
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
     name: string;
     dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
   };
   manifest.name = packageName(destination);
-  if (template === 'preact') manifest.dependencies.preact = '^10.27.0';
-  else if (template === 'vue') manifest.dependencies.vue = '^3.5.0';
+  if (template === 'react') {
+    manifest.dependencies.react = '^19.1.0';
+    manifest.dependencies['react-dom'] = '^19.1.0';
+    manifest.devDependencies['@types/react'] = '^19.1.0';
+    manifest.devDependencies['@types/react-dom'] = '^19.1.0';
+    manifest.devDependencies['@vitejs/plugin-react'] = '^5.0.0';
+  } else if (template === 'preact') {
+    manifest.dependencies.preact = '^10.27.0';
+    manifest.devDependencies['@preact/preset-vite'] = '^2.10.0';
+  } else if (template === 'vue') {
+    manifest.dependencies.vue = '^3.5.0';
+    manifest.devDependencies['@vitejs/plugin-vue'] = '^6.0.0';
+  }
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-  if (template !== 'vanilla')
-    fs.copyFileSync(fileURLToPath(frameworkEntries[template]), path.join(target, 'src/main.ts'));
+  if (template !== 'vanilla') {
+    fs.rmSync(path.join(target, 'src/main.ts'));
+    fs.rmSync(path.join(target, 'src/ui.ts'));
+    fs.cpSync(fileURLToPath(frameworkOverlays[template]), target, { recursive: true });
+    if (template === 'react' || template === 'preact') {
+      const html = path.join(target, 'index.html');
+      fs.writeFileSync(html, fs.readFileSync(html, 'utf8').replace('/src/main.ts', '/src/main.tsx'));
+    }
+  }
   return target;
 }
 
@@ -44,14 +64,14 @@ function templateFrom(args: string[]): TemplateKind {
   const inline = args.find((argument) => argument.startsWith('--template='))?.slice(11);
   const option = args.indexOf('--template');
   const value = inline ?? (option >= 0 ? args[option + 1] : undefined) ?? 'vanilla';
-  if (value === 'vanilla' || value === 'preact' || value === 'vue') return value;
-  throw new Error(`Unknown template ${JSON.stringify(value)}; expected vanilla, preact or vue.`);
+  if (value === 'vanilla' || value === 'react' || value === 'preact' || value === 'vue') return value;
+  throw new Error(`Unknown template ${JSON.stringify(value)}; expected vanilla, react, preact or vue.`);
 }
 
 export function main(args = process.argv.slice(2)): void {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(
-      'create-gneh [directory] [--template vanilla|preact|vue]\n\nCreates an editable Vite application from one shared template (default: vanilla).',
+      'create-gneh [directory] [--template vanilla|react|preact|vue]\n\nCreates an editable Vite application (default: vanilla).',
     );
     return;
   }
