@@ -2,18 +2,22 @@ import { GnehError, type EffectNode, type Expression, type Span } from '@gneh/co
 import { parseExpression, type ExpressionNode } from '@gneh/expression';
 import { balanced, harloweMacroName, splitTopLevel } from '@gneh/syntax';
 import { PrattParser, type OperatorConfig, type PrattToken, type PrattASTNode } from './pratt-parser.js';
+import { inferKarloweComparisons } from './inference.js';
 
 const config: Record<string, OperatorConfig> = {
   or: { precedence: 8, infix: true },
-  and: { precedence: 9, infix: true },
-  not: { precedence: 10, prefix: true },
+  // Harlowe gives `and` and `or` the same, left-associative precedence.
+  and: { precedence: 8, infix: true },
+  not: { precedence: 14, prefix: true },
 };
 
-for (const op of ['is', 'is not', 'is >', 'is <', 'is >=', 'is <=', '>', '<', '>=', '<=', '!='])
-  config[op] = { precedence: 11, infix: true };
-for (const op of ['contains', 'does not contain', 'is in', 'is not in']) config[op] = { precedence: 12, infix: true };
-for (const op of ['+', '-']) config[op] = { precedence: 13, infix: true, prefix: true };
-for (const op of ['*', '/', '%']) config[op] = { precedence: 14, infix: true };
+for (const op of ['is', 'is not', '!=']) config[op] = { precedence: 9, infix: true, implicitLeft: true };
+for (const op of ['contains', 'does not contain', 'is in', 'is not in'])
+  config[op] = { precedence: 10, infix: true, implicitLeft: true };
+for (const op of ['is >', 'is <', 'is >=', 'is <=', '>', '<', '>=', '<='])
+  config[op] = { precedence: 11, infix: true, implicitLeft: true };
+for (const op of ['+', '-']) config[op] = { precedence: 12, infix: true, prefix: true, prefixPrecedence: 14 };
+for (const op of ['*', '/', '%']) config[op] = { precedence: 13, infix: true };
 
 const operators = Object.keys(config).sort((left, right) => right.length - left.length);
 const identifier = (name: string): ExpressionNode => ({ type: 'Identifier', name });
@@ -26,6 +30,8 @@ const call = (callee: ExpressionNode, args: ExpressionNode[]): ExpressionNode =>
 });
 
 function lower(node: PrattASTNode<ExpressionNode>): ExpressionNode {
+  if (node.type === 'missing')
+    throw new GnehError('KARLOWE_INFERRED_IT', 'A comparison is missing its inferred left-hand value.');
   if (node.type === 'leaf') return node.value;
   if (node.type === 'prefix') {
     if (node.operator === 'not')
@@ -215,7 +221,7 @@ export function parseKarloweExpression(
     }
     const ast = new PrattParser<ExpressionNode>({ operators: config }).parse(tokens);
     if (!ast) throw new GnehError('KARLOWE_EXPRESSION', 'Empty expression');
-    return { ast: lower(ast), source, span };
+    return { ast: lower(inferKarloweComparisons(ast)), source, span };
   } catch (error) {
     throw new GnehError(error instanceof GnehError ? error.code : 'KARLOWE_EXPRESSION', (error as Error).message, span);
   }

@@ -15,6 +15,18 @@ import {
   type ViewDeclarationIR,
 } from '@gneh/core';
 import { balanced, splitTopLevel, type Balanced } from './delimiters.js';
+import { readLegacyList, readMarkdownCodeFence, readSugarCodeBlock } from './legacy-blocks.js';
+import {
+  isProfileRule,
+  literalNodes,
+  profileBlockStart,
+  profileHeading,
+  profileMarks,
+  profileQuote,
+  readHarloweCollapse,
+  readHarloweCombinedEmphasis,
+  type MarkupProfile,
+} from './profiles.js';
 
 export interface ReadResult {
   nodes: StoryNode[];
@@ -37,10 +49,14 @@ export interface SyntaxOptions {
   special?: SpecialReader;
   /** Extra inline delimiter pairs owned by the calling dialect. */
   inlineMarks?: readonly (readonly [string, ContentKind])[];
+  /** Select the source format's built-in prose markup rather than assuming Markdown. */
+  markupProfile?: MarkupProfile;
   /** Tell paragraph collection where the calling dialect starts a block construct. */
   isBlockStart?: (line: string) => boolean;
   /** Extend a prose paragraph when an inline dialect construct spans blank lines. */
   extendParagraph?: (source: string, start: number, end: number) => number;
+  /** Preserve prose line endings as semantic breaks instead of Markdown soft breaks. */
+  hardLineBreaks?: boolean;
   maxDepth?: number;
 }
 
@@ -180,6 +196,8 @@ export class MarkupParser {
       let i = 0,
         start = 0,
         text = '';
+      const profile = this.options.markupProfile ?? 'markdown';
+      const hardLineBreaks = this.options.hardLineBreaks ?? profile !== 'markdown';
       const flush = () => {
         if (text) result.push({ type: 'text', value: text, span: this.span(base + start, base + i) });
         text = '';
@@ -187,7 +205,41 @@ export class MarkupParser {
       };
       while (i < source.length) {
         const c = source[i];
-        if (c === '\\' && i + 1 < source.length) {
+        if (hardLineBreaks && c === '\\') {
+          const continuation =
+            profile === 'sugarcube'
+              ? /^\\[^\S\r\n]*(?:\r\n|\r|\n)/.exec(source.slice(i))
+              : /^\\(?:\r\n|\r|\n)/.exec(source.slice(i));
+          if (continuation) {
+            i += continuation[0].length;
+            continue;
+          }
+        }
+        if (hardLineBreaks && (c === '\n' || c === '\r')) {
+          const width = c === '\r' && source[i + 1] === '\n' ? 2 : 1;
+          const continuation =
+            profile === 'sugarcube'
+              ? /^[^\S\r\n]*\\/.exec(source.slice(i + width))
+              : source[i + width] === '\\'
+                ? ['\\']
+                : undefined;
+          if (continuation) {
+            i += width + continuation[0].length;
+            continue;
+          }
+          flush();
+          result.push({
+            type: 'content',
+            kind: 'break',
+            attrs: {},
+            children: [],
+            span: this.span(base + i, base + i + width),
+          });
+          i += width;
+          start = i;
+          continue;
+        }
+        if (profile === 'markdown' && c === '\\' && i + 1 < source.length) {
           text += source[i + 1];
           i += 2;
           continue;
@@ -200,10 +252,38 @@ export class MarkupParser {
           start = i;
           continue;
         }
-        if (c === '`') {
-          let count = 1;
-          while (source[i + count] === '`') count++;
-          const end = source.indexOf('`'.repeat(count), i + count);
+        if (profile === 'sugarcube' && (source.startsWith('/*', i) || source.startsWith('/%', i))) {
+          flush();
+          const opener = source.slice(i, i + 2),
+            closer = opener === '/*' ? '*/' : '%/',
+            end = source.indexOf(closer, i + 2);
+          if (end < 0) this.error('COMMENT', `Unclosed ${opener} comment`, base + i);
+          i = end + 2;
+          start = i;
+          continue;
+        }
+        if (profile === 'sugarcube' && source.startsWith('"""', i)) {
+          const end = source.indexOf('"""', i + 3);
+          if (end >= 0) {
+            flush();
+            result.push(...literalNodes(source.slice(i + 3, end), base, i + 3, this));
+            i = end + 3;
+            start = i;
+            continue;
+          }
+        }
+        if (profile === 'harlowe' && c === '{') {
+          const collapsed = readHarloweCollapse(source, i, base, this);
+          if (collapsed) {
+            flush();
+            result.push(collapsed.node);
+            i = collapsed.end;
+            start = i;
+            continue;
+          }
+        }
+        if (profile === 'sugarcube' && source.startsWith('{{{', i)) {
+          const end = source.indexOf('}}}', i + 3);
           if (end >= 0) {
             flush();
             result.push({
@@ -213,18 +293,51 @@ export class MarkupParser {
               children: [
                 {
                   type: 'text',
-                  value: source.slice(i + count, end).replace(/\n/g, ' '),
-                  span: this.span(base + i + count, base + end),
+                  value: source.slice(i + 3, end),
+                  span: this.span(base + i + 3, base + end),
                 },
               ],
-              span: this.span(base + i, base + end + count),
+              span: this.span(base + i, base + end + 3),
             });
+            i = end + 3;
+            start = i;
+            continue;
+          }
+        }
+        if (c === '`') {
+          let count = 1;
+          while (source[i + count] === '`') count++;
+          const end = source.indexOf('`'.repeat(count), i + count);
+          if (end >= 0) {
+            flush();
+            if (profile === 'harlowe')
+              result.push({
+                type: 'content',
+                kind: 'span',
+                attrs: { verbatim: true },
+                children: literalNodes(source.slice(i + count, end), base, i + count, this),
+                span: this.span(base + i, base + end + count),
+              });
+            else
+              result.push({
+                type: 'content',
+                kind: 'code',
+                attrs: {},
+                children: [
+                  {
+                    type: 'text',
+                    value: source.slice(i + count, end).replace(/\r?\n/g, ' '),
+                    span: this.span(base + i + count, base + end),
+                  },
+                ],
+                span: this.span(base + i, base + end + count),
+              });
             i = end + count;
             start = i;
             continue;
           }
         }
-        if (source.startsWith('{{', i)) {
+        if (profile === 'markdown' && source.startsWith('{{', i)) {
           flush();
           const b = balanced(source, i);
           if (source[b.end - 2] !== '}') this.error('VALUE_CLOSE', 'Expected }}', base + i);
@@ -301,9 +414,16 @@ export class MarkupParser {
           start = i;
           continue;
         }
-        if (c === '$' && /^[A-Za-z_]/.test(source[i + 1] ?? '')) {
+        if (
+          (c === '$' ||
+            (profile !== 'markdown' &&
+              c === '_' &&
+              !(profile === 'sugarcube' && source[i + 1] === '_') &&
+              !/[\w$]/.test(source[i - 1] ?? ''))) &&
+          /^[A-Za-z_]/.test(source[i + 1] ?? '')
+        ) {
           flush();
-          const name = /^\$[A-Za-z_]\w*/.exec(source.slice(i))![0];
+          const name = /^[$_][A-Za-z_]\w*/.exec(source.slice(i))![0];
           result.push({
             type: 'value',
             expression: this.expr(name, base + i),
@@ -321,19 +441,22 @@ export class MarkupParser {
           start = i;
           continue;
         }
-        const marks: (readonly [string, ContentKind])[] = [
-          ...(this.options.inlineMarks ?? []),
-          ['**', 'strong'],
-          ['__', 'strong'],
-          ['~~', 'strike'],
-          ['*', 'emphasis'],
-          ['_', 'emphasis'],
-        ];
+        if (profile === 'harlowe' && source.startsWith('***', i)) {
+          const combined = readHarloweCombinedEmphasis(source, i, base, this);
+          if (combined) {
+            flush();
+            result.push(combined.node);
+            i = combined.end;
+            start = i;
+            continue;
+          }
+        }
+        const marks = [...(this.options.inlineMarks ?? []), ...profileMarks[profile]];
         let marked = false;
         for (const [mark, kind] of marks) {
           if (source.startsWith(mark, i)) {
             const end = source.indexOf(mark, i + mark.length);
-            if (end > i + mark.length) {
+            if (end >= i + mark.length) {
               flush();
               result.push({
                 type: 'content',
@@ -350,7 +473,7 @@ export class MarkupParser {
           }
         }
         if (marked) continue;
-        if (c === '[' || (c === '!' && source[i + 1] === '[')) {
+        if (profile === 'markdown' && (c === '[' || (c === '!' && source[i + 1] === '['))) {
           const image = c === '!',
             bracket = i + (image ? 1 : 0);
           let b: Balanced | undefined;
@@ -406,56 +529,42 @@ export class MarkupParser {
     return this.guard(() => {
       const result: StoryNode[] = [];
       let i = 0;
+      const profile = this.options.markupProfile ?? 'markdown';
       const lineEnd = (start: number) => {
         const end = source.indexOf('\n', start);
         return end < 0 ? source.length : end + 1;
       };
-      const isStart = (line: string) =>
-        /^\s*$|^ {0,3}(?:#{1,6}\s|>\s?|[-*+]\s|\d+\.\s|`{3,}|~{3,}|:::) /.test(line) ||
-        !!this.options.isBlockStart?.(line);
+      const isStart = (line: string) => {
+        if (this.options.isBlockStart?.(line)) return true;
+        return profileBlockStart(line, profile);
+      };
       while (i < source.length) {
         let end = lineEnd(i);
         const line = source.slice(i, end).replace(/\r?\n$/, '');
         if (!line.trim()) {
+          if (profile !== 'markdown') result.push(...this.inline(source.slice(i, end), base + i));
           i = end;
           continue;
         }
         const leading = line.length - line.trimStart().length;
         const start = i + leading;
-        const fence = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-        if (fence) {
-          const marker = fence[1],
-            bodyStart = end;
-          let cursor = end,
-            found = false;
-          while (cursor < source.length) {
-            const e = lineEnd(cursor);
-            const l = source.slice(cursor, e).trim();
-            if (l[0] === marker[0] && l.length >= marker.length && [...l].every((c) => c === marker[0])) {
-              end = e;
-              found = true;
-              break;
-            }
-            cursor = e;
+        if (profile === 'markdown') {
+          const fence = readMarkdownCodeFence(source, i, base, lineEnd, this);
+          if (fence) {
+            result.push(fence.node);
+            i = fence.end;
+            continue;
           }
-          if (!found) this.error('CODE_FENCE', 'Unclosed code fence.', base + i);
-          result.push({
-            type: 'content',
-            kind: 'code-block',
-            attrs: { language: fence[2].trim() },
-            children: [
-              {
-                type: 'text',
-                value: source.slice(bodyStart, cursor).replace(/\r?\n$/, ''),
-                span: this.span(base + bodyStart, base + cursor),
-              },
-            ],
-            span: this.span(base + i, base + end),
-          });
-          i = end;
-          continue;
         }
-        if (line.trimStart().startsWith(':::')) {
+        if (profile === 'sugarcube') {
+          const code = readSugarCodeBlock(source, i, base, lineEnd, this);
+          if (code) {
+            result.push(code.node);
+            i = code.end;
+            continue;
+          }
+        }
+        if (profile === 'markdown' && line.trimStart().startsWith(':::')) {
           const rest = line.trim().slice(3).trim();
           if (!rest) this.error('CONTAINER_CLOSE', 'Unexpected container terminator.', base + i);
           let name = 'box',
@@ -508,23 +617,29 @@ export class MarkupParser {
             i = special.end;
           } else {
             const tailEnd = lineEnd(special.end);
-            const tail = source.slice(special.end, tailEnd).replace(/\r?\n$/, '');
-            result.push({
-              type: 'content',
-              kind: 'paragraph',
-              attrs: {},
-              children: [...special.nodes, ...this.inline(tail, base + special.end)],
-              span: this.span(base + start, base + tailEnd),
-            });
+            const tail =
+              profile === 'markdown'
+                ? source.slice(special.end, tailEnd).replace(/\r?\n$/, '')
+                : source.slice(special.end, tailEnd);
+            const children = [...special.nodes, ...this.inline(tail, base + special.end)];
+            if (profile === 'markdown')
+              result.push({
+                type: 'content',
+                kind: 'paragraph',
+                attrs: {},
+                children,
+                span: this.span(base + start, base + tailEnd),
+              });
+            else result.push(...children);
             i = tailEnd;
           }
           continue;
         }
-        const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+        const heading = profileHeading(line, profile);
         if (heading) {
           let content = heading[2],
             attrs: Metadata = { level: heading[1].length };
-          const attr = /\s+(\{[.#][^}]*\})$/.exec(content);
+          const attr = profile === 'markdown' ? /\s+(\{[.#][^}]*\})$/.exec(content) : undefined;
           if (attr) {
             attrs = {
               ...attrs,
@@ -542,7 +657,7 @@ export class MarkupParser {
           i = end;
           continue;
         }
-        if (/^ {0,3}(?:---+|\*\*\*+|___+)\s*$/.test(line)) {
+        if (isProfileRule(line, profile)) {
           result.push({
             type: 'content',
             kind: 'rule',
@@ -553,7 +668,7 @@ export class MarkupParser {
           i = end;
           continue;
         }
-        const list = /^ {0,3}([-*+]|\d+\.)\s+(.*)$/.exec(line);
+        const list = profile === 'markdown' ? /^ {0,3}([-*+]|\d+\.)\s+(.*)$/.exec(line) : undefined;
         if (list) {
           const children: StoryNode[] = [];
           const ordered = /\d/.test(list[1]);
@@ -582,13 +697,22 @@ export class MarkupParser {
           i = cursor;
           continue;
         }
-        const quote = /^ {0,3}>\s?(.*)$/.exec(line);
+        const legacy = readLegacyList(source, i, base, profile, lineEnd, this);
+        if (legacy) {
+          result.push(...legacy.nodes);
+          i = legacy.end;
+          continue;
+        }
+        const quote = profileQuote(line, profile);
         if (quote) {
           result.push({
             type: 'content',
             kind: 'quote',
-            attrs: {},
-            children: this.inline(quote[1], base + i + line.indexOf(quote[1])),
+            attrs: profile === 'sugarcube' ? { depth: quote[1].length } : {},
+            children: this.inline(
+              quote[profile === 'sugarcube' ? 2 : 1],
+              base + i + line.indexOf(quote[profile === 'sugarcube' ? 2 : 1]),
+            ),
             span: this.span(base + i, base + end),
           });
           i = end;
@@ -599,18 +723,20 @@ export class MarkupParser {
         while (cursor < source.length) {
           const e = lineEnd(cursor),
             next = source.slice(cursor, e);
-          if (isStart(next) || /^ {0,3}(?:#{1,6}\s|>\s?|[-*+]\s|\d+\.\s|`{3,}|~{3,}|:::)/.test(next)) break;
+          if (isStart(next)) break;
           cursor = e;
         }
         cursor = this.options.extendParagraph?.(source, i, cursor) ?? cursor;
-        const text = source.slice(i, cursor).replace(/\r?\n$/, '');
-        result.push({
-          type: 'content',
-          kind: 'paragraph',
-          attrs: {},
-          children: this.inline(text, base + i),
-          span: this.span(base + i, base + cursor),
-        });
+        const text = profile === 'markdown' ? source.slice(i, cursor).replace(/\r?\n$/, '') : source.slice(i, cursor);
+        if (profile === 'markdown')
+          result.push({
+            type: 'content',
+            kind: 'paragraph',
+            attrs: {},
+            children: this.inline(text, base + i),
+            span: this.span(base + i, base + cursor),
+          });
+        else result.push(...this.inline(text, base + i));
         i = cursor;
       }
       return result;

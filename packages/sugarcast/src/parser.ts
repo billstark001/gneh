@@ -681,6 +681,7 @@ export function parseSugarcast(
         file,
         expression: expr,
         special: createSugarcastMacroReader(lowerings, widgetContainers),
+        markupProfile: 'sugarcube',
         isBlockStart: (line) => {
           const match = /^\s*<<\s*(\/?[A-Za-z][\w-]*|=)/.exec(line);
           return !!match;

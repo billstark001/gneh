@@ -709,10 +709,7 @@ export function parseKarlowe(source: string, file = 'story.karlowe', options: Ka
           file,
           expression: parseKarloweExpression,
           special: createKarloweMacroReader(lowerings),
-          inlineMarks: [
-            ["''", 'strong'],
-            ['//', 'emphasis'],
-          ],
+          markupProfile: 'harlowe',
           isBlockStart: (line) => {
             const match = /^\s*\(([\w-]+)\s*:/.exec(line);
             return !!match;

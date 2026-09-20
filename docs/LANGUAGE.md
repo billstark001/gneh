@@ -151,6 +151,8 @@ Render expressions are evaluated with writes denied. Enter/action expressions co
 
 Supported constructs include `set`/`put`, `print`, `if`/`else-if`/`else`, `display`, `link-goto`, reveal and repeat links, a basic `for`, `goto`, dropdown/checkbox bindings, mapped boolean/numeric/collection operations, `array`/`datamap`, `either`/`random`, possessive access and method calls. `/` and `%` are independent operators in the new Karlowe lexer.
 
+Karlowe prose follows Harlowe's own markup profile rather than the Inkdown/Markdown profile. Newlines become semantic line breaks; adjacent backslashes join lines; `#` headings, `*`/`0.` nested lists, horizontal rules, collapsing whitespace, grave-delimited verbatim text, and Harlowe's bold/italic/emphasis/strong/strike/superscript marks retain their source meanings. Harlowe's equal-precedence `and`/`or`, documented comparison precedence, inferred comparisons, and inferred `it` within simple logical chains are lowered before reaching the shared expression runtime.
+
 Karlowe materializes a mounted passage in source order. Thus `(set:$x to 1)(print:$x)(set:$x to 2)(print:$x)` renders `12`; later unrelated state changes do not retroactively rewrite that materialized text. Reveal/repeat link bodies materialize when activated.
 
 Anonymous hooks are structural containers. `|name>[...]` and `[...]<name|` create instance-local semantic regions; `replace`, `append`, and `prepend` can target a `?name` reference. Presentation-only changer composition supports color, font, text-style, size, border and corner radius through renderer-neutral extension data. `?sidebar` is a host portal rather than a global DOM selector.
@@ -174,6 +176,8 @@ Anonymous hooks are structural containers. `|name>[...]` and `[...]<name|` creat
 ```
 
 Supported constructs include `set`/`run`, `print`, `if`/`elseif`/`else`, `include`, `button`/`link`, a basic `for-of`, basic checkbox binding, SugarCube wiki-link headers, and parser-level aliases such as `is`/`isnot`/`and`/`or`/`not`. Link and button bodies are effect-only; their portable subset includes nested conditional and `for-of` control flow. Alias words inside strings are not rewritten.
+
+Sugarcast prose likewise selects SugarCube markup rules: `!` headings, `*`/`#` nested lists, four-hyphen rules, blockquotes, triple-brace code, triple-quote verbatim text, the six documented inline style pairs, C/TiddlyWiki/HTML comments, hard line breaks, and SugarCube's whitespace-tolerant line continuations. These are represented as renderer-neutral content nodes; executable HTML and browser-owned wiki features remain outside the portable profile.
 
 Sugarcast also materializes in source order. Writes are explicit IR effect nodes, not hoisted entry code, so output before and after a write observes the corresponding state.
 

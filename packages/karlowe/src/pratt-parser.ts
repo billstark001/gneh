@@ -19,6 +19,9 @@ export type PrattToken<T> =
 
 export type PrattASTNode<T> =
   | {
+      type: 'missing';
+    }
+  | {
       type: 'leaf';
       value: T;
     }
@@ -41,8 +44,11 @@ export type PrattASTNode<T> =
 
 export interface OperatorConfig {
   precedence: number;
+  prefixPrecedence?: number;
   associativity?: 'left' | 'right';
   prefix?: boolean;
+  /** Accept this infix operator without a left operand for Harlowe's inferred `it`. */
+  implicitLeft?: boolean;
   postfix?: boolean;
   infix?: boolean;
 }
@@ -109,9 +115,20 @@ export class PrattParser<T> {
     if (!token) throw new PrattParseError('Unexpected end of input');
     if (token.type === 'expr') return { type: 'leaf', value: token.value };
     const config = this.operators.get(token.value);
+    if (config?.implicitLeft)
+      return {
+        type: 'binary',
+        operator: token.value,
+        left: { type: 'missing' },
+        right: this.parseExpression(config.precedence + 1),
+      };
     if (!config || !config.prefix)
       throw new PrattParseError(`Unexpected operator '${token.value}' at prefix position`, token);
-    return { type: 'prefix', operator: token.value, operand: this.parseExpression(config.precedence) };
+    return {
+      type: 'prefix',
+      operator: token.value,
+      operand: this.parseExpression(config.prefixPrecedence ?? config.precedence),
+    };
   }
   private peek(): PrattToken<T> | undefined {
     return this.tokens[this.position];
