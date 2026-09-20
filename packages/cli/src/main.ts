@@ -221,8 +221,12 @@ export function createProgram(): Command {
     .option('--preserve-container', 'preserve the lossless Twine container below .gneh/import')
     .action(
       (html: string, options: { output?: string; dialect?: string; report?: string; preserveContainer?: boolean }) => {
-        const output = importTwineFile(html, options);
-        console.log(`Imported editable Twine source → ${output}`);
+        const result = importTwineFile(html, options);
+        console.log(
+          `Imported editable Twine source → ${result.directory}\n${result.summary.portable} portable, ${result.summary.unsupported} unsupported, ${result.summary.warnings} warnings, ${result.containerErrors} container errors.`,
+        );
+        if ((result.summary.unsupported || result.summary.warnings || result.containerErrors) && !options.report)
+          console.warn('Run again with --report <path> for detailed diagnostics.');
       },
     );
 

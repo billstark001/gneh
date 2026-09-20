@@ -35,7 +35,7 @@ function collisions(story: TwineStoryData): Diagnostic[] {
           {
             code: 'IMPORT_TWEE_COLLISION',
             severity: 'error' as const,
-            message: `${passage.name} contains a line that looks like a Twee passage header. The structured JSON retains the exact source, but the combined Twee file requires manual disambiguation.`,
+            message: `${passage.name} contains a line that looks like a Twee passage header. The combined authoring file requires manual disambiguation; use extract or --preserve-container when an exact record is required.`,
             span: {
               file: passage.name,
               start: match.index,
@@ -144,7 +144,13 @@ export interface ImportTwineOptions {
   preserveContainer?: boolean;
 }
 
-export function importTwineFile(input: string, options: ImportTwineOptions = {}): string {
+export interface ImportTwineResult {
+  directory: string;
+  summary: { portable: number; unsupported: number; warnings: number };
+  containerErrors: number;
+}
+
+export function importTwineFile(input: string, options: ImportTwineOptions = {}): ImportTwineResult {
   const file = path.resolve(input);
   const html = fs.readFileSync(file, 'utf8');
   const story = parseTwineHTML(html);
@@ -201,5 +207,9 @@ export function importTwineFile(input: string, options: ImportTwineOptions = {})
         2,
       ) + '\n',
     );
-  return directory;
+  return {
+    directory,
+    summary: checked.summary,
+    containerErrors: containerDiagnostics.filter((diagnostic) => diagnostic.severity === 'error').length,
+  };
 }
