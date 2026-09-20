@@ -104,9 +104,9 @@ The statement that `.inkdown` and `.mjs` are equivalent means that they meet at 
 
 A multi-passage source file has one generated ESM scope. Declarative `@import` records become static ESM imports and enter each passage through a binding table with live getters. `@export` may expose an imported binding from the generated module. Local entries in `fragments` share that table, and a local passage or `@view` named `Card` resolves before an external fragment registry entry.
 
-Vite assigns stable module-scoped IDs such as `path/chapter.inkdown#Card`. Renaming the file changes that ID; version 0.1 does not migrate saved routes automatically. Applications that require long-term save compatibility should own a route/state migration policy.
+Generated modules preserve authored Fragment IDs. Because application code explicitly combines story modules, those IDs are project-global at the composition boundary and `Story` rejects collisions instead of silently namespacing or overwriting them. Applications that rename IDs or require long-term save compatibility should own a route/state migration policy.
 
-CLI compilation does not have an application module graph and therefore requires globally unique passage IDs. Vite modules allow the same local passage name in separate files. This is an explicit distinction between project analysis and application bundling, not accidental behavior.
+CLI project compilation requires globally unique passage IDs. Individual ESM modules may each compile the same authored ID, but an application cannot register both Fragments in one `Story` without choosing explicit distinct IDs; Vite does not invent a namespace for them. Compiler callers that intentionally need private module scopes can request a namespace directly when generating a module.
 
 ## Effects, transactions, and rendering
 
@@ -155,7 +155,7 @@ Navigation chrome, history controls, persistence and Wiki/story-flow/visual-nove
 
 ## Vite coexistence boundary
 
-Registered native story extensions are unambiguous and compile when explicitly imported. `.md`, `.twee` and `.tw` may belong to documentation systems or other plugins, so gneh only handles them with an explicit `?gneh` query. The plugin does not inject global CSS, mount an application, scan source directories, aggregate story files behind a virtual alias, or force full-page reloads. Application entry code explicitly imports and composes every story module and any project-scoped JavaScript or JSON. See [decision 0001](decisions/0001-explicit-story-imports.md).
+Registered native story extensions are unambiguous and compile when explicitly imported. `.md`, `.twee` and `.tw` may belong to documentation systems or other plugins, so gneh only handles them with an explicit `?gneh` query; a value such as `?gneh=karlowe` selects a registered frontend. Asset queries including `?raw` and `?url` remain Vite-owned. The plugin does not inject global CSS, mount an application, scan source directories, aggregate story files behind a virtual alias, or force full-page reloads. Application entry code explicitly imports and composes every story module and any project-scoped JavaScript or JSON. See [decision 0001](decisions/0001-explicit-story-imports.md).
 
 ## Import and inspection boundaries
 

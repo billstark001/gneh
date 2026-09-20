@@ -24,6 +24,8 @@ export interface SourceInput {
 
 export interface DialectFrontend {
   dialect: Dialect;
+  /** Unambiguous native file extensions owned by this frontend, without a leading dot. */
+  extensions: readonly string[];
   parse(source: string, file: string): ParseResult;
 }
 

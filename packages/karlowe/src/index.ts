@@ -25,6 +25,7 @@ import { parseKarlowe, type KarloweLowerings } from './parser.js';
 export function karlowe(lowerings?: KarloweLowerings) {
   return {
     dialect: 'karlowe' as const,
+    extensions: ['karlowe'],
     parse: (source: string, file: string) => parseKarlowe(source, file, { lowerings }),
   };
 }

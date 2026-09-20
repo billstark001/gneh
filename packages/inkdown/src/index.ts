@@ -48,6 +48,7 @@ export function parseInkdown(source: string, file = 'story.inkdown', options: In
 export function inkdown(lowerings?: InkdownLowerings) {
   return {
     dialect: 'inkdown' as const,
+    extensions: ['inkdown'],
     parse: (source: string, file: string) => parseInkdown(source, file, { lowerings }),
   };
 }
