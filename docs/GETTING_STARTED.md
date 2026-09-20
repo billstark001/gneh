@@ -4,7 +4,7 @@
 
 ```sh
 npm create @gneh@latest my-story
-# Add `-- --template preact` or `-- --template vue` for a framework mount.
+# Add `-- --template react`, `preact`, or `vue` for a framework-native application.
 cd my-story
 npm install
 npm run dev
@@ -24,7 +24,7 @@ my-story/
     story/main.inkdown
 ```
 
-`ui.ts` and `style.css` are deliberately application code. Vanilla, Preact, and Vue projects are derived from this same template rather than maintained as three copies. The initial template can switch between Wiki, story-flow and visual-novel presentations, but these are not runtime policies. Delete or replace them when integrating React, Vue, Svelte, Three.js, a design system, or an existing site.
+`ui.ts` and `style.css` are deliberately application code in the vanilla starter. React, Preact, and Vue instead receive native components and lifecycle code; React and Preact are distinct targets and Preact does not use `preact/compat`. Presentation choices are not runtime policies, so the generated UI can be replaced freely.
 
 ## Vite integration
 
@@ -33,9 +33,10 @@ The starter config enables direct story-module compilation:
 ```ts
 import { defineConfig } from 'vite';
 import { gneh } from '@gneh/vite';
+import { inkdown } from '@gneh/inkdown';
 
 export default defineConfig({
-  plugins: [gneh()],
+  plugins: [gneh({ dialects: [inkdown()] })],
 });
 ```
 
@@ -46,9 +47,9 @@ import Start, { fragments, metadata } from './story/main.inkdown';
 const Card = fragments.Card;
 ```
 
-Vite writes an adjacent `main.d.inkdown.ts` (or corresponding Karlowe/Sugarcast name) with concrete passage and prop types. Keep `allowArbitraryExtensions` enabled and include `@gneh/vite/client` in `compilerOptions.types`. `import-twine` writes the same declaration immediately for imported stories. Compose multiple source modules explicitly or with Vite's standard `import.meta.glob`.
+Vite never writes generated files beside story sources. Include the selected frontend declaration, such as `@gneh/inkdown/client`, in `compilerOptions.types` for conservative module types; use the gneh language server for concrete authoring diagnostics and projections. Compose multiple source modules with explicit imports in application code.
 
-`.inkdown`, `.karlowe`, and `.sugarcast` are compiled automatically. Generic `.md`, `.twee`, and `.tw` files require `?gneh`; without it they remain available to other Vite plugins or `?raw` imports.
+Only explicitly registered native dialect extensions are compiled. Generic `.md`, `.twee`, and `.tw` files require `?gneh`; without it they remain available to other Vite plugins or `?raw` imports.
 
 ## Mounting and frameworks
 

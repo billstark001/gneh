@@ -54,8 +54,8 @@ core
 └── runtime
     └── renderer-dom
 
-source + expression + syntax + dialects
-└── compiler
+source + expression + syntax
+└── compiler (dialect-neutral; frontends are registered by callers)
     ├── vite
     ├── language-service ─> lsp
     ├── vendor
@@ -71,7 +71,7 @@ The diagram omits some direct imports, but its ownership rules are strict:
 - `syntax` is dialect-neutral infrastructure. `MarkupParser` receives both an expression parser and an optional special-syntax reader from its caller. Its caller-owned `MacroLoweringRegistry` dispatches dialect tokens without global state or a dependency from core to authoring syntax.
 - Inkdown owns structural `@if`/`@each`, effect `@action`/`@effect`, reusable `@view`, and declarative `@import`/`@export` directives. It has no embedded JavaScript module or script block.
 - Karlowe and Sugarcast own their compatibility syntax and do not recognize Inkdown directives. Shared tools do not imply a shared surface language.
-- All dialects lower to the same IR and never own a separate runtime.
+- All dialects lower to the same IR and never own a separate runtime. None is enabled implicitly, including Inkdown.
 - The compiler has no CLI I/O; the CLI composes compiler and filesystem concerns.
 - Vite owns frontend serving, asset graphs and production builds. The CLI does not maintain a parallel web server or HTML bundler.
 - The runtime knows the renderer protocol but not the DOM renderer.
@@ -155,7 +155,7 @@ Navigation chrome, history controls, persistence and Wiki/story-flow/visual-nove
 
 ## Vite coexistence boundary
 
-Native story extensions are unambiguous and compile automatically. `.md`, `.twee` and `.tw` may belong to documentation systems or other plugins, so gneh only handles them with an explicit `?gneh` query. The plugin does not inject global CSS, mount an application, aggregate story files behind a virtual alias, or force full-page reloads. Native story files are ordinary ESM modules; applications compose multiple modules explicitly or with Vite's standard `import.meta.glob`.
+Registered native story extensions are unambiguous and compile when explicitly imported. `.md`, `.twee` and `.tw` may belong to documentation systems or other plugins, so gneh only handles them with an explicit `?gneh` query. The plugin does not inject global CSS, mount an application, scan source directories, aggregate story files behind a virtual alias, or force full-page reloads. Application entry code explicitly imports and composes every story module and any project-scoped JavaScript or JSON. See [decision 0001](decisions/0001-explicit-story-imports.md).
 
 ## Import and inspection boundaries
 

@@ -10,15 +10,15 @@ A `MacroLoweringRegistry` is build-time configuration. It maps a dialect CST nod
 
 ## CST-to-IR lowerings
 
-Every frontend owns its concrete syntax and built-in lowerings. Registries are caller-owned, have no process-global state, and may be passed through `compileSource`, `compileProject`, `parseSource`, the dialect parsers, vendor helpers, or the Vite plugin.
+Every frontend owns its concrete syntax and built-in lowerings. Registries are caller-owned, have no process-global state, and are captured by the explicit frontend registration passed to the compiler, vendor helpers, or Vite plugin.
 
 ```ts
-import { createInkdownLowerings } from '@gneh/inkdown';
+import { createInkdownLowerings, inkdown } from '@gneh/inkdown';
 import { gneh } from '@gneh/vite';
 
-const inkdown = createInkdownLowerings();
+const lowerings = createInkdownLowerings();
 
-inkdown.register('build-name', ({ node, parser, base }) => ({
+lowerings.register('build-name', ({ node, parser, base }) => ({
   nodes: [
     {
       type: 'text',
@@ -30,7 +30,7 @@ inkdown.register('build-name', ({ node, parser, base }) => ({
 }));
 
 export default {
-  plugins: [gneh({ lowerings: { inkdown } })],
+  plugins: [gneh({ dialects: [inkdown(lowerings)] })],
 };
 ```
 
@@ -44,6 +44,7 @@ An application must declare every generic invocation to the compiler and install
 
 ```ts
 const result = compileProject(sources, {
+  dialects: [sugarcast()],
   runtimeExtensionIds: ['sugarcast/badge'],
 });
 

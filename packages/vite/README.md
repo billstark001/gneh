@@ -1,16 +1,28 @@
 # @gneh/vite
 
-Vite integration for typed narrative ESM modules.
+Vite transforms for explicitly imported narrative modules.
 
-Native `.inkdown`, `.karlowe`, and `.sugarcast` files compile automatically. Import ambiguous `.md`, `.twee`, or `.tw` sources with `?gneh`; the plugin deliberately leaves ordinary Markdown and framework files to other plugins.
+No dialect is enabled implicitly. Register each authoring frontend in `vite.config.ts`:
 
 ```ts
-import Start, { fragments, metadata } from './story/main.inkdown';
-const Card = fragments.Card;
+import { defineConfig } from 'vite';
+import { gneh } from '@gneh/vite';
+import { inkdown } from '@gneh/inkdown';
+
+export default defineConfig({ plugins: [gneh({ dialects: [inkdown()] })] });
 ```
 
-Direct transforms emit adjacent arbitrary-extension declarations such as `main.d.inkdown.ts`, so TypeScript can infer concrete passage props. Enable `allowArbitraryExtensions` and add `@gneh/vite/client` to `compilerOptions.types`.
+Application code owns the project graph and imports every story module it ships:
 
-Compose several story modules explicitly or with Vite's standard `import.meta.glob`. The plugin does not mount UI, inject CSS, replace Vite's server/build commands, add virtual import aliases, or force full reloads.
+```ts
+import start, { fragments as main } from './story/main.inkdown';
+import { fragments as appendix } from './story/appendix.inkdown';
 
-See the workspace README and `docs/CLI.md` for examples.
+const fragments = { ...main, ...appendix };
+```
+
+Native extensions are claimed only for registered dialects. Ambiguous `.md`, `.twee`, and `.tw` imports require `?gneh` and use source metadata or the registered Inkdown fallback.
+
+The plugin does not scan story directories, expose a virtual project alias, mount UI, inject CSS, import project helpers, or write generated files beside sources. Each frontend owns its conservative module declaration, such as `@gneh/inkdown/client`; the gneh language server supplies authoring diagnostics and projections.
+
+See [the explicit-import decision](../../docs/decisions/0001-explicit-story-imports.md).

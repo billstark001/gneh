@@ -20,7 +20,7 @@ node standalone/gneh.mjs <command> ...
 | `migrate <file\|dir> [-o file.inkdown]` | Rewrite the supported portable profile to Inkdown and emit a report |
 | `fmt <file> [-o file.twee]` | Canonicalize Twee headers and metadata without reformatting prose |
 | `extract <story.html> [-o dir]` | Extract structured Twine data and decoded Twee without executing the HTML |
-| `import-twine <story.html> [-o dir] [--dialect d]` | Create a gneh source project plus a per-passage compatibility and fidelity report |
+| `import-twine <story.html> [-o dir] [--dialect d] [--report file] [--preserve-container]` | Create editable gneh source; optionally emit audit artifacts |
 | `inspect <file\|dir> [--level <level>]` | Emit versioned public parser/compiler records, optionally filtered with `--passage` |
 | `lsp` | Start the workspace LSP on standard I/O; not included in standalone |
 
@@ -34,7 +34,7 @@ The former CLI `init`, `dev`, and HTML `build` commands were intentionally remov
 
 ## Configuration and discovery
 
-CLI project discovery reads `gneh.config.json`. It may define `entry`, `sources`, `state`, `stateTypes`, `dialect`, and `live`. `sources` contains relative files or directories, not glob expressions. Discovery is recursive and ignores hidden, dependency, build, standalone, and verification directories.
+CLI project discovery may read `gneh.config.json`. It may define `entry`, `sources`, `state`, `stateTypes`, `dialect`, and `live`. This file is CLI/LSP input only: the importer does not create it and Vite does not discover or execute it. Applications put project-scoped code and data in their explicit JavaScript/TypeScript entry, which may import JSON normally. `sources` contains relative files or directories, not glob expressions. Discovery is recursive and ignores hidden, dependency, build, standalone, and verification directories.
 
 Recognized source extensions are `.inkdown`, `.karlowe`, `.sugarcast`, `.md`, `.twee`, and `.tw`. Neutral extensions default to Inkdown unless config or metadata selects a dialect. In Vite, the neutral extensions instead require an explicit `?gneh` query so the plugin can coexist with ordinary Markdown tooling.
 
@@ -47,7 +47,7 @@ import Start, { fragments } from './story/chapter.karlowe';
 const Card = fragments.Card;
 ```
 
-The plugin emits `chapter.d.karlowe.ts` beside the source with concrete Fragment exports and prop types. TypeScript projects should enable `allowArbitraryExtensions` and include `@gneh/vite/client`; the latter supplies a fallback while the exact declaration is first being generated.
+The plugin does not emit declarations beside sources. TypeScript projects include the client declaration for each selected frontend, such as `@gneh/karlowe/client`; these are conservative module types, while the language server provides concrete passage diagnostics.
 
 Ambiguous source extensions require an explicit opt-in:
 
@@ -72,14 +72,15 @@ The plugin does not install a full-page reload hook. Normal Vite module propagat
 gneh extract compiled-story.html -o extracted-story
 ```
 
-`import-twine` additionally maps Harlowe to Karlowe or SugarCube to Sugarcast, creates `gneh.config.json`, chooses the entry through Twine's `startnode`, and writes an adjacent TypeScript declaration plus `import-report.json` with per-passage diagnostics:
+`import-twine` maps Harlowe to Karlowe or SugarCube to Sugarcast and writes one editable story source. The Twine entry and title are placed in source front matter; it does not generate project configuration, declarations, or reports by default:
 
 ```sh
 gneh import-twine compiled-story.html -o imported-story
 gneh import-twine unknown-format.html -o imported-story --dialect inkdown
+gneh import-twine compiled-story.html -o imported-story --report compatibility.json --preserve-container
 ```
 
-Neither command executes the HTML or claims engine equivalence. Output directories must be empty. A passage containing a line that itself looks like a Twee header is retained exactly in `twine-story.json` and reported as `IMPORT_TWEE_COLLISION` rather than silently escaped. Embedded styles and scripts are written as separate files; they are never automatically imported or executed.
+Neither command executes the HTML or claims engine equivalence. Output directories must be empty. `--report` writes detailed diagnostics, while `--preserve-container` stores the lossless record below `.gneh/import/`. Embedded non-empty styles and scripts are written as separate files; they are never automatically imported or executed.
 
 ## Inspection
 

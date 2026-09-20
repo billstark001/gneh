@@ -16,15 +16,15 @@ Node.js 22.16 or newer is required. New applications use the standard npm initia
 
 ```sh
 npm create @gneh@latest my-story
-# Framework wrappers are derived from the same editable template:
-npm create @gneh@latest my-story -- --template preact
-# or: --template vue
+# Framework-native starters are separate:
+npm create @gneh@latest my-story -- --template react
+# or: --template preact | vue
 cd my-story
 npm install
 npm run dev
 ```
 
-The generated Wiki/story-flow/visual-novel interface is application source, not a runtime-owned shell. The vanilla, Preact, and Vue starters share that one interface implementation; the framework variants only derive their mounting entry from it. Edit it freely or replace it with another renderer.
+The generated interface is application source, not a runtime-owned shell. Vanilla, React, Preact, and Vue receive separate native implementations. React and Preact do not alias one another and the Preact starter does not use `preact/compat`.
 
 The CLI remains focused on story-domain tooling and can also be used from the generated standalone distribution:
 
@@ -92,7 +92,7 @@ paramTypes:
 The room beyond the door is quiet.
 ```
 
-`$hp` in prose is syntax sugar for `{{ $hp }}`. Complex access stays explicit: `{{ $player.stats.hp }}`. Global state is declared in `gneh.config.json`.
+`$hp` in prose is syntax sugar for `{{ $hp }}`. Complex access stays explicit: `{{ $player.stats.hp }}`. Initial state is ordinary application data passed to `Story`; reusable source defaults may also live in story metadata.
 
 Metadata precedence is file front matter, then Twee header JSON, then passage front matter. Objects merge recursively, arrays replace earlier arrays, and only `tags` uses a stable union.
 
@@ -133,7 +133,7 @@ A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScr
 | `@gneh/inkdown` | Inkdown directives and frontend assembly |
 | `@gneh/karlowe` | Harlowe-like syntax and expression lowering |
 | `@gneh/sugarcast` | SugarCube-like macro syntax and expression lowering |
-| `@gneh/compiler` | Project validation, graphing, ESM/declarations/maps, and migration output |
+| `@gneh/compiler` | Dialect-neutral project validation, graphing, ESM/declarations/maps, and migration output |
 | `@gneh/runtime` | Fragment instances, transactions, navigation, history, regions, and saves |
 | `@gneh/renderer-dom` | Keyed DOM reconciliation and an optional minimal Story-to-DOM adapter |
 | `@gneh/vendor` | Source/IR browser loading and optional dynamic wikification |
