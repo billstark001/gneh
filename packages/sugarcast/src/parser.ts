@@ -14,6 +14,7 @@ import {
 } from '@gneh/syntax';
 import { firstString, sugarExpression as expr, wikiLink } from './arguments.js';
 import { actionBody } from './actions.js';
+import { sugarcastMarkup } from './markup.js';
 import { discoverWidgets, referencedWidgets, widgetHeader } from './widgets.js';
 
 export interface SugarcastMacroToken {
@@ -680,8 +681,8 @@ export function parseSugarcast(
       const parser = new MarkupParser({
         file,
         expression: expr,
+        markup: sugarcastMarkup,
         special: createSugarcastMacroReader(lowerings, widgetContainers),
-        markupProfile: 'sugarcube',
         isBlockStart: (line) => {
           const match = /^\s*<<\s*(\/?[A-Za-z][\w-]*|=)/.exec(line);
           return !!match;

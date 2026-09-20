@@ -1,8 +1,9 @@
 import { GnehError, type EffectNode, type Expression, type Span } from '@gneh/core';
 import { parseExpression, type ExpressionNode } from '@gneh/expression';
-import { balanced, harloweMacroName, splitTopLevel } from '@gneh/syntax';
+import { balanced, splitTopLevel } from '@gneh/syntax';
 import { PrattParser, type OperatorConfig, type PrattToken, type PrattASTNode } from './pratt-parser.js';
 import { inferKarloweComparisons } from './inference.js';
+import { harloweMacroName } from './names.js';
 
 const config: Record<string, OperatorConfig> = {
   or: { precedence: 8, infix: true },
@@ -125,7 +126,7 @@ export function parseKarloweExpression(
       const start = index;
       let atom: ExpressionNode;
       if (source[index] === '(') {
-        const group = balanced(source, index, 'karlowe');
+        const group = balanced(source, index, { apostropheProperty: true });
         const macro = /^\s*([\w-]+)\s*:\s*/.exec(group.content);
         if (macro) {
           const name = harloweMacroName(macro[1]);
@@ -208,7 +209,7 @@ export function parseKarloweExpression(
           callable = true;
         } else if (callable && /^\s*\(/.test(tail)) {
           const whitespace = /^\s*/.exec(tail)?.[0].length ?? 0;
-          const group = balanced(source, index + whitespace, 'karlowe');
+          const group = balanced(source, index + whitespace, { apostropheProperty: true });
           const args = group.content.trim()
             ? splitTopLevel(group.content).map((part) => recurse(part, group.start + group.content.indexOf(part)))
             : [];

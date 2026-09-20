@@ -6,14 +6,31 @@ export interface Balanced {
   end: number;
 }
 
+export type DelimiterSkipper = (source: string, index: number) => number | undefined;
+
+export interface BalancedOptions {
+  mode?: 'js' | 'markup';
+  /** Treat possessive apostrophes as operators instead of string openers. */
+  apostropheProperty?: boolean;
+  /** Let a caller skip a dialect-owned nested construct atomically. */
+  skip?: DelimiterSkipper;
+}
+
 /** Delimiters are scanned with quotes, comments, escapes and fenced code awareness. */
-export function balanced(source: string, index: number, mode: 'js' | 'markup' | 'karlowe' = 'js'): Balanced {
+export function balanced(source: string, index: number, options: 'js' | 'markup' | BalancedOptions = 'js'): Balanced {
+  const config = typeof options === 'string' ? { mode: options } : options;
+  const mode = config.mode ?? 'js';
   const open = source[index],
     close: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
   if (!close[open]) throw new GnehError('DELIMITER', 'Expected an opening delimiter.');
   const stack = [close[open]];
   let i = index + 1;
   while (i < source.length) {
+    const skipped = config.skip?.(source, i);
+    if (skipped !== undefined && skipped > i) {
+      i = skipped;
+      continue;
+    }
     const c = source[i];
     if (c === '\\') {
       i += 2;
@@ -21,7 +38,7 @@ export function balanced(source: string, index: number, mode: 'js' | 'markup' | 
     }
     if (
       mode !== 'markup' &&
-      !(mode === 'karlowe' && c === "'" && source.slice(i, i + 2) === "'s" && /\s/.test(source[i + 2] ?? '')) &&
+      !(config.apostropheProperty && c === "'" && source.slice(i, i + 2) === "'s" && /\s/.test(source[i + 2] ?? '')) &&
       (c === '"' || c === "'" || c === '`')
     ) {
       const q = c;
@@ -62,35 +79,6 @@ export function balanced(source: string, index: number, mode: 'js' | 'markup' | 
       const b = balanced(source, i, 'js');
       i = b.end;
       continue;
-    }
-    if (mode === 'markup' && c === '(' && /^\([A-Za-z][\w-]*:/.test(source.slice(i))) {
-      i = balanced(source, i, 'karlowe').end;
-      continue;
-    }
-    if (mode === 'markup' && c === '@') {
-      const head = /^@(?:if|each)\s*/.exec(source.slice(i));
-      if (head) {
-        const p = i + head[0].length;
-        if (source[p] === '(') {
-          i = balanced(source, p, 'js').end;
-          continue;
-        }
-      }
-      const effect = /^@(?:enter|effect)\s*/.exec(source.slice(i));
-      if (effect && source[i + effect[0].length] === '{') {
-        i = balanced(source, i + effect[0].length, 'js').end;
-        continue;
-      }
-      const declaration = /^@(action|view)\s+[\w-]+\s*/.exec(source.slice(i));
-      if (declaration) {
-        let body = i + declaration[0].length;
-        if (source[body] === '(') body = balanced(source, body, 'js').end;
-        while (/\s/.test(source[body] ?? '')) body++;
-        if (source[body] === '{') {
-          i = balanced(source, body, declaration[1] === 'view' ? 'markup' : 'js').end;
-          continue;
-        }
-      }
     }
     // Markup nesting tracks the current delimiter, not apostrophes in natural-language prose.
     if (mode === 'markup') {

@@ -1,7 +1,6 @@
 import { type EffectNode, type Expression, type ParseResult, type StoryNode } from '@gneh/core';
 import { splitPassages, diag } from '@gneh/source';
 import {
-  harloweMacroName,
   MacroLoweringRegistry,
   MarkupParser,
   basePassage,
@@ -10,6 +9,8 @@ import {
   type SpecialReader,
 } from '@gneh/syntax';
 import { parseKarloweExpression, karloweAssignments } from './expression.js';
+import { karloweMarkup } from './markup.js';
+import { harloweMacroName } from './names.js';
 import {
   parseKarloweCST,
   readKarloweHook,
@@ -708,8 +709,8 @@ export function parseKarlowe(source: string, file = 'story.karlowe', options: Ka
         new MarkupParser({
           file,
           expression: parseKarloweExpression,
+          markup: karloweMarkup,
           special: createKarloweMacroReader(lowerings),
-          markupProfile: 'harlowe',
           isBlockStart: (line) => {
             const match = /^\s*\(([\w-]+)\s*:/.exec(line);
             return !!match;

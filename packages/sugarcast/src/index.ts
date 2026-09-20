@@ -18,3 +18,5 @@ export type {
   SugarcastDocumentCST,
   SugarcastParseOptions,
 } from './parser.js';
+
+export { sugarcastMarkup } from './markup.js';

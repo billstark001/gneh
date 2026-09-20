@@ -2,7 +2,7 @@
 
 Portable Karlowe frontend with a new span-preserving lexer and an attributed Pratt expression parser.
 
-Karlowe shares dialect-neutral scanning tools with the other frontends but does not recognize Inkdown directives.
+`karloweMarkup` owns Harlowe-compatible prose, list, heading, line-break, and verbatim parsing. Karlowe reuses only dialect-neutral scanning tools from `@gneh/syntax`.
 
 `createKarloweLowerings()` exposes trusted IR-lowering extensions. Its lookup is ASCII-case-insensitive and ignores internal hyphens, matching Harlowe macro names.
 

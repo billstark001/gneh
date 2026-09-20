@@ -1,8 +1,8 @@
 # @gneh/syntax
 
-Dialect-neutral delimiters, document scanning, and passage lowering.
+Dialect-neutral delimiter scanning, parser context, list construction, and passage lowering.
 
-Callers provide an expression parser and any dialect-specific token reader. This package does not recognize Inkdown directives, Karlowe macros, or Sugarcast macros, and it does not provide compatibility aliases for those frontends. It does provide the caller-owned generic `MacroLoweringRegistry` used by all three frontends.
+Callers provide an expression parser plus a `MarkupDialect` containing their inline and block readers. This package owns recursion limits, source spans, declaration collection, and common link/value dispatch; it contains no concrete dialect profile. It also provides the caller-owned generic `MacroLoweringRegistry` used by all three frontends.
 
 Part of gneh 0.1.0. See the workspace README and docs for the supported language profile and verification limitations.
 

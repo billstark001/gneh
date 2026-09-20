@@ -11,6 +11,10 @@ export type { KarloweMacroMeta, KarloweLowerings, KarloweParseOptions, KarloweAt
 
 export { parseKarloweExpression, karloweAssignments } from './expression.js';
 
+export { harloweMacroName } from './names.js';
+
+export { karloweMarkup } from './markup.js';
+
 export { lexKarlowe, parseKarloweCST, readKarloweHook, readKarloweMacro } from './lexer.js';
 
 export type { KarloweCSTNode, KarloweDocumentCST, KarloweToken, KarloweMacroToken, KarloweHookToken } from './lexer.js';

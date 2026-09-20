@@ -7,9 +7,6 @@ export const exactMacroName: MacroNameNormalizer = (name) => name;
 
 export const caseInsensitiveMacroName: MacroNameNormalizer = (name) => name.toLowerCase();
 
-/** Harlowe macro names are ASCII-case-insensitive, dash-insensitive and underscore-insensitive. */
-export const harloweMacroName: MacroNameNormalizer = (name) => name.toLowerCase().replaceAll(/[-_]/g, '');
-
 export interface MacroLoweringInvocation<Node, Meta = undefined> {
   /** Canonical name after this registry's normalization policy. */
   name: string;

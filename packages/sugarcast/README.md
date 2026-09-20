@@ -2,7 +2,7 @@
 
 Portable SugarCube-like frontend.
 
-Sugarcast shares dialect-neutral scanning tools with the other frontends but does not recognize Inkdown directives.
+`sugarcastMarkup` owns SugarCube-compatible prose, list, heading, quote, continuation, comment, and code parsing. Sugarcast reuses only dialect-neutral scanning tools from `@gneh/syntax`.
 
 `createSugarcastLowerings()` exposes trusted IR-lowering extensions. Portable source-defined `<<widget>>` declarations lower to view IR, while scripts, DOM macros and runtime `Macro.add` remain unsupported.
 

@@ -100,6 +100,7 @@ test('shared syntax infrastructure has no concrete dialect dependency', () => {
     .join('\n');
   assert.doesNotMatch(source, /@gneh\/(?:expression|inkdown|karlowe|sugarcast)/);
   assert.doesNotMatch(source, /readInkdown|readKarlowe|readSugarcast/);
+  assert.doesNotMatch(source, /\b(?:inkdown|karlowe|sugarcast|harlowe|sugarcube)\b/i);
 });
 
 test('Twine HTML parsing is isolated to the CLI package', () => {

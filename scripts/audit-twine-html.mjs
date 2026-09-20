@@ -9,9 +9,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createKarloweLowerings, parseKarlowe, parseKarloweCST } from '../packages/karlowe/dist/index.js';
+import {
+  createKarloweLowerings,
+  harloweMacroName,
+  parseKarlowe,
+  parseKarloweCST,
+} from '../packages/karlowe/dist/index.js';
 import { createSugarcastLowerings, parseSugarcast, parseSugarcastCST } from '../packages/sugarcast/dist/index.js';
-import { harloweMacroName } from '../packages/syntax/dist/index.js';
 import { parseTwineHTML } from '../packages/cli/dist/twine-html.js';
 
 export const extractTwineStory = parseTwineHTML;

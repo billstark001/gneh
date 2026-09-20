@@ -1,6 +1,7 @@
 import type { StoryNode } from '@gneh/core';
 import { parseIterationClause } from '@gneh/expression';
 import { balanced, splitTopLevel, type MarkupParser, type ReadResult, type SpecialReader } from '@gneh/syntax';
+import { balancedMarkup } from './delimiters.js';
 
 const spaces = (source: string, start: number) => {
   while (/\s/.test(source[start] ?? '')) start++;
@@ -20,7 +21,7 @@ export function readConditional(
   const test = balanced(source, cursor);
   let end = spaces(source, test.end);
   if (source[end] !== '{') parser.error('IF_BODY', '@if requires a body', base + end);
-  const yes = balanced(source, end, 'markup');
+  const yes = balancedMarkup(source, end);
   end = yes.end;
   let no: StoryNode[] = [];
   const tail = /^\s*@else\s*/.exec(source.slice(end));
@@ -32,7 +33,7 @@ export function readConditional(
       end = next - 1 + result.end;
     } else {
       if (source[next] !== '{') parser.error('ELSE_BODY', '@else requires a body', base + next);
-      const body = balanced(source, next, 'markup');
+      const body = balancedMarkup(source, next);
       no = parser.children(body.content, base + body.start, inline);
       end = body.end;
     }
@@ -66,7 +67,7 @@ export function readLoop(
   const clause = parseIterationClause(pieces[0], parser.span(base + argument.start, base + argument.end));
   const start = spaces(source, argument.end);
   if (source[start] !== '{') parser.error('FOR_BODY', '@each requires a body', base + start);
-  const body = balanced(source, start, 'markup');
+  const body = balancedMarkup(source, start);
   const identifier = clause.binding.type === 'Identifier' ? clause.binding.name.replace(/^_/, '') : undefined;
   if (!identifier)
     parser.error('VIEW_BINDING', 'View loops currently require an identifier binding.', base + argument.start);
@@ -105,7 +106,7 @@ export function readRegion(
   if (!region) parser.error('REGION_NAME', 'Expected a region name', base + cursor);
   const start = spaces(source, cursor + region[0].length);
   if (source[start] !== '{') parser.error('REGION_BODY', 'A region requires a body', base + start);
-  const body = balanced(source, start, 'markup');
+  const body = balancedMarkup(source, start);
   return {
     nodes: [
       {

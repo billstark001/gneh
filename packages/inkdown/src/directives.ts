@@ -9,6 +9,7 @@ import {
   type SpecialReader,
 } from '@gneh/syntax';
 import { parseEffects } from './effects.js';
+import { balancedMarkup } from './delimiters.js';
 import { readConditional, readLoop, readRegion } from './structural.js';
 
 export interface InkdownMacroToken {
@@ -174,7 +175,7 @@ function readInkdownDirectiveWith(
   let hasBody = false;
   if (source[cursor] === '{') {
     hasBody = true;
-    const body = balanced(source, cursor, 'markup');
+    const body = balancedMarkup(source, cursor);
     children = parser.children(body.content, base + body.start, inline);
     cursor = body.end;
   }
@@ -218,7 +219,7 @@ export function createInkdownLowerings(): InkdownLowerings {
       cursor = spaces(source, parsed.end);
     }
     if (source[cursor] !== '{') parser.error('DECLARATION_BODY', `@${token.name} requires a body.`, base + cursor);
-    const body = balanced(source, cursor, token.name === 'view' ? 'markup' : 'js');
+    const body = token.name === 'view' ? balancedMarkup(source, cursor) : balanced(source, cursor);
     const span = parser.span(base + token.start, base + body.end);
     if (token.name === 'enter') parser.addEnter(parseEffects(body.content, base + body.start, parser));
     else if (token.name === 'action')

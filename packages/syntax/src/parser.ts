@@ -14,19 +14,7 @@ import {
   type StoryNode,
   type ViewDeclarationIR,
 } from '@gneh/core';
-import { balanced, splitTopLevel, type Balanced } from './delimiters.js';
-import { readLegacyList, readMarkdownCodeFence, readSugarCodeBlock } from './legacy-blocks.js';
-import {
-  isProfileRule,
-  literalNodes,
-  profileBlockStart,
-  profileHeading,
-  profileMarks,
-  profileQuote,
-  readHarloweCollapse,
-  readHarloweCombinedEmphasis,
-  type MarkupProfile,
-} from './profiles.js';
+import { balanced, splitTopLevel } from './delimiters.js';
 
 export interface ReadResult {
   nodes: StoryNode[];
@@ -42,26 +30,67 @@ export type SpecialReader = (
   inline: boolean,
 ) => ReadResult | undefined;
 
+export type MarkupInlineReader = (
+  source: string,
+  index: number,
+  base: number,
+  parser: MarkupParser,
+) => ReadResult | undefined;
+
+export type LineEnd = (start: number) => number;
+
+export type MarkupBlockReader = (
+  source: string,
+  index: number,
+  base: number,
+  lineEnd: LineEnd,
+  parser: MarkupParser,
+) => ReadResult | undefined;
+
+export interface HeadingMatch {
+  content: string;
+  contentOffset: number;
+  attrs: Metadata;
+}
+
+export interface QuoteMatch {
+  content: string;
+  contentOffset: number;
+  attrs?: Metadata;
+}
+
+/**
+ * A dialect-owned prose grammar. The shared package only drives the scanner;
+ * token spellings and block semantics are selected by the frontend package.
+ */
+export interface MarkupDialect {
+  inline?: MarkupInlineReader;
+  inlineMarks?: readonly (readonly [string, ContentKind])[];
+  block?: MarkupBlockReader;
+  isBlockStart?: (line: string) => boolean;
+  heading?: (line: string) => HeadingMatch | undefined;
+  rule?: (line: string) => boolean;
+  quote?: (line: string) => QuoteMatch | undefined;
+  paragraphs?: boolean;
+  preserveBlankLines?: boolean;
+}
+
 export interface SyntaxOptions {
   file: string;
   /** Dialect-owned expression parser. The shared scanner never selects a language. */
   expression: (source: string, span: Span) => Expression;
+  /** Dialect-owned prose grammar. */
+  markup: MarkupDialect;
   special?: SpecialReader;
-  /** Extra inline delimiter pairs owned by the calling dialect. */
-  inlineMarks?: readonly (readonly [string, ContentKind])[];
-  /** Select the source format's built-in prose markup rather than assuming Markdown. */
-  markupProfile?: MarkupProfile;
   /** Tell paragraph collection where the calling dialect starts a block construct. */
   isBlockStart?: (line: string) => boolean;
   /** Extend a prose paragraph when an inline dialect construct spans blank lines. */
   extendParagraph?: (source: string, start: number, end: number) => number;
-  /** Preserve prose line endings as semantic breaks instead of Markdown soft breaks. */
-  hardLineBreaks?: boolean;
   maxDepth?: number;
 }
 
 /**
- * Shared recursive-descent scanner for Inkdown plus the two compatibility dialects.
+ * Shared recursive-descent context used by the three dialect frontends.
  * A parser instance owns passage-level enter/effect/view declarations and ESM
  * import/export records while every reader returns only renderer-neutral nodes.
  * Dialect readers plug in at token boundaries and cannot bypass depth/span tracking.
@@ -189,59 +218,23 @@ export class MarkupParser {
     return this.options.special?.(source, index, base, this, inline);
   }
   inline(source: string, base = 0): StoryNode[] {
-    // The scanner accumulates ordinary prose and flushes it only at semantic
-    // boundaries. This preserves exact source spans without a second token stream.
     return this.guard(() => {
       const result: StoryNode[] = [];
       let i = 0,
         start = 0,
         text = '';
-      const profile = this.options.markupProfile ?? 'markdown';
-      const hardLineBreaks = this.options.hardLineBreaks ?? profile !== 'markdown';
       const flush = () => {
         if (text) result.push({ type: 'text', value: text, span: this.span(base + start, base + i) });
         text = '';
         start = i;
       };
       while (i < source.length) {
-        const c = source[i];
-        if (hardLineBreaks && c === '\\') {
-          const continuation =
-            profile === 'sugarcube'
-              ? /^\\[^\S\r\n]*(?:\r\n|\r|\n)/.exec(source.slice(i))
-              : /^\\(?:\r\n|\r|\n)/.exec(source.slice(i));
-          if (continuation) {
-            i += continuation[0].length;
-            continue;
-          }
-        }
-        if (hardLineBreaks && (c === '\n' || c === '\r')) {
-          const width = c === '\r' && source[i + 1] === '\n' ? 2 : 1;
-          const continuation =
-            profile === 'sugarcube'
-              ? /^[^\S\r\n]*\\/.exec(source.slice(i + width))
-              : source[i + width] === '\\'
-                ? ['\\']
-                : undefined;
-          if (continuation) {
-            i += width + continuation[0].length;
-            continue;
-          }
+        const dialect = this.options.markup.inline?.(source, i, base, this);
+        if (dialect) {
           flush();
-          result.push({
-            type: 'content',
-            kind: 'break',
-            attrs: {},
-            children: [],
-            span: this.span(base + i, base + i + width),
-          });
-          i += width;
+          result.push(...dialect.nodes);
+          i = dialect.end;
           start = i;
-          continue;
-        }
-        if (profile === 'markdown' && c === '\\' && i + 1 < source.length) {
-          text += source[i + 1];
-          i += 2;
           continue;
         }
         if (source.startsWith('<!--', i)) {
@@ -252,108 +245,8 @@ export class MarkupParser {
           start = i;
           continue;
         }
-        if (profile === 'sugarcube' && (source.startsWith('/*', i) || source.startsWith('/%', i))) {
-          flush();
-          const opener = source.slice(i, i + 2),
-            closer = opener === '/*' ? '*/' : '%/',
-            end = source.indexOf(closer, i + 2);
-          if (end < 0) this.error('COMMENT', `Unclosed ${opener} comment`, base + i);
-          i = end + 2;
-          start = i;
-          continue;
-        }
-        if (profile === 'sugarcube' && source.startsWith('"""', i)) {
-          const end = source.indexOf('"""', i + 3);
-          if (end >= 0) {
-            flush();
-            result.push(...literalNodes(source.slice(i + 3, end), base, i + 3, this));
-            i = end + 3;
-            start = i;
-            continue;
-          }
-        }
-        if (profile === 'harlowe' && c === '{') {
-          const collapsed = readHarloweCollapse(source, i, base, this);
-          if (collapsed) {
-            flush();
-            result.push(collapsed.node);
-            i = collapsed.end;
-            start = i;
-            continue;
-          }
-        }
-        if (profile === 'sugarcube' && source.startsWith('{{{', i)) {
-          const end = source.indexOf('}}}', i + 3);
-          if (end >= 0) {
-            flush();
-            result.push({
-              type: 'content',
-              kind: 'code',
-              attrs: {},
-              children: [
-                {
-                  type: 'text',
-                  value: source.slice(i + 3, end),
-                  span: this.span(base + i + 3, base + end),
-                },
-              ],
-              span: this.span(base + i, base + end + 3),
-            });
-            i = end + 3;
-            start = i;
-            continue;
-          }
-        }
-        if (c === '`') {
-          let count = 1;
-          while (source[i + count] === '`') count++;
-          const end = source.indexOf('`'.repeat(count), i + count);
-          if (end >= 0) {
-            flush();
-            if (profile === 'harlowe')
-              result.push({
-                type: 'content',
-                kind: 'span',
-                attrs: { verbatim: true },
-                children: literalNodes(source.slice(i + count, end), base, i + count, this),
-                span: this.span(base + i, base + end + count),
-              });
-            else
-              result.push({
-                type: 'content',
-                kind: 'code',
-                attrs: {},
-                children: [
-                  {
-                    type: 'text',
-                    value: source.slice(i + count, end).replace(/\r?\n/g, ' '),
-                    span: this.span(base + i + count, base + end),
-                  },
-                ],
-                span: this.span(base + i, base + end + count),
-              });
-            i = end + count;
-            start = i;
-            continue;
-          }
-        }
-        if (profile === 'markdown' && source.startsWith('{{', i)) {
-          flush();
-          const b = balanced(source, i);
-          if (source[b.end - 2] !== '}') this.error('VALUE_CLOSE', 'Expected }}', base + i);
-          const exp = b.content.slice(1, -1);
-          result.push({
-            type: 'value',
-            expression: this.expr(exp, base + i + 2),
-            span: this.span(base + i, base + b.end),
-          });
-          i = b.end;
-          start = i;
-          continue;
-        }
         if (source.startsWith('[[', i)) {
-          // A dialect may assign a longer token beginning with generic link
-          // punctuation. Karlowe uses `[[[link]]]` for a hook containing a link.
+          // A dialect may assign a longer token beginning with generic link punctuation.
           const longer = source[i + 2] === '[' ? this.readSpecial(source, i, base, true) : undefined;
           if (longer) {
             flush();
@@ -414,16 +307,9 @@ export class MarkupParser {
           start = i;
           continue;
         }
-        if (
-          (c === '$' ||
-            (profile !== 'markdown' &&
-              c === '_' &&
-              !(profile === 'sugarcube' && source[i + 1] === '_') &&
-              !/[\w$]/.test(source[i - 1] ?? ''))) &&
-          /^[A-Za-z_]/.test(source[i + 1] ?? '')
-        ) {
+        if (source[i] === '$' && /^[A-Za-z_]/.test(source[i + 1] ?? '')) {
           flush();
-          const name = /^[$_][A-Za-z_]\w*/.exec(source.slice(i))![0];
+          const name = /^\$[A-Za-z_]\w*/.exec(source.slice(i))![0];
           result.push({
             type: 'value',
             expression: this.expr(name, base + i),
@@ -441,19 +327,8 @@ export class MarkupParser {
           start = i;
           continue;
         }
-        if (profile === 'harlowe' && source.startsWith('***', i)) {
-          const combined = readHarloweCombinedEmphasis(source, i, base, this);
-          if (combined) {
-            flush();
-            result.push(combined.node);
-            i = combined.end;
-            start = i;
-            continue;
-          }
-        }
-        const marks = [...(this.options.inlineMarks ?? []), ...profileMarks[profile]];
         let marked = false;
-        for (const [mark, kind] of marks) {
+        for (const [mark, kind] of this.options.markup.inlineMarks ?? []) {
           if (source.startsWith(mark, i)) {
             const end = source.indexOf(mark, i + mark.length);
             if (end >= i + mark.length) {
@@ -473,50 +348,7 @@ export class MarkupParser {
           }
         }
         if (marked) continue;
-        if (profile === 'markdown' && (c === '[' || (c === '!' && source[i + 1] === '['))) {
-          const image = c === '!',
-            bracket = i + (image ? 1 : 0);
-          let b: Balanced | undefined;
-          try {
-            b = balanced(source, bracket, 'markup');
-          } catch {}
-          if (b) {
-            const next = source[b.end];
-            if (next === '(') {
-              const destination = balanced(source, b.end);
-              flush();
-              const url = destination.content.trim().replace(/^<|>$/g, '');
-              result.push({
-                type: 'content',
-                kind: image ? 'image' : 'link',
-                attrs: image ? { src: url, alt: b.content } : { href: url },
-                children: image ? [] : this.inline(b.content, base + b.start),
-                span: this.span(base + i, base + destination.end),
-              });
-              i = destination.end;
-              start = i;
-              continue;
-            }
-            if (next === '{' && !image) {
-              const a = balanced(source, b.end);
-              const parsed = this.attributes(a.content, base + a.start);
-              if (Object.keys(parsed.bindings).length)
-                this.error('STYLE_BINDING', 'Dynamic attributes belong on extension containers.', base + i);
-              flush();
-              result.push({
-                type: 'content',
-                kind: 'span',
-                attrs: parsed.attrs,
-                children: this.inline(b.content, base + b.start),
-                span: this.span(base + i, base + a.end),
-              });
-              i = a.end;
-              start = i;
-              continue;
-            }
-          }
-        }
-        text += c;
+        text += source[i];
         i++;
       }
       flush();
@@ -524,90 +356,30 @@ export class MarkupParser {
     });
   }
   blocks(source: string, base = 0): StoryNode[] {
-    // Block recognition is line-oriented; inline parsing is delegated only after
-    // the complete extent of a block has been found.
     return this.guard(() => {
       const result: StoryNode[] = [];
       let i = 0;
-      const profile = this.options.markupProfile ?? 'markdown';
       const lineEnd = (start: number) => {
         const end = source.indexOf('\n', start);
         return end < 0 ? source.length : end + 1;
       };
-      const isStart = (line: string) => {
-        if (this.options.isBlockStart?.(line)) return true;
-        return profileBlockStart(line, profile);
-      };
+      const isStart = (line: string) =>
+        !!this.options.isBlockStart?.(line) || !!this.options.markup.isBlockStart?.(line);
+      const paragraphs = this.options.markup.paragraphs ?? true;
       while (i < source.length) {
         let end = lineEnd(i);
         const line = source.slice(i, end).replace(/\r?\n$/, '');
         if (!line.trim()) {
-          if (profile !== 'markdown') result.push(...this.inline(source.slice(i, end), base + i));
+          if (this.options.markup.preserveBlankLines) result.push(...this.inline(source.slice(i, end), base + i));
           i = end;
           continue;
         }
         const leading = line.length - line.trimStart().length;
         const start = i + leading;
-        if (profile === 'markdown') {
-          const fence = readMarkdownCodeFence(source, i, base, lineEnd, this);
-          if (fence) {
-            result.push(fence.node);
-            i = fence.end;
-            continue;
-          }
-        }
-        if (profile === 'sugarcube') {
-          const code = readSugarCodeBlock(source, i, base, lineEnd, this);
-          if (code) {
-            result.push(code.node);
-            i = code.end;
-            continue;
-          }
-        }
-        if (profile === 'markdown' && line.trimStart().startsWith(':::')) {
-          const rest = line.trim().slice(3).trim();
-          if (!rest) this.error('CONTAINER_CLOSE', 'Unexpected container terminator.', base + i);
-          let name = 'box',
-            attr = rest;
-          const m = /^([\w:-]+)\s*(.*)$/.exec(rest);
-          if (m) {
-            name = m[1];
-            attr = m[2];
-          }
-          const parsed = this.attributes(attr, base + start + 3 + rest.indexOf(attr));
-          let depth = 1,
-            cursor = end,
-            bodyEnd = end;
-          let codeFence = '';
-          while (cursor < source.length) {
-            const e = lineEnd(cursor),
-              l = source.slice(cursor, e).trim();
-            if (/^(`{3,}|~{3,})/.test(l)) {
-              if (!codeFence) codeFence = l[0];
-              else if (l[0] === codeFence) codeFence = '';
-            }
-            if (!codeFence && l.startsWith(':::')) {
-              if (l === ':::') depth--;
-              else depth++;
-              if (!depth) {
-                bodyEnd = cursor;
-                end = e;
-                break;
-              }
-            }
-            cursor = e;
-          }
-          if (depth) this.error('CONTAINER_CLOSE', 'Unclosed ::: container.', base + i);
-          const bodyStart = lineEnd(i);
-          result.push({
-            type: 'extension',
-            name,
-            attrs: parsed.attrs,
-            bindings: parsed.bindings,
-            children: this.blocks(source.slice(bodyStart, bodyEnd), base + bodyStart),
-            span: this.span(base + i, base + end),
-          });
-          i = end;
+        const dialect = this.options.markup.block?.(source, i, base, lineEnd, this);
+        if (dialect) {
+          result.push(...dialect.nodes);
+          i = dialect.end;
           continue;
         }
         const special = this.readSpecial(source, start, base, false);
@@ -617,12 +389,11 @@ export class MarkupParser {
             i = special.end;
           } else {
             const tailEnd = lineEnd(special.end);
-            const tail =
-              profile === 'markdown'
-                ? source.slice(special.end, tailEnd).replace(/\r?\n$/, '')
-                : source.slice(special.end, tailEnd);
+            const tail = paragraphs
+              ? source.slice(special.end, tailEnd).replace(/\r?\n$/, '')
+              : source.slice(special.end, tailEnd);
             const children = [...special.nodes, ...this.inline(tail, base + special.end)];
-            if (profile === 'markdown')
+            if (paragraphs)
               result.push({
                 type: 'content',
                 kind: 'paragraph',
@@ -635,29 +406,19 @@ export class MarkupParser {
           }
           continue;
         }
-        const heading = profileHeading(line, profile);
+        const heading = this.options.markup.heading?.(line);
         if (heading) {
-          let content = heading[2],
-            attrs: Metadata = { level: heading[1].length };
-          const attr = profile === 'markdown' ? /\s+(\{[.#][^}]*\})$/.exec(content) : undefined;
-          if (attr) {
-            attrs = {
-              ...attrs,
-              ...this.attributes(attr[1], base + i + line.indexOf(attr[1])).attrs,
-            };
-            content = content.slice(0, attr.index);
-          }
           result.push({
             type: 'content',
             kind: 'heading',
-            attrs,
-            children: this.inline(content, base + i + line.indexOf(content)),
+            attrs: heading.attrs,
+            children: this.inline(heading.content, base + i + heading.contentOffset),
             span: this.span(base + i, base + end),
           });
           i = end;
           continue;
         }
-        if (isProfileRule(line, profile)) {
+        if (this.options.markup.rule?.(line)) {
           result.push({
             type: 'content',
             kind: 'rule',
@@ -668,51 +429,13 @@ export class MarkupParser {
           i = end;
           continue;
         }
-        const list = profile === 'markdown' ? /^ {0,3}([-*+]|\d+\.)\s+(.*)$/.exec(line) : undefined;
-        if (list) {
-          const children: StoryNode[] = [];
-          const ordered = /\d/.test(list[1]);
-          let cursor = i;
-          while (cursor < source.length) {
-            const e = lineEnd(cursor),
-              l = source.slice(cursor, e).replace(/\r?\n$/, '');
-            const m = /^ {0,3}([-*+]|\d+\.)\s+(.*)$/.exec(l);
-            if (!m || /\d/.test(m[1]) !== ordered) break;
-            children.push({
-              type: 'content',
-              kind: 'item',
-              attrs: {},
-              children: this.inline(m[2], base + cursor + l.indexOf(m[2])),
-              span: this.span(base + cursor, base + e),
-            });
-            cursor = e;
-          }
-          result.push({
-            type: 'content',
-            kind: 'list',
-            attrs: { ordered },
-            children,
-            span: this.span(base + i, base + cursor),
-          });
-          i = cursor;
-          continue;
-        }
-        const legacy = readLegacyList(source, i, base, profile, lineEnd, this);
-        if (legacy) {
-          result.push(...legacy.nodes);
-          i = legacy.end;
-          continue;
-        }
-        const quote = profileQuote(line, profile);
+        const quote = this.options.markup.quote?.(line);
         if (quote) {
           result.push({
             type: 'content',
             kind: 'quote',
-            attrs: profile === 'sugarcube' ? { depth: quote[1].length } : {},
-            children: this.inline(
-              quote[profile === 'sugarcube' ? 2 : 1],
-              base + i + line.indexOf(quote[profile === 'sugarcube' ? 2 : 1]),
-            ),
+            attrs: quote.attrs ?? {},
+            children: this.inline(quote.content, base + i + quote.contentOffset),
             span: this.span(base + i, base + end),
           });
           i = end;
@@ -727,8 +450,8 @@ export class MarkupParser {
           cursor = e;
         }
         cursor = this.options.extendParagraph?.(source, i, cursor) ?? cursor;
-        const text = profile === 'markdown' ? source.slice(i, cursor).replace(/\r?\n$/, '') : source.slice(i, cursor);
-        if (profile === 'markdown')
+        const text = paragraphs ? source.slice(i, cursor).replace(/\r?\n$/, '') : source.slice(i, cursor);
+        if (paragraphs)
           result.push({
             type: 'content',
             kind: 'paragraph',
