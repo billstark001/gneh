@@ -35,3 +35,36 @@ test('sugarcast recognizes block code without evaluating its contents', () => {
   assert.equal(text(s.view), '$hidden');
   assert.ok(all(s.view).some((node) => node.kind === 'code-block'));
 });
+
+test('sugarcast follows official naked-variable and nowiki behavior', () => {
+  // SugarCube v2 docs, "Naked Variable" and "Verbatim Text":
+  // https://www.motoslave.net/sugarcube/2/docs/#markup-naked-variable
+  const s = story(
+    '<<set _local = { name: "temporary" }>>$hero.name $items[1] $hero[$key] _local.name $$hero <nowiki>$hero.name //raw//</nowiki> `$name`',
+    'sugarcast',
+    {
+      state: {
+        hero: { name: 'Mara', title: 'Captain' },
+        items: ['zero', 'one'],
+        key: 'title',
+        name: 'Mara',
+      },
+    },
+  );
+  assert.equal(text(s.view), 'Mara one Captain temporary $hero $hero.name //raw// `Mara`');
+  assert.equal(
+    all(s.view).some((node) => node.kind === 'code'),
+    false,
+  );
+});
+
+test('sugarcast supports both official print aliases', () => {
+  // SugarCube v2 docs, "<<= expression>>" and "<<- expression>>".
+  assert.equal(text(story('<<= $value>>/<<- $value>>', 'sugarcast', { state: { value: '<ok>' } }).view), '<ok>/<ok>');
+});
+
+test('sugarcast preserves SugarCube simple comparison aliases', () => {
+  // SugarCube v2 docs, "Conditional operators".
+  const source = '<<if 1 eq "1" and 1 isnot "1" and def $present and ndef $missing>>compatible<<else>>wrong<</if>>';
+  assert.equal(text(story(source, 'sugarcast', { state: { present: 0 } }).view), 'compatible');
+});

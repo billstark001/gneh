@@ -127,8 +127,8 @@ export function parseIterationClause(source: string, span?: Span): IterationClau
 const sugarOperators = Object.freeze({
   isnot: '!==',
   is: '===',
-  eq: '===',
-  neq: '!==',
+  eq: '==',
+  neq: '!=',
   gt: '>',
   gte: '>=',
   lt: '<',
@@ -136,6 +136,8 @@ const sugarOperators = Object.freeze({
   and: '&&',
   or: '||',
   not: '!',
+  def: 'typeof',
+  ndef: 'void',
   to: '=',
 });
 
@@ -150,7 +152,12 @@ const sugarRules: readonly JSLexerRule[] = Object.entries(sugarOperators)
       return source.slice(position + word.length).trimStart()[0] !== ':';
     },
     advance(_source, position) {
-      return { kind: 'op', value: operator, start: position, end: position + word.length };
+      return {
+        kind: word === 'def' || word === 'ndef' ? 'identifier' : 'op',
+        value: operator,
+        start: position,
+        end: position + word.length,
+      };
     },
   }));
 
@@ -162,9 +169,46 @@ export function parseSugarExpression(
 ): Expression {
   const ast = wrap(span, 'EXPR_SYNTAX', () => {
     const tokens = new JSLexer(source, { rules: sugarRules, numbers: { bigint: false } }).tokenize();
-    return new JSExpressionParser(tokens, parserOptions(options), source).parse();
+    const unaryOrigins = (operator: string, alias: string) =>
+      tokens.flatMap((token, index) =>
+        token.kind === 'identifier' &&
+        token.value === operator &&
+        !['.', '?.'].includes(tokens[index - 1]?.value ?? '') &&
+        tokens[index + 1]?.value !== ':'
+          ? [source.slice(token.start, token.end) === alias]
+          : [],
+      );
+    const defined = unaryOrigins('typeof', 'def');
+    const undefined_ = unaryOrigins('void', 'ndef');
+    return lowerSugarDefinitionOperators(
+      new JSExpressionParser(tokens, parserOptions(options), source).parse(),
+      defined,
+      undefined_,
+    );
   });
   return { ast, source, span };
+}
+
+function lowerSugarDefinitionOperators(ast: ExpressionNode, defined: boolean[], undefined_: boolean[]): ExpressionNode {
+  const walk = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(walk);
+    if (!item || typeof item !== 'object') return item;
+    const node = item as Record<string, unknown> & { type?: string; operator?: string; argument?: ExpressionNode };
+    if (node.type === 'UnaryExpression' && (node.operator === 'typeof' || node.operator === 'void')) {
+      const twineOperator = (node.operator === 'typeof' ? defined : undefined_).shift();
+      const argument = walk(node.argument) as ExpressionNode;
+      if (twineOperator)
+        return {
+          type: 'BinaryExpression',
+          operator: node.operator === 'typeof' ? '!==' : '===',
+          left: { type: 'UnaryExpression', operator: 'typeof', prefix: true, argument },
+          right: { type: 'Literal', value: 'undefined' },
+        } satisfies ExpressionNode;
+      return { ...node, argument };
+    }
+    return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, walk(value)]));
+  };
+  return walk(ast) as ExpressionNode;
 }
 
 /** Parse SugarCube's whitespace-or-comma separated macro argument list. */

@@ -28,6 +28,7 @@ const intrinsicValues = Object.freeze({
       : Array.isArray(container)
         ? container.includes(needle)
         : !!container && typeof container === 'object' && Object.hasOwn(container, safeKey(needle)),
+  harloweIndex: (key: unknown) => (typeof key === 'number' ? key - 1 : key),
   array: (...items: unknown[]) => items,
   datamap: (...items: unknown[]) => {
     invariant(items.length % 2 === 0, 'E_ARGS', 'datamap requires key/value pairs.');

@@ -1,4 +1,5 @@
 import {
+  balanced,
   literalNodes,
   readList,
   type LineEnd,
@@ -7,10 +8,33 @@ import {
   type ReadResult,
 } from '@gneh/syntax';
 
+function nakedVariableEnd(source: string, index: number): number | undefined {
+  if (!['$', '_'].includes(source[index]) || !/^[A-Za-z_]/.test(source[index + 1] ?? '')) return;
+  if (source.startsWith('__', index) || (source[index] === '_' && /[\w$]/.test(source[index - 1] ?? ''))) return;
+  let end = index + /^[$_][A-Za-z_]\w*/.exec(source.slice(index))![0].length;
+  while (source[end] === '.' && /^[A-Za-z_]\w*/.test(source.slice(end + 1))) {
+    end += 1 + /^[A-Za-z_]\w*/.exec(source.slice(end + 1))![0].length;
+  }
+  if (source[end] !== '[') return end;
+  try {
+    const group = balanced(source, end);
+    return /^(?:\d+|[$_][A-Za-z_]\w*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$/.test(group.content.trim())
+      ? group.end
+      : end;
+  } catch {
+    return end;
+  }
+}
+
 function inline(source: string, index: number, base: number, parser: MarkupParser): ReadResult | undefined {
   const continuation = /^\\[^\S\r\n]*(?:\r\n|\r|\n)/.exec(source.slice(index));
   if (continuation) return { nodes: [], end: index + continuation[0].length };
   const character = source[index];
+  if (source.startsWith('$$', index))
+    return {
+      nodes: [{ type: 'text', value: '$', span: parser.span(base + index, base + index + 2) }],
+      end: index + 2,
+    };
   if (character === '\n' || character === '\r') {
     const width = character === '\r' && source[index + 1] === '\n' ? 2 : 1;
     const joined = /^[^\S\r\n]*\\/.exec(source.slice(index + width));
@@ -43,6 +67,14 @@ function inline(source: string, index: number, base: number, parser: MarkupParse
         end: end + 3,
       };
   }
+  if (source.startsWith('<nowiki>', index)) {
+    const end = source.indexOf('</nowiki>', index + 8);
+    if (end < 0) parser.error('NOWIKI', 'Unclosed <nowiki> markup.', base + index);
+    return {
+      nodes: literalNodes(source.slice(index + 8, end), base, index + 8, parser),
+      end: end + 9,
+    };
+  }
   if (source.startsWith('{{{', index)) {
     const end = source.indexOf('}}}', index + 3);
     if (end >= 0)
@@ -65,46 +97,19 @@ function inline(source: string, index: number, base: number, parser: MarkupParse
         end: end + 3,
       };
   }
-  if (character === '`') {
-    let count = 1;
-    while (source[index + count] === '`') count++;
-    const end = source.indexOf('`'.repeat(count), index + count);
-    if (end >= 0)
-      return {
-        nodes: [
-          {
-            type: 'content',
-            kind: 'code',
-            attrs: {},
-            children: [
-              {
-                type: 'text',
-                value: source.slice(index + count, end).replace(/\r?\n/g, ' '),
-                span: parser.span(base + index + count, base + end),
-              },
-            ],
-            span: parser.span(base + index, base + end + count),
-          },
-        ],
-        end: end + count,
-      };
-  }
-  if (
-    character === '_' &&
-    source[index + 1] !== '_' &&
-    !/[\w$]/.test(source[index - 1] ?? '') &&
-    /^[A-Za-z_]/.test(source[index + 1] ?? '')
-  ) {
-    const name = /^_[A-Za-z_]\w*/.exec(source.slice(index))![0];
+  const variableEnd = nakedVariableEnd(source, index);
+  if (variableEnd !== undefined) {
+    const end = variableEnd;
+    const expression = source.slice(index, end);
     return {
       nodes: [
         {
           type: 'value',
-          expression: parser.expr(name, base + index),
-          span: parser.span(base + index, base + index + name.length),
+          expression: parser.expr(expression, base + index),
+          span: parser.span(base + index, base + end),
         },
       ],
-      end: index + name.length,
+      end,
     };
   }
 }

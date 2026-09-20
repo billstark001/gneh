@@ -56,7 +56,7 @@ export interface SugarcastMacroMeta {
 export type SugarcastLowerings = MacroLoweringRegistry<SugarcastMacroCST, SugarcastMacroMeta>;
 
 export function readSugarcastMacro(source: string, index: number): SugarcastMacroToken | undefined {
-  const match = /^<<\s*(\/?[A-Za-z][\w-]*|=)\s*/.exec(source.slice(index));
+  const match = /^<<\s*(\/?[A-Za-z][\w-]*|[=-])\s*/.exec(source.slice(index));
   if (!match) return;
   let i = index + match[0].length;
   const argStart = i;
@@ -309,6 +309,7 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
       };
     case 'print':
     case '=':
+    case '-':
       if (m.args.trim() === '_contents') return { nodes: [{ type: 'children', span }], end: m.end };
       return {
         nodes: [
@@ -549,7 +550,10 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
 
 export function createSugarcastLowerings(): SugarcastLowerings {
   const registry = new MacroLoweringRegistry<SugarcastMacroCST, SugarcastMacroMeta>(caseInsensitiveMacroName);
-  registry.register(['set', 'run', 'print', '=', 'include', 'checkbox', 'goto', 'elseif', 'else'], expandSugarcast);
+  registry.register(
+    ['set', 'run', 'print', '=', '-', 'include', 'checkbox', 'goto', 'elseif', 'else'],
+    expandSugarcast,
+  );
   registry.register('if', expandSugarcast, {
     meta: { container: true, sections: ['elseif', 'else'] },
   });
@@ -684,7 +688,7 @@ export function parseSugarcast(
         markup: sugarcastMarkup,
         special: createSugarcastMacroReader(lowerings, widgetContainers),
         isBlockStart: (line) => {
-          const match = /^\s*<<\s*(\/?[A-Za-z][\w-]*|=)/.exec(line);
+          const match = /^\s*<<\s*(\/?[A-Za-z][\w-]*|[=-])/.exec(line);
           return !!match;
         },
         extendParagraph: (source, start, end) => extendParagraph(source, start, end, lowerings),

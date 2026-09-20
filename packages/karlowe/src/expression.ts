@@ -186,7 +186,7 @@ export function parseKarloweExpression(
         const property = /^\s*'s\s+([\w-]+)|^\.([A-Za-z_]\w*)/.exec(tail);
         if (property) {
           const name = property[1] ?? property[2];
-          const ordinal = /^(\d+)(?:st|nd|rd|th)$/.exec(name);
+          const ordinal = /^(\d+)(?:st|nd|rd|th)$/i.exec(name);
           atom = {
             type: 'MemberExpression',
             object: atom,
@@ -195,6 +195,19 @@ export function parseKarloweExpression(
             optional: false,
           };
           index += property[0].length;
+          callable = true;
+        } else if (/^\s*'s\s*\(/.test(tail)) {
+          const propertyStart = index + /^\s*'s\s*/.exec(tail)![0].length;
+          const group = balanced(source, propertyStart, { apostropheProperty: true });
+          const computed = call(identifier('harloweIndex'), [recurse(group.content, group.start)]);
+          atom = {
+            type: 'MemberExpression',
+            object: atom,
+            property: computed,
+            computed: true,
+            optional: false,
+          };
+          index = group.end;
           callable = true;
         } else if (source[index] === '[') {
           const group = balanced(source, index);

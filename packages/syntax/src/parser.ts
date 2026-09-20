@@ -274,10 +274,10 @@ export class MarkupParser {
             label = inside.slice(0, at).trim();
             target = inside.slice(at + 2).trim();
             action = true;
-          } else if ((at = inside.indexOf('->')) >= 0) {
+          } else if ((at = inside.lastIndexOf('->')) >= 0) {
             label = inside.slice(0, at).trim();
             target = inside.slice(at + 2).trim();
-          } else if ((at = inside.indexOf('<-')) >= 0) {
+          } else if ((at = inside.lastIndexOf('<-')) >= 0) {
             target = inside.slice(0, at).trim();
             label = inside.slice(at + 2).trim();
           } else if ((at = inside.indexOf('|')) >= 0) {

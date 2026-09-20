@@ -70,7 +70,8 @@ export type ContentKind =
   | 'rule'
   | 'link'
   | 'image'
-  | 'span';
+  | 'span'
+  | 'group';
 
 export type StoryNode =
   | { type: 'text'; value: string; span: Span }

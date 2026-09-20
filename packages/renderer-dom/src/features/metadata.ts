@@ -16,6 +16,14 @@ export function metadataFeature(): ElementFeature {
 
           if (typeof attrs.id === 'string') element.dataset.ref = attrs.id;
           else delete element.dataset.ref;
+
+          const alignment = attrs.alignment;
+          element.style.textAlign =
+            alignment === 'left' || alignment === 'right' || alignment === 'center' || alignment === 'justify'
+              ? alignment
+              : '';
+          element.style.marginLeft = typeof attrs.marginLeft === 'number' ? `${attrs.marginLeft}%` : '';
+          element.style.marginRight = typeof attrs.marginRight === 'number' ? `${attrs.marginRight}%` : '';
         },
       };
     },

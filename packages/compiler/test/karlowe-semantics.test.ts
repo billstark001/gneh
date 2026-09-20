@@ -60,3 +60,27 @@ test('karlowe supports collapsing, unclosed collapsing and combined emphasis mar
   const strong = nodes.find((node) => node.kind === 'strong');
   assert.equal(strong.children[0].kind, 'emphasis');
 });
+
+test('karlowe follows the official modal aligner markup', () => {
+  // Harlowe 3.3.8 manual, "Aligner markup": https://twine2.neocities.org/#markup_aligner
+  const s = story('==>\nright\n=><=\ncenter\n===><=\noffset\n<==>\njustified\n<==\nleft', 'karlowe');
+  const groups = all(s.view).filter((node) => node.kind === 'group');
+  assert.deepEqual(
+    groups.map((node) => node.attrs?.alignment),
+    ['right', 'center', 'center', 'justify'],
+  );
+  assert.deepEqual(groups[1].attrs, { alignment: 'center', marginLeft: 0, marginRight: 0 });
+  assert.deepEqual(groups[2].attrs, { alignment: 'center', marginLeft: 50, marginRight: 0 });
+  assert.equal(text(s.view), 'rightcenteroffsetjustifiedleft');
+});
+
+test('karlowe uses the rightmost Harlowe arrow and one-based computed possessive access', () => {
+  // Harlowe 3.3.8 manual, "Link markup" and computed property indexing.
+  const linked = story(':: Start\n[[A->B->End]]\n:: End\ndone', 'karlowe');
+  assert.equal(text(linked.view), 'A->B');
+  assert.equal(text(story('(print: (a: "first", "second")\'s (2))', 'karlowe').view), 'second');
+  assert.equal(
+    text(story('(print: (a: "first", "second")\'s ($position))', 'karlowe', { state: { position: 1 } }).view),
+    'first',
+  );
+});

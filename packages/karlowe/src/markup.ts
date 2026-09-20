@@ -151,6 +151,33 @@ function block(
   lineEnd: LineEnd,
   parser: MarkupParser,
 ): ReadResult | undefined {
+  const firstEnd = lineEnd(index);
+  const marker = readAligner(source.slice(index, firstEnd).replace(/\r?\n$/, ''));
+  if (marker) {
+    let cursor = firstEnd;
+    while (cursor < source.length) {
+      const end = lineEnd(cursor);
+      if (readAligner(source.slice(cursor, end).replace(/\r?\n$/, ''))) break;
+      cursor = end;
+    }
+    const children = parser.blocks(source.slice(firstEnd, cursor), base + firstEnd);
+    return {
+      nodes:
+        marker.alignment === 'left'
+          ? children
+          : [
+              {
+                type: 'content',
+                kind: 'group',
+                attrs: marker,
+                children,
+                span: parser.span(base + index, base + cursor),
+              },
+            ],
+      end: cursor,
+      block: true,
+    };
+  }
   return readList(source, index, base, lineEnd, parser, (raw) => {
     const match = /^\s*(\*+|(0\.)+)\s+(.*)$/.exec(raw.replace(/\r?\n$/, ''));
     if (!match) return;
@@ -161,6 +188,27 @@ function block(
       content: match[3],
     };
   });
+}
+
+function readAligner(
+  line: string,
+): { alignment: 'left' | 'right' | 'center' | 'justify'; marginLeft?: number; marginRight?: number } | undefined {
+  const token = line.trim();
+  if (/^={2,}>$/.test(token)) return { alignment: 'right' };
+  if (/^<={2,}$/.test(token)) return { alignment: 'left' };
+  if (/^<={2,}>$/.test(token)) return { alignment: 'justify' };
+  const mixed = /^(=+)><(=+)$/.exec(token);
+  if (!mixed) return;
+  const left = mixed[1].length;
+  const right = mixed[2].length;
+  const total = left + right;
+  const width = (2 * Math.min(left, right) * 100) / total;
+  const point = (left * 100) / total;
+  return {
+    alignment: 'center',
+    marginLeft: point - width / 2,
+    marginRight: 100 - point - width / 2,
+  };
 }
 
 export const karloweMarkup: MarkupDialect = {
@@ -174,7 +222,8 @@ export const karloweMarkup: MarkupDialect = {
     ['*', 'emphasis'],
   ],
   block,
-  isBlockStart: (line) => /^\s*(?:#{1,6}|-{3,}\s*$|(?:\*+|(0\.)+)\s+)/.test(line),
+  isBlockStart: (line) =>
+    /^\s*(?:#{1,6}|-{3,}\s*$|(?:\*+|(0\.)+)\s+)/.test(line) || !!readAligner(line.replace(/\r?\n$/, '')),
   heading: (line) => {
     const match = /^\s*(#{1,6})\s*(.*)$/.exec(line);
     return match

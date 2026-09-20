@@ -1,8 +1,31 @@
 import type { Metadata, StoryNode } from '@gneh/core';
 import { balanced, readList, type LineEnd, type MarkupDialect, type MarkupParser, type ReadResult } from '@gneh/syntax';
 
+function hardBreak(index: number, width: number, base: number, parser: MarkupParser): ReadResult {
+  const node: StoryNode = {
+    type: 'content',
+    kind: 'break',
+    attrs: {},
+    children: [],
+    span: parser.span(base + index, base + index + width),
+  };
+  return { nodes: [node], end: index + width };
+}
+
 function inline(source: string, index: number, base: number, parser: MarkupParser): ReadResult | undefined {
-  if (source[index] === '\\' && index + 1 < source.length)
+  if (source[index] === '\\' && (source[index + 1] === '\n' || source[index + 1] === '\r')) {
+    const width = source[index + 1] === '\r' && source[index + 2] === '\n' ? 3 : 2;
+    return hardBreak(index, width, base, parser);
+  }
+  if (source[index] === '\n' || source[index] === '\r') {
+    const width = source[index] === '\r' && source[index + 1] === '\n' ? 2 : 1;
+    if (source.slice(0, index).match(/ {2,}$/)) return hardBreak(index, width, base, parser);
+  }
+  if (
+    source[index] === '\\' &&
+    index + 1 < source.length &&
+    /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(source[index + 1])
+  )
     return {
       nodes: [
         {
@@ -12,6 +35,15 @@ function inline(source: string, index: number, base: number, parser: MarkupParse
         },
       ],
       end: index + 2,
+    };
+  if (
+    source[index] === '_' &&
+    /[\p{L}\p{N}]/u.test(source[index - 1] ?? '') &&
+    /[\p{L}\p{N}]/u.test(source[index + 1] ?? '')
+  )
+    return {
+      nodes: [{ type: 'text', value: '_', span: parser.span(base + index, base + index + 1) }],
+      end: index + 1,
     };
   if (source[index] === '`') {
     let count = 1;
@@ -27,7 +59,11 @@ function inline(source: string, index: number, base: number, parser: MarkupParse
             children: [
               {
                 type: 'text',
-                value: source.slice(index + count, end).replace(/\r?\n/g, ' '),
+                value: (() => {
+                  let value = source.slice(index + count, end).replace(/\r?\n/g, ' ');
+                  if (value.startsWith(' ') && value.endsWith(' ') && /[^ ]/.test(value)) value = value.slice(1, -1);
+                  return value;
+                })(),
                 span: parser.span(base + index + count, base + end),
               },
             ],
@@ -213,14 +249,15 @@ function block(
   const boxed = container(source, index, base, lineEnd, parser);
   if (boxed) return boxed;
   const listed = readList(source, index, base, lineEnd, parser, (raw) => {
-    const match = /^ {0,3}([-*+]|\d+\.)\s+(.*)$/.exec(raw.replace(/\r?\n$/, ''));
+    const match = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(raw.replace(/\r?\n$/, ''));
     if (!match) return;
-    return { depth: 1, ordered: /\d/.test(match[1]), content: match[2] };
+    const indentation = match[1].replace(/\t/g, '    ').length;
+    return { depth: Math.floor(indentation / 2) + 1, ordered: /\d/.test(match[2]), content: match[3] };
   });
   if (listed) return listed;
   const end = lineEnd(index);
   const line = source.slice(index, end).replace(/\r?\n$/, '');
-  const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  const heading = /^ {0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/.exec(line);
   if (!heading) return;
   let content = heading[2];
   let attrs: Metadata = { level: heading[1].length };

@@ -29,6 +29,27 @@ describe('@gneh/expression', () => {
     });
   });
 
+  test('preserves SugarCube loose aliases and definition operators', () => {
+    expect(parseSugarExpression('1 eq "1" and 1 neq "2"').ast).toMatchObject({
+      type: 'LogicalExpression',
+      left: { type: 'BinaryExpression', operator: '==' },
+      right: { type: 'BinaryExpression', operator: '!=' },
+    });
+    expect(parseSugarExpression('def $present and ndef $missing').ast).toMatchObject({
+      type: 'LogicalExpression',
+      left: { type: 'BinaryExpression', operator: '!==' },
+      right: { type: 'BinaryExpression', operator: '===' },
+    });
+    expect(parseSugarExpression('typeof $present').ast).toMatchObject({
+      type: 'UnaryExpression',
+      operator: 'typeof',
+    });
+    expect(parseSugarExpression('({ typeof: 1 }).typeof and def $present').ast).toMatchObject({
+      type: 'LogicalExpression',
+      right: { type: 'BinaryExpression', operator: '!==' },
+    });
+  });
+
   test('parses SugarCube whitespace-or-comma separated macro arguments', () => {
     const arguments_ = parseSugarArguments('"ready" $value, 3');
     expect(arguments_.map((argument) => argument.ast)).toMatchObject([
