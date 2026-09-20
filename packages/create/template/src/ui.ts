@@ -39,6 +39,9 @@ export function createApp(host: HTMLElement, fragments: readonly AnyFragment[], 
     },
   });
   let environment: Environment = options.environment ?? 'story-flow';
+  const page = document.documentElement;
+  const previousPageEnvironment = page.dataset.gnehEnvironment;
+  page.dataset.gnehEnvironment = environment;
   let beat = 0;
   let route = '';
   let contentMount: DOMMount | undefined;
@@ -111,6 +114,7 @@ export function createApp(host: HTMLElement, fragments: readonly AnyFragment[], 
 
   select.onchange = () => {
     environment = select.value as Environment;
+    page.dataset.gnehEnvironment = environment;
     root.dataset.environment = environment;
     beat = 0;
     render(story.view);
@@ -139,6 +143,8 @@ export function createApp(host: HTMLElement, fragments: readonly AnyFragment[], 
       if (choiceMount) renderer.dispose(choiceMount);
       story.dispose();
       root.remove();
+      if (previousPageEnvironment) page.dataset.gnehEnvironment = previousPageEnvironment;
+      else delete page.dataset.gnehEnvironment;
     },
   };
 }

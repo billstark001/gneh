@@ -1,4 +1,4 @@
-import primary, { fragments } from './story/main.inkdown';
+import { fragments } from './story/main.inkdown';
 import { createApp } from './ui';
 import './style.css';
 
@@ -13,9 +13,11 @@ const environment = ['wiki', 'story-flow', 'visual-novel'].includes(requested ??
   : undefined;
 
 const app = createApp(host, Object.values(fragments), {
-  entry: primary.id,
+  entry: 'Start',
   state: { visits: 0 },
   environment,
 });
 
 (window as Window & { gnehApp?: typeof app }).gnehApp = app;
+
+if (import.meta.hot) import.meta.hot.dispose(() => app.dispose());

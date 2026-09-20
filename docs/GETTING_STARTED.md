@@ -26,6 +26,8 @@ my-story/
 
 `ui.ts` and `style.css` are deliberately application code in the vanilla starter. React, Preact, and Vue instead receive native components and lifecycle code; React and Preact are distinct targets and Preact does not use `preact/compat`. Presentation choices are not runtime policies, so the generated UI can be replaced freely.
 
+React and Preact use the workspace's TypeScript 7 CLI. The Vue starter currently pins TypeScript 6 and runs `vue-tsc --noEmit`, because the current Vue checker still consumes the classic compiler API that the TypeScript 7 native CLI package does not export.
+
 ## Vite integration
 
 The starter config enables direct story-module compilation:
@@ -40,16 +42,19 @@ export default defineConfig({
 });
 ```
 
-Story files are ordinary typed ESM imports. The default export is the first Fragment, and `fragments` contains every passage in the file:
+Story files are ordinary typed ESM imports. The application entry chooses its project entry and combines the modules it ships; `fragments` contains every passage in one authoring file:
 
 ```ts
-import Start, { fragments, metadata } from './story/main.inkdown';
+import { fragments, metadata } from './story/main.inkdown';
+const Start = fragments.Start;
 const Card = fragments.Card;
 ```
 
+The default export remains the file's first Fragment as a local convenience, but it is not a hidden project-entry selection.
+
 Vite never writes generated files beside story sources. Include the selected frontend declaration, such as `@gneh/inkdown/client`, in `compilerOptions.types` for conservative module types; use the gneh language server for concrete authoring diagnostics and projections. Compose multiple source modules with explicit imports in application code.
 
-Only explicitly registered native dialect extensions are compiled. Generic `.md`, `.twee`, and `.tw` files require `?gneh`; without it they remain available to other Vite plugins or `?raw` imports.
+Only explicitly registered native dialect extensions are compiled. Generic `.md`, `.twee`, and `.tw` files require `?gneh`; use a value such as `?gneh=karlowe` when the source does not declare its dialect. Without that query they remain available to other Vite plugins, while `?raw`, `?url`, and worker queries always keep their ordinary Vite meaning.
 
 ## Mounting and frameworks
 

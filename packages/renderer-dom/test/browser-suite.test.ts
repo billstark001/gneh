@@ -87,6 +87,21 @@ test('generated Vite applications conform in a real browser', { timeout: 60_000 
       await page.$eval('.gneh-app', (node) => node.dataset.environment === 'wiki'),
       'starter: presentation starts from application-owned options',
     );
+    check(
+      await page.evaluate(() => {
+        const root = getComputedStyle(document.documentElement).backgroundColor;
+        return (
+          document.documentElement.dataset.gnehEnvironment === 'wiki' &&
+          root === getComputedStyle(document.body).backgroundColor &&
+          root !== 'rgba(0, 0, 0, 0)'
+        );
+      }),
+      'starter: presentation environment colors the complete page',
+    );
+    check(
+      (await page.$eval('article', (node) => node.getBoundingClientRect().width)) > 800,
+      'starter: story content is not capped at 800 pixels',
+    );
     await page.locator(aria('button', 'Visit again')).click();
     check(
       await page.evaluate(() => window.gnehApp.story.state.visits === 1),
@@ -103,6 +118,14 @@ test('generated Vite applications conform in a real browser', { timeout: 60_000 
     check(
       await page.$eval('.gneh-app', (node) => node.dataset.environment === 'visual-novel'),
       'starter: template owns environment switching',
+    );
+    check(
+      await page.evaluate(
+        () =>
+          document.documentElement.dataset.gnehEnvironment === 'visual-novel' &&
+          getComputedStyle(document.body).backgroundColor === 'rgb(16, 23, 39)',
+      ),
+      'starter: switching presentation updates the page background',
     );
     check(
       await page.$eval('footer', (node) => getComputedStyle(node).display === 'flex'),

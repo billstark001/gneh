@@ -30,6 +30,7 @@ export function createProject(destination: string, template: TemplateKind = 'van
   const manifestPath = path.join(target, 'package.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
     name: string;
+    scripts: Record<string, string>;
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
   };
@@ -46,6 +47,9 @@ export function createProject(destination: string, template: TemplateKind = 'van
   } else if (template === 'vue') {
     manifest.dependencies.vue = '^3.5.0';
     manifest.devDependencies['@vitejs/plugin-vue'] = '^6.0.0';
+    manifest.devDependencies.typescript = '^6.0.3';
+    manifest.devDependencies['vue-tsc'] = '^3.3.11';
+    manifest.scripts.typecheck = 'vue-tsc --noEmit';
   }
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
   if (template !== 'vanilla') {

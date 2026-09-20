@@ -1,16 +1,25 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { DOMRenderer, type DOMMount } from '@gneh/renderer-dom';
-import primary, { fragments } from './story/main.inkdown';
-import { createStory } from './story';
+import type { Story } from '@gneh/runtime';
 
-const story = createStory(Object.values(fragments), { entry: primary.id, state: { visits: 0 } }).start();
+const { story } = defineProps<{ story: Story }>();
 const host = ref<HTMLElement>();
 const current = ref(story.current);
 const revision = ref(0);
 const renderer = new DOMRenderer();
 const mount = shallowRef<DOMMount>();
 let unsubscribe: (() => void) | undefined;
+
+function save() {
+  localStorage.setItem('gneh:save', story.save());
+}
+
+function load() {
+  const saved = localStorage.getItem('gneh:save');
+  if (saved) story.load(saved);
+}
+
 onMounted(() => {
   unsubscribe = story.subscribe((view) => {
     if (!host.value) return;
@@ -23,7 +32,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unsubscribe?.();
   if (mount.value) renderer.dispose(mount.value);
-  story.dispose();
 });
 </script>
 
@@ -33,13 +41,18 @@ onBeforeUnmount(() => {
       <strong>GNĒH <small>Vue starter</small></strong>
       <button :disabled="!story.canUndo" @click="story.undo()">Undo</button
       ><button :disabled="!story.canRedo" @click="story.redo()">Redo</button>
+      <button @click="save">Save</button>
+      <button @click="load">Load</button>
     </header>
     <div class="layout">
       <aside>
         <p>PASSAGES</p>
         <nav>
           <button
-            v-for="fragment in [...story.fragments.values()].filter((item) => item.metadata.nav !== false)"
+            v-for="fragment in [...story.fragments.values()].filter(
+              (item) =>
+                item.metadata.nav !== false && !(Array.isArray(item.metadata.params) && item.metadata.params.length),
+            )"
             :key="fragment.id"
             :aria-current="fragment.id === current ? 'page' : undefined"
             @click="story.navigate(fragment.id)"

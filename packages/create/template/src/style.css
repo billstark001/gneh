@@ -1,11 +1,31 @@
 :root {
+  --gneh-page-background: #141921;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   color: #25352c;
-  background: #f5f3ee;
+  background-color: var(--gneh-page-background);
+  color-scheme: dark;
+}
+:root[data-gneh-environment='wiki'] {
+  --gneh-page-background: #f5f3ee;
+  color-scheme: light;
+}
+:root[data-gneh-environment='story-flow'] {
+  --gneh-page-background: #141921;
+  color-scheme: dark;
+}
+:root[data-gneh-environment='visual-novel'] {
+  --gneh-page-background: #101727;
+  color-scheme: dark;
 }
 body {
   margin: 0;
   min-width: 20rem;
+}
+body,
+#app {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--gneh-page-background);
 }
 button,
 select {
@@ -18,6 +38,7 @@ select {
   --line: #dce2d9;
   --accent: #256c52;
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--ink);
   background: #f5f3ee;
   line-height: 1.7;
@@ -99,7 +120,8 @@ main {
   margin-bottom: 2rem;
 }
 article {
-  max-width: 50rem;
+  width: 100%;
+  min-width: 0;
   font-size: 1.05rem;
 }
 article h1 {

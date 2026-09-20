@@ -13,7 +13,7 @@ gneh 0.1 is a working reference implementation, not an audited game engine or an
 | Reactivity | Transaction-level full-view recomputation with keyed identities; not fine-grained signals |
 | Types | Typed Fragment props and state/props projection; external module bindings remain conservative |
 | LSP | Protocol diagnostics, completion, hover, definitions, references, and conservative rename; no editor extension |
-| Presentation | One DOM renderer plus an editable three-mode starter template; no Three.js or terminal renderer is included |
+| Presentation | One DOM renderer, an editable three-mode vanilla starter, and framework-native story-flow starters; no Three.js or terminal renderer is included |
 | Visual novel | Text beats, dialogue, and choices; no asset timeline, audio, skip, or read-history engine |
 | Hot reload | Normal Vite module propagation; the starter does not preserve Story state across module replacement |
 | Migration | Supported-profile rewrite plus diagnostics; not a universal legacy importer |

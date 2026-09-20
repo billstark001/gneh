@@ -1,8 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DOMRenderer, type DOMMount } from '@gneh/renderer-dom';
 import type { View } from '@gneh/core';
-import primary, { fragments } from './story/main.inkdown';
-import { createStory } from './story';
+import type { Story } from '@gneh/runtime';
 
 function StoryView({ view }: { view: View[] }) {
   const host = useRef<HTMLElement>(null);
@@ -23,15 +22,7 @@ function StoryView({ view }: { view: View[] }) {
   return <article ref={host} />;
 }
 
-export function App() {
-  const story = useMemo(
-    () =>
-      createStory(Object.values(fragments), {
-        entry: primary.id,
-        state: { visits: 0 },
-      }).start(),
-    [],
-  );
+export function App({ story }: { story: Story }) {
   const [view, setView] = useState(() => story.view);
   const [, redraw] = useState(0);
   useLayoutEffect(
@@ -42,7 +33,6 @@ export function App() {
       }),
     [story],
   );
-  useLayoutEffect(() => () => story.dispose(), [story]);
   return (
     <div className="gneh-app" data-environment="story-flow">
       <header className="toolbar">
@@ -70,7 +60,11 @@ export function App() {
           <p>PASSAGES</p>
           <nav>
             {[...story.fragments.values()]
-              .filter((fragment) => fragment.metadata.nav !== false)
+              .filter(
+                (fragment) =>
+                  fragment.metadata.nav !== false &&
+                  !(Array.isArray(fragment.metadata.params) && fragment.metadata.params.length),
+              )
               .map((fragment) => (
                 <button
                   key={fragment.id}

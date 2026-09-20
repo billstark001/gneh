@@ -11,3 +11,5 @@ npm create @gneh@latest my-vue-story -- --template vue
 ```
 
 The generated application owns its layout, controls and CSS. Vanilla, React, Preact, and Vue templates contain native lifecycle and component code; React and Preact are separate targets and the Preact project does not install or use `preact/compat`. Every template explicitly registers Inkdown and imports its story modules from application code.
+
+The Vue template uses `vue-tsc` with TypeScript 6 for SFC type checking; the other templates use the TypeScript 7 CLI.
