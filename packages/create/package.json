@@ -20,6 +20,11 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@gneh/core": "workspace:*",
+    "@gneh/inkdown": "workspace:*",
+    "@gneh/renderer-dom": "workspace:*",
+    "@gneh/runtime": "workspace:*",
+    "@gneh/vite": "workspace:*",
     "@preact/preset-vite": "^2.10.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
