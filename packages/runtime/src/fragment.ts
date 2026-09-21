@@ -22,6 +22,8 @@ import {
 import { CallableRuntime, type ChildrenInvocation } from './callables.js';
 import { definePassage, isAuthoredCallable } from './definition.js';
 
+const maxIRDepth = 128;
+
 export function defineIRFragment(
   ir: PassageIR,
   options: {
@@ -66,7 +68,17 @@ export function defineIRFragment(
       }
     }
   };
+  let nodeDepth = 0;
   function nodes(body: StoryNode[], ctx: FragmentContext, parent: Scope, path: string, existing = false): View[] {
+    invariant(nodeDepth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');
+    nodeDepth++;
+    try {
+      return renderNodes(body, ctx, parent, path, existing);
+    } finally {
+      nodeDepth--;
+    }
+  }
+  function renderNodes(body: StoryNode[], ctx: FragmentContext, parent: Scope, path: string, existing = false): View[] {
     const scope = existing ? parent : blockScope(body, parent, ctx, path);
     if (!inheritedNames.has(scope)) inheritedNames.set(scope, new Set(Object.keys(scope)));
     return body.flatMap((node, index): View[] => {

@@ -10,6 +10,9 @@ import { safeKey } from './json.js';
 import { bindingOwner, flattenScope, hasBinding } from './scope.js';
 import type { EvaluationContext, Scope } from './view.js';
 
+const maxExpressionSteps = 100_000;
+const maxExpressionCallDepth = 128;
+
 const intrinsicValues = Object.freeze({
   Math: Object.freeze(
     Object.fromEntries(
@@ -109,8 +112,8 @@ const renderEvaluator = new JSEvaluator(
   {},
   {
     writes: 'deny',
-    maxSteps: 100_000,
-    maxCallDepth: 128,
+    maxSteps: maxExpressionSteps,
+    maxCallDepth: maxExpressionCallDepth,
     isCallableAllowed: allowAllCalls,
   },
 );
@@ -120,8 +123,8 @@ const effectEvaluator = new JSEvaluator(
   {
     writes: 'commit',
     allowMemberWrites: true,
-    maxSteps: 100_000,
-    maxCallDepth: 128,
+    maxSteps: maxExpressionSteps,
+    maxCallDepth: maxExpressionCallDepth,
     isCallableAllowed: allowAllCalls,
   },
 );

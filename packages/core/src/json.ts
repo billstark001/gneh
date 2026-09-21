@@ -9,6 +9,8 @@ export type State = Record<string, Json>;
 /** Keys rejected at every data boundary to avoid prototype traversal/pollution. */
 export const dangerousKeys = new Set(['__proto__', 'prototype', 'constructor']);
 
+const maxJsonDepth = 128;
+
 export function safeKey(value: unknown): string {
   invariant(
     typeof value === 'string' || typeof value === 'number',
@@ -29,13 +31,21 @@ export function assertJson(value: unknown, path = '$', seen = new Set<unknown>()
   }
   invariant(typeof value === 'object' && value !== null, 'E_STATE', `Non-serializable value at ${path}`);
   invariant(!seen.has(value), 'E_STATE', `Cyclic state at ${path}`);
+  invariant(seen.size < maxJsonDepth, 'E_STATE', `JSON nesting exceeds the depth limit at ${path}`);
   invariant(
     Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null,
     'E_STATE',
     `State must contain only plain objects at ${path}`,
   );
+  const entries = Object.entries(value);
+  if (Array.isArray(value))
+    invariant(
+      entries.length === value.length && entries.every(([key], index) => key === String(index)),
+      'E_STATE',
+      `State arrays must be dense and contain no named properties at ${path}`,
+    );
   seen.add(value);
-  for (const [key, child] of Object.entries(value)) {
+  for (const [key, child] of entries) {
     safeKey(key);
     assertJson(child, `${path}.${key}`, seen);
   }
@@ -44,13 +54,9 @@ export function assertJson(value: unknown, path = '$', seen = new Set<unknown>()
 
 export function cloneState<T>(value: T): T {
   assertJson(value);
-  const copy = (item: Json): Json =>
-    Array.isArray(item)
-      ? item.map(copy)
-      : item !== null && typeof item === 'object'
-        ? Object.fromEntries(Object.entries(item).map(([key, child]) => [key, copy(child)]))
-        : item;
-  return copy(value) as T;
+  // The host implementation is optimized for graph traversal and preserves
+  // numeric edge cases such as -0 that a JSON stringify/parse clone would lose.
+  return structuredClone(value);
 }
 
 export function display(value: unknown): string {

@@ -33,15 +33,25 @@ export interface TraceEvent {
 }
 
 export interface StoryOptions {
+  /** Initial passage id; required when a PassageSet has no unique `[start]` passage. */
   entry?: string;
+  /** JSON state merged over StoryIR defaults, or used as the initial state for a PassageSet. */
   state?: State;
+  /** Enable actions and mutable regions; set false for deterministic snapshot rendering. Defaults to true. */
   live?: boolean;
+  /** Maximum retained undo and redo snapshots. Zero disables history; defaults to 100. */
   historyLimit?: number;
+  /** Evaluation steps allowed per transaction or render pass. Defaults to 100,000. */
   maxSteps?: number;
+  /** Trusted application values and Fragment bindings exposed to portable expressions. */
   bindings?: Record<string, unknown>;
+  /** Phase-declared implementations for `invoke` nodes required by compiled story IR. */
   runtimeExtensions?: Readonly<Record<string, RuntimeExtension>>;
+  /** Unsigned 32-bit initial state for deterministic effect-time randomness. */
   seed?: number;
+  /** Receives cloned state snapshots for lifecycle tracing. */
   onTrace?: (event: TraceEvent) => void;
+  /** Optional trusted compiler bridge used by explicit runtime wikification features. */
   wikify?: (source: string, dialect?: Dialect) => Fragment;
   /** Renderer/application-owned effects. The story kernel never reaches for DOM or browser globals. */
   host?: (operation: string, args: readonly unknown[], story: Story) => unknown;

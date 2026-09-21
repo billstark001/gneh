@@ -19,6 +19,9 @@ import {
 import { deepReadonly } from './readonly.js';
 import { isAuthoredCallable, type AuthoredCallable } from './definition.js';
 
+const maxIRDepth = 128;
+const maxCallDepth = 128;
+
 interface RuntimeCallable {
   readonly kind: 'gneh.callable';
   readonly phase: CallableIR['phase'];
@@ -45,42 +48,47 @@ const isSerializedCallable = (value: unknown): value is SerializedCallable =>
 /** Owns declaration lookup and the explicit parent-linked environments captured by authored callables. */
 export class CallableRuntime implements EffectCallableRuntime {
   private readonly declarations = new Map<string, CallableIR>();
+  private callDepth = 0;
 
   constructor(ir: PassageIR) {
-    this.collectNodes(ir.body);
+    this.collectNodes(ir.body, 0);
   }
 
-  private collectCallable(callable: CallableIR): void {
+  private collectCallable(callable: CallableIR, depth: number): void {
+    invariant(depth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');
     this.declarations.set(callable.id, callable);
-    if (callable.phase === 'view') this.collectNodes(callable.body as StoryNode[]);
-    else if (callable.phase === 'effect') this.collectEffects(callable.body as EffectNode[]);
-    else this.collectEffects((callable.body as ValueCallableBodyIR).effects);
+    if (callable.phase === 'view') this.collectNodes(callable.body as StoryNode[], depth);
+    else if (callable.phase === 'effect') this.collectEffects(callable.body as EffectNode[], depth);
+    else this.collectEffects((callable.body as ValueCallableBodyIR).effects, depth);
   }
 
-  private collectEffects(effects: EffectNode[]): void {
+  private collectEffects(effects: EffectNode[], depth: number): void {
+    invariant(depth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');
     for (const effect of effects) {
       if (effect.type === 'assign-callable' || effect.type === 'publish-callable')
-        this.collectCallable(effect.callable);
+        this.collectCallable(effect.callable, depth + 1);
       else if (effect.type === 'call' && effect.call.callee.type === 'inline')
-        this.collectCallable(effect.call.callee.callable);
+        this.collectCallable(effect.call.callee.callable, depth + 1);
       else if (effect.type === 'if') {
-        this.collectEffects(effect.yes);
-        this.collectEffects(effect.no);
-      } else if (effect.type === 'each') this.collectEffects(effect.body);
+        this.collectEffects(effect.yes, depth + 1);
+        this.collectEffects(effect.no, depth + 1);
+      } else if (effect.type === 'each') this.collectEffects(effect.body, depth + 1);
     }
   }
 
-  private collectNodes(nodes: StoryNode[]): void {
+  private collectNodes(nodes: StoryNode[], depth: number): void {
+    invariant(depth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');
     for (const node of nodes) {
-      if (node.type === 'callable') this.collectCallable(node.callable);
+      if (node.type === 'callable') this.collectCallable(node.callable, depth + 1);
       if (node.type === 'if') {
-        this.collectNodes(node.yes);
-        this.collectNodes(node.no);
-      } else if ('children' in node) this.collectNodes(node.children);
-      if (node.type === 'effect') this.collectEffects(node.effects);
+        this.collectNodes(node.yes, depth + 1);
+        this.collectNodes(node.no, depth + 1);
+      } else if ('children' in node) this.collectNodes(node.children, depth + 1);
+      if (node.type === 'effect') this.collectEffects(node.effects, depth + 1);
       if ((node.type === 'button' || node.type === 'control') && node.action.callee.type === 'inline')
-        this.collectCallable(node.action.callee.callable);
-      if (node.type === 'call' && node.call.callee.type === 'inline') this.collectCallable(node.call.callee.callable);
+        this.collectCallable(node.action.callee.callable, depth + 1);
+      if (node.type === 'call' && node.call.callee.type === 'inline')
+        this.collectCallable(node.call.callee.callable, depth + 1);
     }
   }
 
@@ -148,7 +156,26 @@ export class CallableRuntime implements EffectCallableRuntime {
     );
   }
 
+  private boundedCall<T>(invoke: () => T): T {
+    invariant(this.callDepth < maxCallDepth, 'CALL_DEPTH', 'Maximum authored callable recursion exceeded.');
+    this.callDepth++;
+    try {
+      return invoke();
+    } finally {
+      this.callDepth--;
+    }
+  }
+
   invokeEffect(call: CallableCallIR, ctx: FragmentContext, caller: Scope, values?: readonly unknown[]): void {
+    this.boundedCall(() => this.invokeEffectUnchecked(call, ctx, caller, values));
+  }
+
+  private invokeEffectUnchecked(
+    call: CallableCallIR,
+    ctx: FragmentContext,
+    caller: Scope,
+    values?: readonly unknown[],
+  ): void {
     const target = this.resolve(this.callee(call, ctx, caller));
     invariant(target, 'E_CALLABLE', 'An effect call requires an authored callable.');
     invariant(target.phase === 'effect', 'E_CALLABLE_PHASE', `Cannot call a ${target.phase} callable as an effect.`);
@@ -167,6 +194,10 @@ export class CallableRuntime implements EffectCallableRuntime {
   }
 
   invokeValue(value: unknown, args: readonly unknown[], ctx: FragmentContext): unknown {
+    return this.boundedCall(() => this.invokeValueUnchecked(value, args, ctx));
+  }
+
+  private invokeValueUnchecked(value: unknown, args: readonly unknown[], ctx: FragmentContext): unknown {
     const target = this.resolve(value);
     invariant(target, 'E_CALLABLE', 'A value call requires an authored callable.');
     invariant(target.phase === 'value', 'E_CALLABLE_PHASE', `Cannot call a ${target.phase} callable as a value.`);

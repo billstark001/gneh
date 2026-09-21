@@ -19,8 +19,10 @@ import {
 } from '@gneh/core';
 import { deepReadonly } from './readonly.js';
 import { type Passage, type PassageSet, isPassage } from './definition.js';
-import { createFrame, disposeFrame, initializeStoryInput, readSave, validateSnapshot } from './story-support.js';
+import * as storySupport from './story-support.js';
 import type { Frame, SaveData, Snapshot, StoryOptions, TraceEvent } from './story-types.js';
+
+const maxFragmentDepth = 128;
 
 export type { SaveData, Snapshot, StoryOptions, TraceEvent } from './story-types.js';
 
@@ -61,9 +63,9 @@ export class Story {
   private renderDepth = 0;
   private settingUp = false;
   constructor(input: StoryIR | PassageSet, options: StoryOptions = {}) {
-    this.options = options;
-    this.live = options.live ?? true;
-    const initialized = initializeStoryInput(input, options, (passage) => this.register(passage));
+    this.options = { ...options };
+    this.live = this.options.live ?? true;
+    const initialized = storySupport.initializeStoryInput(input, this.options, (passage) => this.register(passage));
     this.route = initialized.route;
     this.values = initialized.values;
     this.setup = initialized.setup;
@@ -154,8 +156,7 @@ export class Story {
     this.options.onTrace?.({ type, fragment: this.route, state: cloneState(this.values) });
   }
   private frame(target: AnyFragment, props: FragmentProps, key: string): Frame {
-    // `key` is a structural mount path, not a passage id. The same Fragment may
-    // therefore be included more than once without sharing regions or cleanups.
+    // Structural mount keys let repeated Fragment includes keep regions and cleanups isolated.
     for (const name of Array.isArray(target.metadata.params) ? target.metadata.params : []) {
       if (
         typeof name === 'string' &&
@@ -165,7 +166,7 @@ export class Story {
     }
     let frame = this.frames.get(key);
     if (frame && frame.fragment !== target) {
-      disposeFrame(frame);
+      storySupport.disposeFrame(frame);
       this.frames.delete(key);
       frame = undefined;
     }
@@ -175,7 +176,7 @@ export class Story {
         'CAPABILITY_LIVE',
         `${target.id} requires live rendering.`,
       );
-      frame = createFrame(`i${this.frameSerial++}:${key}`, target, props);
+      frame = storySupport.createFrame(`i${this.frameSerial++}:${key}`, target, props);
       this.frames.set(key, frame);
       this.newFrames = true;
     }
@@ -191,7 +192,7 @@ export class Story {
     return frame;
   }
   private renderFrame(frame: Frame): View[] {
-    invariant(this.renderDepth < 128, 'FRAGMENT_DEPTH', 'Maximum fragment recursion exceeded.');
+    invariant(this.renderDepth < maxFragmentDepth, 'FRAGMENT_DEPTH', 'Maximum fragment recursion exceeded.');
     this.renderDepth++;
     try {
       frame.declaredRegions.clear();
@@ -201,8 +202,7 @@ export class Story {
     }
   }
   private context(frame: Frame, phase: 'render' | 'enter' | 'action'): FragmentContext {
-    // The context object uses accessors whose `this` is the context itself; retain
-    // an explicit kernel reference so every callback closes over the same Story.
+    // Keep an explicit kernel reference because accessors bind `this` to the context object.
     // oxlint-disable-next-line typescript/no-this-alias
     const story = this;
     let includes = 0;
@@ -243,7 +243,7 @@ export class Story {
       random(min, max) {
         invariant(phase !== 'render', 'E_PURITY', 'Randomness must be stored during enter/actions.');
         invariant(
-          Number.isSafeInteger(min) && Number.isSafeInteger(max) && max >= min,
+          Number.isSafeInteger(min) && Number.isSafeInteger(max) && max >= min && Number.isSafeInteger(max - min + 1),
           'E_RANDOM',
           'Invalid random range.',
         );
@@ -329,8 +329,7 @@ export class Story {
         return story.regionHandle(frame, name);
       },
       regionView(name, fallback) {
-        // Declaring during render makes a handle valid only while the region is
-        // actually mounted. Overrides belong to the owning frame, not story state.
+        // A handle is valid only while mounted; overrides belong to its frame, not story state.
         safeKey(name);
         frame.declaredRegions.add(name);
         const override = frame.regions.get(name);
@@ -426,8 +425,7 @@ export class Story {
       action();
       return;
     }
-    // Copy-on-transaction isolates mutations until validation, rendering and
-    // navigation all succeed. Any failure restores state, RNG and both histories.
+    // Copy-on-transaction isolates changes; failure restores state, RNG, and both histories.
     const before = this.snapshot();
     const oldPast = [...this.past],
       oldFuture = [...this.future];
@@ -487,7 +485,7 @@ export class Story {
       } while (this.newFrames);
       for (const [key, frame] of this.frames)
         if (!this.visited.has(key)) {
-          disposeFrame(frame);
+          storySupport.disposeFrame(frame);
           this.frames.delete(key);
         }
       assertJson(this.values);
@@ -502,11 +500,11 @@ export class Story {
     for (const listener of this.listeners) listener(this.currentView);
   }
   private resetFrames(): void {
-    for (const frame of this.frames.values()) disposeFrame(frame);
+    for (const frame of this.frames.values()) storySupport.disposeFrame(frame);
     this.frames.clear();
   }
   private resetSetupFrames(): void {
-    for (const frame of this.setupFrames.values()) disposeFrame(frame);
+    for (const frame of this.setupFrames.values()) storySupport.disposeFrame(frame);
     this.setupFrames.clear();
   }
   private runSetup(): void {
@@ -518,7 +516,7 @@ export class Story {
     this.settingUp = true;
     try {
       for (const passage of this.setup) {
-        const frame = createFrame(`setup:${passage.id}`, passage, {}, true);
+        const frame = storySupport.createFrame(`setup:${passage.id}`, passage, {}, true);
         this.setupFrames.set(passage.id, frame);
         passage.enter?.(this.context(frame, 'enter'), {});
         passage.render(this.context(frame, 'enter'), {});
@@ -534,7 +532,7 @@ export class Story {
     }
   }
   private restoreSnapshot(snapshot: Snapshot): void {
-    validateSnapshot(snapshot, (id) => this.resolve(id));
+    storySupport.validateSnapshot(snapshot, (id) => this.resolve(id));
     this.route = snapshot.current;
     this.props = cloneState(snapshot.props);
     this.values = cloneState(snapshot.state);
@@ -550,6 +548,7 @@ export class Story {
     const previous = this.past.pop();
     if (!previous) return false;
     this.future.push(this.snapshot());
+    if (this.future.length > (this.options.historyLimit ?? 100)) this.future.shift();
     this.restoreSnapshot(previous);
     return true;
   }
@@ -557,6 +556,7 @@ export class Story {
     const next = this.future.pop();
     if (!next) return false;
     this.past.push(this.snapshot());
+    if (this.past.length > (this.options.historyLimit ?? 100)) this.past.shift();
     this.restoreSnapshot(next);
     return true;
   }
@@ -571,14 +571,14 @@ export class Story {
     return JSON.stringify(data);
   }
   load(source: string): void {
-    const data = readSave(source, this.identity, (id) => this.resolve(id));
+    const data = storySupport.readSave(source, this.identity, (id) => this.resolve(id));
     const before = this.snapshot();
     const beforePast = this.past;
     const beforeFuture = this.future;
     const beforeRegistry = new Map(this.registry);
     try {
-      this.past = data.past.slice(-(this.options.historyLimit ?? 100));
-      this.future = data.future.slice(-(this.options.historyLimit ?? 100));
+      this.past = storySupport.boundedHistory(data.past, this.options.historyLimit);
+      this.future = storySupport.boundedHistory(data.future, this.options.historyLimit);
       this.route = data.present.current;
       this.props = cloneState(data.present.props);
       this.values = cloneState(data.present.state);
@@ -589,6 +589,7 @@ export class Story {
       this.skipEnter = true;
       this.refresh();
       this.trace('restore');
+      this.started = true;
     } catch (error) {
       this.resetFrames();
       this.route = before.current;
@@ -619,6 +620,7 @@ export class Story {
       this.resetFrames();
       this.runSetup();
       this.refresh();
+      this.started = true;
     } catch (error) {
       this.resetFrames();
       this.route = before.current;

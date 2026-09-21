@@ -1,4 +1,13 @@
-import { ABI_VERSION, assertJson, cloneState, invariant, type AnyFragment, type State, type StoryIR } from '@gneh/core';
+import {
+  ABI_VERSION,
+  GnehError,
+  assertJson,
+  cloneState,
+  invariant,
+  type AnyFragment,
+  type State,
+  type StoryIR,
+} from '@gneh/core';
 import { isPassage, passageSetSetup, type Passage, type PassageSet } from './definition.js';
 import { defineIRFragment } from './fragment.js';
 import type { Frame, SaveData, Snapshot, StoryOptions } from './story-types.js';
@@ -14,6 +23,21 @@ export function initializeStoryInput(
   options: StoryOptions,
   register: (passage: AnyFragment) => void,
 ): StoryInitialization {
+  invariant(
+    options.historyLimit === undefined || (Number.isSafeInteger(options.historyLimit) && options.historyLimit >= 0),
+    'HISTORY_LIMIT',
+    'StoryOptions.historyLimit must be a non-negative safe integer.',
+  );
+  invariant(
+    options.maxSteps === undefined || (Number.isSafeInteger(options.maxSteps) && options.maxSteps > 0),
+    'STEP_LIMIT',
+    'StoryOptions.maxSteps must be a positive safe integer.',
+  );
+  invariant(
+    options.seed === undefined || (Number.isInteger(options.seed) && options.seed >= 0 && options.seed <= 4294967295),
+    'RANDOM_SEED',
+    'StoryOptions.seed must be an unsigned 32-bit integer.',
+  );
   const storyIR = input as StoryIR;
   if (typeof storyIR.abi === 'number' && Array.isArray(storyIR.passages)) {
     invariant(storyIR.abi === ABI_VERSION, 'ABI_VERSION', `Unsupported story ABI: ${storyIR.abi}`);
@@ -68,6 +92,7 @@ export function createFrame(id: string, fragment: AnyFragment, props: Frame['pro
 
 export function validateSnapshot(value: Snapshot, resolve: (id: string) => unknown): void {
   invariant(value && typeof value === 'object', 'SAVE_SHAPE', 'Invalid save snapshot.');
+  invariant(typeof value.current === 'string', 'SAVE_ROUTE', 'Saved route must be a string.');
   resolve(value.current);
   assertJson(value.state);
   assertJson(value.props);
@@ -88,6 +113,11 @@ export function validateSnapshot(value: Snapshot, resolve: (id: string) => unkno
   );
 }
 
+/** Apply the configured history bound without `slice(-0)` accidentally retaining every entry. */
+export function boundedHistory(snapshots: Snapshot[], limit = 100): Snapshot[] {
+  return limit === 0 ? [] : snapshots.slice(-limit);
+}
+
 export function disposeFrame(frame: Frame): void {
   frame.alive = false;
   for (const cleanup of frame.cleanups) {
@@ -105,7 +135,18 @@ export function disposeFrame(frame: Frame): void {
 }
 
 export function readSave(source: string, identity: string, resolve: (id: string) => unknown): SaveData {
-  const data = JSON.parse(source) as SaveData;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch (error) {
+    throw new GnehError('SAVE_JSON', `Invalid save JSON: ${(error as Error).message}`);
+  }
+  invariant(
+    parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed),
+    'SAVE_SHAPE',
+    'Invalid save data.',
+  );
+  const data = parsed as SaveData;
   invariant(
     data.abi === ABI_VERSION && data.story === identity,
     'SAVE_STORY',

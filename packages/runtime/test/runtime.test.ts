@@ -113,14 +113,32 @@ test('save/load and undo restore persistent state, not imperative region overrid
 
 test('invalid save identity, props and prototype-bearing state are rejected', () => {
   const s = story('Hi');
+  assert.throws(() => s.load('{'), /SAVE_JSON|Invalid save JSON/);
   const data = JSON.parse(s.save());
   data.story = 'not-this-story';
   assert.throws(() => s.load(JSON.stringify(data)));
   data.story = JSON.parse(s.save()).story;
   data.present.props = [];
   assert.throws(() => s.load(JSON.stringify(data)));
+  data.present.props = {};
+  data.present.current = 7;
+  assert.throws(() => s.load(JSON.stringify(data)), /route.*string/i);
   assert.throws(() => assertJson(JSON.parse('{"__proto__":{"polluted":true}}')));
   assert.throws(() => assertJson(new Date()));
+});
+
+test('loading with a zero history limit does not retain saved undo or redo entries', () => {
+  const source = story('Ready', 'inkdown', { state: { count: 0 } });
+  source.mutate((state) => (state.count += 1));
+  source.mutate((state) => (state.count += 1));
+  source.undo();
+  assert.equal(source.canUndo, true);
+  assert.equal(source.canRedo, true);
+
+  const loaded = story('Ready', 'inkdown', { state: { count: 0 }, historyLimit: 0 });
+  loaded.load(source.save());
+  assert.equal(loaded.canUndo, false);
+  assert.equal(loaded.canRedo, false);
 });
 
 test('keyed includes preserve local lifetime on reordering', () => {
@@ -180,6 +198,21 @@ test('recursive fragments fail with a bounded, meaningful diagnostic', () => {
   assert.throws(() => new Story(definePassages(f), { entry: 'Recursion' }).view, /recursion/i);
 });
 
+test('recursive authored views fail before overflowing the JavaScript stack', () => {
+  assert.throws(
+    () =>
+      story(`@view recurse() { @recurse() }
+@recurse()`),
+    /IR nesting/i,
+  );
+});
+
+test('recursive authored actions fail before overflowing the JavaScript stack', () => {
+  const instance = story(`@action recurse() { @call recurse(); }
+[[Go => recurse]]`);
+  assert.throws(() => click(instance, 'Go'), /callable recursion/i);
+});
+
 test('duplicate structural keys roll back the action', () => {
   const s = story(
     `@each (item of $items; key item.id) {
@@ -227,6 +260,25 @@ test('random is deterministic, snapshotted, and forbidden during render', () => 
     b = story(src, 'inkdown', { state: { roll: 0 }, seed: 3 });
   assert.equal(a.state.roll, b.state.roll);
   assert.throws(() => story('{{ random(1,2) }}'), /render|store|pure/i);
+  assert.throws(
+    () => story('@do $roll = random(-9007199254740991, 9007199254740991)', 'inkdown', { state: { roll: 0 } }),
+    /random range/i,
+  );
+});
+
+test('runtime limits cannot be disabled with non-finite or wrapping options', () => {
+  for (const options of [{ historyLimit: Infinity }, { maxSteps: NaN }, { seed: -1 }, { seed: 4294967296 }])
+    assert.throws(() => story('Hello', 'inkdown', options));
+});
+
+test('validated runtime limits are snapshotted instead of retaining the options object', () => {
+  const options = { state: { count: 0 }, historyLimit: 1 };
+  const instance = story('Ready', 'inkdown', options);
+  options.historyLimit = Infinity;
+  instance.mutate((state) => (state.count += 1));
+  instance.mutate((state) => (state.count += 1));
+  assert.equal(instance.undo(), true);
+  assert.equal(instance.undo(), false);
 });
 
 test('expression iteration consumes a finite execution budget', () => {
