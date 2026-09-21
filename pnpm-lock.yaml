@@ -106,6 +106,27 @@ importers:
         specifier: workspace:*
         version: link:../source
 
+  packages/conformance:
+    dependencies:
+      '@gneh/compiler':
+        specifier: workspace:*
+        version: link:../compiler
+      '@gneh/inkdown':
+        specifier: workspace:*
+        version: link:../inkdown
+      '@gneh/karlowe':
+        specifier: workspace:*
+        version: link:../karlowe
+      '@gneh/renderer-xml':
+        specifier: workspace:*
+        version: link:../renderer-xml
+      '@gneh/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@gneh/sugarcast':
+        specifier: workspace:*
+        version: link:../sugarcast
+
   packages/core:
     dependencies:
       pure-expr:

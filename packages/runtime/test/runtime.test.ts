@@ -3,8 +3,15 @@ import { assert, story, text, click, compiled } from './helpers.js';
 import { Story, defineIRFragment, definePassage, definePassages, v } from '../dist/index.js';
 import { assertJson } from '../../core/dist/index.js';
 
-const source =
-  ':: Start [start]\n@do $visits += 1\n@action hit { @do $hp -= 1; }\nHP: $hp / visit $visits\n[[Hit => hit]]\n@region notice { Empty }\n[[Next->End]]\n:: End\nDone';
+const source = `:: Start [start]
+@do $visits += 1
+@action hit { @do $hp -= 1; }
+HP: $hp / visit $visits
+[[Hit => hit]]
+@region notice { Empty }
+[[Next->End]]
+:: End
+Done`;
 
 test('entry effects run once per mount, not once per reactive render', () => {
   const s = story(source, 'inkdown', { state: { hp: 3, visits: 0 } });
@@ -29,7 +36,9 @@ test('transactions update the full semantic view and checkpoint state', () => {
 
 test('effect expressions commit member assignments and updates through the story transaction', () => {
   const s = story(
-    '@action hurt { @do $player.hp -= 1; @do $items[0].count++; }\n{{ $player.hp }} / {{ $items[0].count }}\n[[Hurt => hurt]]',
+    `@action hurt { @do $player.hp -= 1; @do $items[0].count++; }
+{{ $player.hp }} / {{ $items[0].count }}
+[[Hurt => hurt]]`,
     'inkdown',
     { state: { player: { hp: 3 }, items: [{ count: 0 }] } },
   );
@@ -37,72 +46,6 @@ test('effect expressions commit member assignments and updates through the story
   assert.deepEqual(s.state, { player: { hp: 2 }, items: [{ count: 1 }] });
   assert.equal(s.undo(), true);
   assert.deepEqual(s.state, { player: { hp: 3 }, items: [{ count: 0 }] });
-});
-
-test('Inkdown effects compose binding patterns, control flow and nested action calls', () => {
-  const s = story(
-    `@action add(amount) {
-  @do $total += amount;
-}
-@action collect({bonus = 2}) {
-  @let [first, ...rest] = $values;
-  @if (first > 0) {
-    @call add(first + bonus);
-    @each (value of rest) {
-      @call add(value);
-    }
-  } @else {
-    @do $total = -1;
-  }
-}
-Total: {{ $total }}
-[[Collect => collect({})]]`,
-    'inkdown',
-    { state: { total: 0, values: [1, 3, 4] } },
-  );
-  click(s, 'Collect');
-  assert.equal(s.state.total, 10);
-  assert.match(text(s.view), /Total: 10/);
-});
-
-test('@let may write Story state while @const remains lexical', () => {
-  const instance = story('@let $value = 2\n@const _fixed = 3\n{{ $value + _fixed }}', 'inkdown', {
-    state: { value: 0 },
-  });
-  assert.equal(instance.state.value, 2);
-  assert.equal(text(instance.view), '5');
-  assert.throws(() => compiled('@const $value = 2'), /error|const|state/i);
-});
-
-test('Inkdown views use the same binding-pattern call convention as actions', () => {
-  const s = story('@view Badge({label = "untitled"}) { **{{ label }}** @children }\n@Badge({label: "Ready"}) { now }');
-  assert.equal(text(s.view).replaceAll(/\s/g, ''), 'Readynow');
-});
-
-test('view and action rest parameters receive every call argument', () => {
-  const s = story(
-    `@view Join(first, ...rest) { {{ first + rest.join("") }} }
-@action add(...values) {
-  @each (value of values) { @do $total += value; }
-}
-@Join("A", "B", "C")
-[[Add => add(1, 2, 3)]]`,
-    'inkdown',
-    { state: { total: 0 } },
-  );
-  assert.match(text(s.view).replaceAll(/\s/g, ''), /ABC/);
-  click(s, 'Add');
-  assert.equal(s.state.total, 6);
-});
-
-test('source-order compatibility effects migrate to native @effect blocks', () => {
-  const s = story('before {{ $value }}\n@effect { @do $value += 1; }\nafter {{ $value }}', 'inkdown', {
-    state: { value: 0 },
-  });
-  assert.equal(s.state.value, 1);
-  assert.equal(text(s.view).replaceAll(/\s/g, ''), 'before0after1');
-  s.mutate((state) => (state.value = 9));
-  assert.equal(text(s.view).replaceAll(/\s/g, ''), 'before0after1');
 });
 
 test('failed mutation rolls state and history back', () => {
@@ -195,7 +138,12 @@ test('keyed includes preserve local lifetime on reordering', () => {
     },
   });
   const data = compiled(
-    ':: Start\n@each (item of $items; key item.id) {\n@Card({item})\n}\n:: Card {"params":["item"]}\nplaceholder',
+    `:: Start
+@each (item of $items; key item.id) {
+@Card({item})
+}
+:: Card {"params":["item"]}
+placeholder`,
     'inkdown',
     {
       state: {
@@ -233,9 +181,15 @@ test('recursive fragments fail with a bounded, meaningful diagnostic', () => {
 });
 
 test('duplicate structural keys roll back the action', () => {
-  const s = story('@each (item of $items; key item.id) {\n{{ item.id }}\n}', 'inkdown', {
-    state: { items: [{ id: 'a' }] },
-  });
+  const s = story(
+    `@each (item of $items; key item.id) {
+{{ item.id }}
+}`,
+    'inkdown',
+    {
+      state: { items: [{ id: 'a' }] },
+    },
+  );
   assert.throws(() => s.mutate((state) => state.items.push({ id: 'a' })), /Duplicate/);
   assert.equal(s.state.items.length, 1);
 });
@@ -255,7 +209,10 @@ test('native .mjs fragment ABI composes with parsed documents', () => {
       ];
     },
   });
-  const result = compiled(':: Start\n[[Go->Native]]\n:: Native\nPlaceholder');
+  const result = compiled(`:: Start
+[[Go->Native]]
+:: Native
+Placeholder`);
   result.story.passages = result.story.passages.filter((p) => p.id !== 'Native');
   const passages = definePassages(...result.story.passages.map(defineIRFragment), native);
   const s = new Story(passages, { entry: result.story.entry, state: { count: 0 } });
@@ -275,10 +232,16 @@ test('random is deterministic, snapshotted, and forbidden during render', () => 
 test('expression iteration consumes a finite execution budget', () => {
   assert.throws(
     () =>
-      story('@each (x of $items) {\n{{ x }}\n}', 'inkdown', {
-        state: { items: Array(50).fill(1) },
-        maxSteps: 10,
-      }),
+      story(
+        `@each (x of $items) {
+{{ x }}
+}`,
+        'inkdown',
+        {
+          state: { items: Array(50).fill(1) },
+          maxSteps: 10,
+        },
+      ),
     /budget/i,
   );
 });

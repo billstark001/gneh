@@ -1,0 +1,19 @@
+{
+  "name": "@gneh/conformance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Markdown-authored end-to-end language conformance suite",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gneh/compiler": "workspace:*",
+    "@gneh/inkdown": "workspace:*",
+    "@gneh/karlowe": "workspace:*",
+    "@gneh/renderer-xml": "workspace:*",
+    "@gneh/runtime": "workspace:*",
+    "@gneh/sugarcast": "workspace:*"
+  }
+}

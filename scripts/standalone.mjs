@@ -13,7 +13,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const output = path.join(root, 'standalone');
 
-const excluded = new Set(['create', 'language-service', 'lsp', 'vite']);
+const excluded = new Set(['conformance', 'create', 'language-service', 'lsp', 'vite']);
 
 const externalRequests = [];
 
@@ -143,5 +143,5 @@ workspace-only features.
 );
 
 console.log(
-  `Standalone distribution: ${packages.length} gneh packages + ${copiedExternal.size} external runtime packages; create, LSP and Vite stay in the npm workspace.`,
+  `Standalone distribution: ${packages.length} gneh packages + ${copiedExternal.size} external runtime packages; conformance, create, LSP and Vite stay in the npm workspace.`,
 );

@@ -10,27 +10,6 @@ import { createSugarcastLowerings, parseSugarcastCST, sugarcast } from '../../su
 
 const vendorDialects = [inkdown(), karlowe(), sugarcast()];
 
-test('native documents stay reactive while compatibility dialects materialize their passage', () => {
-  const sources = {
-    inkdown:
-      ':: Start\n@action hit { @do $hp -= 1; }\n@if ($hp > 0) {\nHP: $hp\n[[Hit => hit]]\n} @else {\nDead\n}\n[[Next -> End]]\n:: End\nEnd',
-    karlowe:
-      ':: Start\n(if: $hp > 0)[HP: $hp (link-repeat: "Hit")[(set: $hp to $hp - 1)]](else:)[Dead]\n[[Next->End]]\n:: End\nEnd',
-    sugarcast:
-      ':: Start\n<<if $hp > 0>>HP: $hp <<button "Hit">><<set $hp -= 1>><</button>><<else>>Dead<</if>>\n[[Next->End]]\n:: End\nEnd',
-  };
-  for (const [dialect, source] of Object.entries(sources)) {
-    const s = story(source, dialect, { state: { hp: 1 } });
-    assert.match(text(s.view), /HP: 1/);
-    click(s, 'Hit');
-    if (dialect === 'inkdown') assert.match(text(s.view), /Dead/);
-    else assert.match(text(s.view), /HP: 1/);
-    assert.equal(s.state.hp, 0);
-    click(s, 'Next');
-    assert.equal(s.current, 'End');
-  }
-});
-
 test('dialect frontends do not expose aliases or interpret Inkdown directives', async () => {
   const [inkdown, karlowe, sugarcast] = await Promise.all([
     import('../../inkdown/dist/index.js'),
@@ -79,44 +58,32 @@ imports:
   assert.deepEqual(call.callee, { type: 'Identifier', name: 'helper' });
 });
 
-test('inline escapes, code and currency do not execute variables', () => {
-  const s = story('Cost $1.50. `{{ $hp }}` \\$hp **$hp**', 'inkdown', { state: { hp: 7 } });
-  assert.equal(text(s.view), 'Cost $1.50. {{ $hp }} $hp 7');
-});
-
-test('nested conditions and keyed loops are real structural nodes', () => {
-  const s = story(
-    '@if ($ok) {\n@each (item of $items; key item.id) {\n- {{ item.name }}\n}\n} @else {\nNo\n}',
-    'inkdown',
-    {
-      state: {
-        ok: true,
-        items: [
-          { id: 'a', name: 'Alpha' },
-          { id: 'b', name: 'Beta' },
-        ],
-      },
-    },
-  );
-  assert.match(text(s.view), /AlphaBeta/);
-  s.mutate((state) => (state.ok = false));
-  assert.equal(text(s.view), 'No');
-});
-
 test('inline strings with brackets do not terminate JS directives early', () => {
-  const s = story('@if ($x === "}") {\n{{ "a}b" }}\n}', 'inkdown', { state: { x: '}' } });
+  const s = story(
+    `@if ($x === "}") {
+{{ "a}b" }}
+}`,
+    'inkdown',
+    { state: { x: '}' } },
+  );
   assert.equal(text(s.view), 'a}b');
 });
 
 test('reusable passage parameters are checked and passed', () => {
-  const source = ':: Start\n@Card({enemy: $enemy})\n:: Card {"params":["enemy"]}\n**{{ enemy.name }}**';
+  const source = `:: Start
+@Card({enemy: $enemy})
+:: Card {"params":["enemy"]}
+**{{ enemy.name }}**`;
   const s = story(source, 'inkdown', { state: { enemy: { name: 'Ink' } } });
   assert.equal(text(s.view), 'Ink');
   assert.ok(compileSource(source.replace('{enemy: $enemy}', '{}')).diagnostics.some((d) => d.code === 'PROPS_MISSING'));
 });
 
 test('passage calls use canonical ids and do not create display-name aliases', () => {
-  const source = ':: Start\n@RealCard()\n:: Card {"id":"RealCard"}\nresolved';
+  const source = `:: Start
+@RealCard()
+:: Card {"id":"RealCard"}
+resolved`;
   assert.equal(text(story(source).view), 'resolved');
   const call = compileSource(source).passages[0].body[0].children[0];
   assert.equal(call.type === 'call' && call.call.callee.type === 'binding' ? call.call.callee.name : '', 'RealCard');
@@ -246,14 +213,7 @@ test('dialects expose caller-owned CST-to-IR lowerings through the compiler', ()
   }
 });
 
-test('karlowe macro names ignore ASCII case and internal hyphens', () => {
-  const s = story('(Se-T: $value to 7)(PrInT: $value)(TeXtCoLoUr: red)[!]', 'karlowe', {
-    state: { value: 0 },
-  });
-  assert.equal(text(s.view), '7!');
-  assert.equal(s.state.value, 7);
-  assert.equal(text(story('(PRINT: (A: "ok")\'s 1st)', 'karlowe').view), 'ok');
-
+test('karlowe lowering registry uses normalized macro names without global mutation', () => {
   const original = createKarloweLowerings();
   const overridden = original.clone();
   assert.throws(() => overridden.register('Pr-In-T', () => undefined), /already registered/);
@@ -275,43 +235,23 @@ test('karlowe macro names ignore ASCII case and internal hyphens', () => {
   assert.equal(text(story('(print: 1)', 'karlowe', { dialects: [karlowe(original)] }).view), '1');
 });
 
-test('karlowe resolves triple-bracket hook and link ambiguity in prose', () => {
-  const s = story(':: Start\nBefore [[[Go->End]]]\n:: End\nDone', 'karlowe');
-  assert.equal(text(s.view), 'Before Go');
-  click(s, 'Go');
-  assert.equal(s.current, 'End');
-});
-
-test('karlowe executes effects in source order and keeps materialized values stable', () => {
-  const s = story('(set: $value to 1)(print: $value)(set: $value to 2)(print: $value)', 'karlowe', {
-    state: { value: 0 },
-  });
-  assert.equal(text(s.view), '12');
-  s.mutate((state) => (state.value = 9));
-  assert.equal(text(s.view), '12');
-});
-
-test('karlowe source-order navigation settles before publishing the view', () => {
-  const s = story(':: Start\n(go-to: "End")\n:: End\nDone', 'karlowe');
-  assert.equal(s.current, 'End');
-  assert.equal(text(s.view), 'Done');
-});
-
-test('karlowe supports semantic named-hook changes without DOM queries', () => {
-  const s = story('|notice>[old](replace: ?notice)[new]', 'karlowe');
-  assert.equal(text(s.view), 'new');
-});
-
 test('karlowe sidebar changes cross an explicit host boundary', () => {
   assert.throws(() => story('(append: ?Sidebar)[Notice]', 'karlowe'), /Host operation is unavailable: portal/);
   let received;
   let disposed = false;
-  const hosted = story(':: Start\n(append: ?Sidebar)[Notice]\n:: End\nDone', 'karlowe', {
-    host(operation, args) {
-      received = { operation, args };
-      return () => (disposed = true);
+  const hosted = story(
+    `:: Start
+(append: ?Sidebar)[Notice]
+:: End
+Done`,
+    'karlowe',
+    {
+      host(operation, args) {
+        received = { operation, args };
+        return () => (disposed = true);
+      },
     },
-  });
+  );
   assert.equal(received.operation, 'portal');
   assert.deepEqual(received.args.slice(0, 2), ['sidebar', 'append']);
   assert.equal(text(received.args[2]), 'Notice');
@@ -319,26 +259,11 @@ test('karlowe sidebar changes cross an explicit host boundary', () => {
   assert.equal(disposed, true);
 });
 
-test('portable Harlowe and SugarCube checkbox bindings remain live', () => {
-  const karlowe = story('(checkbox: 2bind $enabled, "Enabled")', 'karlowe', {
-    state: { enabled: false },
-  });
-  const karloweControl = all(karlowe.view).find((node) => node.kind === 'control:checkbox');
-  assert.equal(text(karlowe.view), 'Enabled');
-  karloweControl.change(true);
-  assert.equal(karlowe.state.enabled, true);
-
-  const sugarcast = story('<<checkbox "$enabled" false true autocheck>>', 'sugarcast', {
-    state: { enabled: false },
-  });
-  const sugarcastControl = all(sugarcast.view).find((node) => node.kind === 'control:checkbox');
-  sugarcastControl.change(true);
-  assert.equal(sugarcast.state.enabled, true);
-});
-
 test('removed Inkdown entry declarations are rejected everywhere', () => {
   assert.ok(
-    compileSource('@if ($yes) {\n@enter { @do $x = 1; }\n}').diagnostics.some((d) => d.code === 'REMOVED_DIRECTIVE'),
+    compileSource(`@if ($yes) {
+@enter { @do $x = 1; }
+}`).diagnostics.some((d) => d.code === 'REMOVED_DIRECTIVE'),
   );
 });
 
@@ -359,14 +284,14 @@ test('removed inline ESM records and state declarations are rejected', () => {
 
 test('known callable phase errors are checked while dynamic registry calls remain valid', () => {
   assert.ok(
-    compileSource('@view wrong() { no }\n@action outer { @call wrong(); }\n[[Run => outer]]').diagnostics.some(
-      (diagnostic) => diagnostic.code === 'CALLABLE_PHASE',
-    ),
+    compileSource(`@view wrong() { no }
+@action outer { @call wrong(); }
+[[Run => outer]]`).diagnostics.some((diagnostic) => diagnostic.code === 'CALLABLE_PHASE'),
   );
   assert.ok(
-    compileSource('@action wrong() {}\n@view Card() { @wrong() }\n@Card()').diagnostics.some(
-      (diagnostic) => diagnostic.code === 'CALLABLE_PHASE',
-    ),
+    compileSource(`@action wrong() {}
+@view Card() { @wrong() }
+@Card()`).diagnostics.some((diagnostic) => diagnostic.code === 'CALLABLE_PHASE'),
   );
   assert.ok(
     !compileSource('@action outer { @call installedLater(); }').diagnostics.some((d) => d.severity === 'error'),
@@ -374,61 +299,12 @@ test('known callable phase errors are checked while dynamic registry calls remai
   assert.ok(compileSource('@children').diagnostics.some((diagnostic) => diagnostic.code === 'CHILDREN_POSITION'));
 });
 
-test('karlowe arithmetic, containers, possessive access and membership are normalized', () => {
-  const s = story("(print: 1 + 2 * 3) (print: $enemy's name) (print: (a: 1, 2) contains 2)", 'karlowe', {
-    state: { enemy: { name: 'Ada' } },
-  });
-  assert.equal(text(s.view), '7 Ada true');
-});
-
-test('karlowe preserves conditional writes as source-order effects', () => {
-  const source = '(if: $enabled)[(set: $value to 2)](else:)[(set: $value to 3)](print: $value)';
-  const enabled = story(source, 'karlowe', { state: { enabled: true, value: 0 } });
-  assert.equal(enabled.state.value, 2);
-  assert.match(text(enabled.view), /2/);
-  const disabled = story(source, 'karlowe', { state: { enabled: false, value: 0 } });
-  assert.equal(disabled.state.value, 3);
-  assert.match(text(disabled.view), /3/);
-});
-
-test('sugarcast operators do not rewrite quoted strings', () => {
-  const s = story('<<if $a is 1 and not $b>><<print "is and to">><</if>>', 'sugarcast', {
-    state: { a: 1, b: false },
-  });
-  assert.equal(text(s.view), 'is and to');
-});
-
-test('sugarcast keeps multiline containers and conditional source-order effects structured', () => {
-  const source = `Before <<if $enabled>>
-<<set $value = 2>>
-
-Value: <<print $value>>
-<<else>>
-<<set $value = 3>>
-Disabled
-<</if>>`;
-  const enabled = story(source, 'sugarcast', { state: { enabled: true, value: 0 } });
-  assert.equal(enabled.state.value, 2);
-  assert.match(text(enabled.view), /Value: 2/);
-  const disabled = story(source, 'sugarcast', { state: { enabled: false, value: 0 } });
-  assert.equal(disabled.state.value, 3);
-  assert.match(text(disabled.view), /Disabled/);
-});
-
-test('portable loops in karlowe and sugarcast', () => {
-  assert.equal(text(story('(for: each _x, (a: "A", "B"))[(print: _x)]', 'karlowe').view), 'AB');
-  assert.equal(
-    text(
-      story('<<for _x of $items>><<print _x>><</for>>', 'sugarcast', {
-        state: { items: ['A', 'B'] },
-      }).view,
-    ),
-    'AB',
-  );
-});
-
 test('migration pretty-printer preserves supported observable behavior', () => {
-  const old = ':: Start\n<<if $hp gt 0>>HP: $hp<<else>>Dead<</if>>\n[[End]]\n:: End\nDone';
+  const old = `:: Start
+<<if $hp gt 0>>HP: $hp<<else>>Dead<</if>>
+[[End]]
+:: End
+Done`;
   const parsed = compiled(old, 'sugarcast', { state: { hp: 2 } });
   const native = toInkdown(parsed.passages);
   const a = new Story(parsed.story).start(),
@@ -467,7 +343,12 @@ test('wikify rejects module and source effects; pure excludes actions/regions', 
   assert.throws(() => createWikifier({ dialects: vendorDialects })('(set: $hp to 1)', 'karlowe'));
   assert.throws(() => createWikifier({ dialects: vendorDialects })('@import { x } from "./x.mjs"'));
   assert.throws(() => createWikifier({ dialects: vendorDialects, pure: true })('@region x { hello }'));
-  assert.throws(() => createWikifier({ dialects: vendorDialects })(':: A\na\n:: B\nb'));
+  assert.throws(() =>
+    createWikifier({ dialects: vendorDialects })(`:: A
+a
+:: B
+b`),
+  );
 });
 
 test('snapshot target rejects live requirements but retains navigation', () => {
@@ -476,7 +357,14 @@ test('snapshot target rejects live requirements but retains navigation', () => {
       (d) => d.code === 'CAPABILITY_LIVE',
     ),
   );
-  const s = story(':: Start\n[[Go->End]]\n:: End\nDone', 'inkdown', { live: false });
+  const s = story(
+    `:: Start
+[[Go->End]]
+:: End
+Done`,
+    'inkdown',
+    { live: false },
+  );
   click(s, 'Go');
   assert.equal(s.current, 'End');
   assert.throws(() => s.mutate((state) => (state.x = 1)));
@@ -484,7 +372,17 @@ test('snapshot target rejects live requirements but retains navigation', () => {
 
 test('dialect metadata and the ambiguous .twee extension are not accepted', () => {
   assert.throws(
-    () => compileProject([{ path: 'test.twee', source: '---\ndialect: sugarcast\n---\n:: Start\n<<print 42>>' }]),
+    () =>
+      compileProject([
+        {
+          path: 'test.twee',
+          source: `---
+dialect: sugarcast
+---
+:: Start
+<<print 42>>`,
+        },
+      ]),
     /native GNEH dialect/,
   );
 });
