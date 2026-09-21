@@ -144,8 +144,8 @@ Story markup supplies the semantic marker (`#reactor`); application code decides
 Selection highlights, geometry-dependent popovers, and animation libraries often need to run after a DOM patch. `mountStory` intentionally installs no global behavior layer, so an application that needs one can compose `Story` and `DOMRenderer` directly:
 
 ```ts
-import type { AnyFragment, View } from '@gneh/core';
-import { Story } from '@gneh/runtime';
+import type { View } from '@gneh/core';
+import { Story, type PassageSet } from '@gneh/runtime';
 import { DOMRenderer } from '@gneh/renderer-dom';
 
 interface DOMBehavior {
@@ -153,13 +153,9 @@ interface DOMBehavior {
   dispose?(): void;
 }
 
-export function mountWithBehaviors(
-  root: HTMLElement,
-  fragments: readonly AnyFragment[],
-  behaviors: readonly DOMBehavior[],
-) {
+export function mountWithBehaviors(root: HTMLElement, passages: PassageSet, behaviors: readonly DOMBehavior[]) {
   const renderer = new DOMRenderer();
-  const story = new Story([...fragments], { host: browserHost(root) });
+  const story = new Story(passages, { host: browserHost(root) });
   const mount = renderer.mount(root, story.view);
 
   const render = (view: View[]) => {
@@ -265,7 +261,7 @@ function mapRenderer(story: Story): ExtensionRenderer {
   };
 }
 
-const story = new Story(fragments);
+const story = new Story(passages);
 const renderer = new DOMRenderer({
   extensions: { map: mapRenderer(story) },
 });

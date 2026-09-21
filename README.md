@@ -59,11 +59,12 @@ The workspace uses pnpm 12, TypeScript 7 for builds, Oxlint, and Oxfmt. The lang
 
 All three directories are generated. `demo/` is also generated, from `examples/`, by `pnpm demos`. See [Generated artifacts](docs/GENERATED_ARTIFACTS.md) for the exact provenance and regeneration commands.
 
-## One file, several Fragments
+## One source module, several passages
 
 ```inkdown
 ---
-tags: [chapter-one]
+metadata:
+  tags: [chapter-one]
 ---
 :: Start [start] {"title":"The Night Archive"}
 @action takeKey {
@@ -80,12 +81,7 @@ tags: [chapter-one]
 
 @EnemyCard({ enemy: $enemy })
 
-:: EnemyCard {"presentation":{"tone":"muted"}}
----
-params: [enemy]
-paramTypes:
-  enemy: '{name: string; hp: number}'
----
+:: EnemyCard {"params":["enemy"],"paramTypes":{"enemy":"{name: string; hp: number}"},"presentation":{"tone":"muted"}}
 **{{ enemy.name }}** / HP: {{ enemy.hp }}
 
 :: Room
@@ -94,15 +90,15 @@ The room beyond the door is quiet.
 
 `$hp` in prose is syntax sugar for `{{ $hp }}`. Complex access stays explicit: `{{ $player.stats.hp }}`. Initial state is ordinary application data passed to `Story`; reusable source defaults may also live in story metadata.
 
-Metadata precedence is file front matter, then Twee header JSON, then passage front matter. Objects merge recursively, arrays replace earlier arrays, and only `tags` uses a stable union.
+File YAML owns module metadata, imports, named exports, and setup. Passage metadata lives only in Twee header JSON. The generated module default-exports an immutable `PassageSet` keyed by canonical ID.
 
 ## Handwritten JavaScript uses the same ABI
 
 ```js
-import { defineFragment, v } from '@gneh/runtime';
+import { definePassage, v } from '@gneh/runtime';
 
 /** @typedef {{label: string}} Props */
-export default defineFragment({
+export default definePassage({
   id: 'native:Counter',
   metadata: { params: ['label'] },
   capabilities: ['live'],

@@ -69,7 +69,7 @@ The diagram omits some direct imports, but its ownership rules are strict:
 - `core` has no parser, DOM, build-tool, or application dependency.
 - `source` parses Twee/front matter and does not choose a story language.
 - `syntax` is dialect-neutral infrastructure. `MarkupParser` receives both an expression parser and an optional special-syntax reader from its caller. Its caller-owned `MacroLoweringRegistry` dispatches dialect tokens without global state or a dependency from core to authoring syntax.
-- Inkdown owns structural `@if`/`@each`, lexical `@action`/`@view`, source-position `@effect`, and declarative `@import`/`@export` directives. It has no embedded JavaScript module or script block.
+- Inkdown owns structural `@if`/`@each`, source-ordered `@do`/`@let`/`@const`, lexical `@action`/`@view`, explicit `@publish`, and source-position `@effect`. Static ESM linkage belongs to file YAML; Inkdown has no embedded JavaScript module or script block.
 - Karlowe and Sugarcast own their compatibility syntax and do not recognize Inkdown directives. Shared tools do not imply a shared surface language.
 - All dialects lower to the same IR and never own a separate runtime. None is enabled implicitly, including Inkdown.
 - The compiler has no CLI I/O; the CLI composes compiler and filesystem concerns.
@@ -96,21 +96,21 @@ interface Fragment<P extends object = Record<string, unknown>> {
 }
 ```
 
-`defineFragment()` creates a handwritten Fragment. `defineIRFragment()` adapts portable IR. Generated ESM embeds that IR and calls the same adapter; it does not generate a second set of expression evaluators. There is no second “component” or “passage class”.
+`definePassage()` creates a branded handwritten passage, while `defineIRFragment()` adapts passage IR to the same brand. `defineFragment()` remains the lower-level API for non-navigable nested fragments. Generated ESM embeds IR, constructs passages, and default-exports a branded immutable `PassageSet`.
 
 The statement that `.inkdown` and `.mjs` are equivalent means that they meet at this ABI. It does not imply byte-identical output, reversible JavaScript, or identical source maps. Generated modules are normal ESM and do not use string evaluation.
 
 ## Modules and large projects
 
-A multi-passage source file has one generated ESM scope. Declarative `@import` records become static ESM imports and enter each passage through a binding table with live getters. `@export` may expose an imported binding from the generated module. Local entries in `fragments` share that table. Authored callables resolve lexically before an imported Fragment or external registry entry with the same name.
+A multi-passage source file has one generated ESM scope. Its first YAML block declares static imports, named exports, metadata, and an ordered setup plan. A headerless `primary` region initializes module lexical bindings once per ESM instance; generated live cells connect selected bindings to named ESM exports. The default export is the file's keyed `PassageSet`. Application code composes sets with `definePassages`; no first-passage fallback or display-name route alias exists.
 
 ## Authored callables and lexical environments
 
 Value, view, and effect callables share one phase-typed IR. A call records its callee as a lexical binding, an expression value, or an inline declaration; the runtime rejects phase mismatches instead of relying on separate action/view lookup tables. Every declaration states whether it captures its lexical environment or reconstructs from story state.
 
-Lexical environments are parent-linked records. A block hoists its named declarations into its own environment, calls allocate child environments for parameters and locals, and closures retain only the outward chain that they captured. Environments never retain child call frames. Unmounting a Fragment clears its local, region, prop, and cleanup stores, so unreachable closure graphs remain collectable by the JavaScript runtime.
+Lexical environments are parent-linked records. Declarations materialize in source order, calls allocate child environments for parameters and locals, and closures retain only the outward chain that they captured. Environments never retain child call frames. Unmounting a Fragment clears its local, region, prop, and cleanup stores, so unreachable closure graphs remain collectable by the JavaScript runtime.
 
-Inkdown actions and views use lexical capture. Top-level Sugarcast widgets are module-visible, while widgets nested in control flow are lexical to that block. Karlowe macro values use story capture: JSON state contains a stable declaration reference rather than a JavaScript closure, and invocation obtains current story state plus a fresh temporary scope. Value callables always execute in a read-only story-state phase; they may update invocation-local temporaries but cannot consume effect-time randomness.
+Inkdown actions and views use lexical capture. Normal Sugarcast widgets publish captured views into the transient Story registry; `local` widgets remain lexical. Karlowe macros and views capture lexically, while `$` callable assignment publishes and `_` assignment remains lexical. The registry and closure environments are never serialized. Value callables execute in a read-only story-state phase; they may update invocation-local temporaries but cannot consume effect-time randomness.
 
 Generated modules preserve authored Fragment IDs. Because application code explicitly combines story modules, those IDs are project-global at the composition boundary and `Story` rejects collisions instead of silently namespacing or overwriting them. Applications that rename IDs or require long-term save compatibility should own a route/state migration policy.
 
@@ -155,7 +155,7 @@ interface Renderer<Host, Handle> {
 }
 ```
 
-The repository implements one DOM backend. Other hosts may implement the protocol, but the project does not claim that a Three.js or terminal backend already exists. `DOMRenderer` supports typed extension renderers with explicit mount/update/dispose ownership. `mountStory` is a minimal optional bridge: it subscribes one Story to one host and installs no styles, globals, router, or document-level listeners.
+The repository implements a DOM backend plus deterministic XML and plain-text conformance projections. `DOMRenderer` supports typed extension renderers with explicit mount/update/dispose ownership. `XMLRenderer` emits canonical structure and stable callback handles without a host DOM. `mountStory` is a minimal optional bridge: it subscribes one Story to one host and installs no styles, globals, router, or document-level listeners.
 
 Navigation chrome, history controls, persistence and Wiki/story-flow/visual-novel layouts belong to the editable initializer template. Moving that code out of a runtime package makes the customization boundary honest and lets React, Vue or an existing application use `Story` directly. Extensions and imported JavaScript are trusted host code.
 
@@ -163,7 +163,7 @@ Navigation chrome, history controls, persistence and Wiki/story-flow/visual-nove
 
 ## Vite coexistence boundary
 
-Registered native story extensions are unambiguous and compile when explicitly imported. `.md`, `.twee` and `.tw` may belong to documentation systems or other plugins, so gneh only handles them with an explicit `?gneh` query; a value such as `?gneh=karlowe` selects a registered frontend. Asset queries including `?raw` and `?url` remain Vite-owned. The plugin does not inject global CSS, mount an application, scan source directories, aggregate story files behind a virtual alias, or force full-page reloads. Application entry code explicitly imports and composes every story module and any project-scoped JavaScript or JSON. See [decision 0001](decisions/0001-explicit-story-imports.md).
+Registered native story extensions are unambiguous and compile when explicitly imported. GNEH claims only `.inkdown`, `.karlowe`, and `.sugarcast` for their registered frontends; `.md`, `.twee`, `.tw`, and the former `.sugar` alias remain outside the plugin. Asset queries including `?raw` and `?url` remain Vite-owned. The plugin does not inject global CSS, mount an application, scan source directories, aggregate story files behind a virtual alias, or force full-page reloads. Application entry code explicitly imports and composes every story module and any project-scoped JavaScript or JSON. See [decision 0001](decisions/0001-explicit-story-imports.md).
 
 ## Import and inspection boundaries
 

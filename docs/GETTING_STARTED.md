@@ -42,19 +42,19 @@ export default defineConfig({
 });
 ```
 
-Story files are ordinary typed ESM imports. The application entry chooses its project entry and combines the modules it ships; `fragments` contains every passage in one authoring file:
+Story files are ordinary typed ESM imports. Each native source module default-exports an immutable `PassageSet` keyed by canonical passage ID:
 
 ```ts
-import { fragments, metadata } from './story/main.inkdown';
-const Start = fragments.Start;
-const Card = fragments.Card;
+import passages from './story/main.inkdown';
+const Start = passages.Start;
+const Card = passages.Card;
 ```
 
-The default export remains the file's first Fragment as a local convenience, but it is not a hidden project-entry selection.
+Named exports come only from the file YAML `exports` list or automatic unbounded primary callables. There is no first-passage default or display-name alias.
 
 Vite never writes generated files beside story sources. Include the selected frontend declaration, such as `@gneh/inkdown/client`, in `compilerOptions.types` for conservative module types; use the gneh language server for concrete authoring diagnostics and projections. Compose multiple source modules with explicit imports in application code.
 
-Only explicitly registered native dialect extensions are compiled. Generic `.md`, `.twee`, and `.tw` files require `?gneh`; use a value such as `?gneh=karlowe` when the source does not declare its dialect. Without that query they remain available to other Vite plugins, while `?raw`, `?url`, and worker queries always keep their ordinary Vite meaning.
+Only explicitly registered native dialect extensions are compiled: `.inkdown`, `.karlowe`, and `.sugarcast`. Generic `.md`, `.twee`, and `.tw` files remain available to other tooling; `?raw`, `?url`, and worker queries keep their ordinary Vite meaning.
 
 ## Mounting and frameworks
 
@@ -62,10 +62,10 @@ For a small plain-DOM application, `mountStory` connects one runtime instance to
 
 ```ts
 import { mountStory } from '@gneh/renderer-dom';
-import Start, { fragments } from './story/main.inkdown';
+import passages from './story/main.inkdown';
 
-const mounted = mountStory(document.querySelector('#story')!, Object.values(fragments), {
-  entry: Start.id,
+const mounted = mountStory(document.querySelector('#story')!, passages, {
+  entry: 'Start',
   state: { visits: 0 },
 });
 ```

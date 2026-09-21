@@ -1,6 +1,6 @@
 # 0002: Separate passages, source modules, and authored callables
 
-Status: proposed
+Status: accepted
 
 ## Context
 

@@ -16,7 +16,7 @@ GNEH prefers explicit project composition over hidden project behavior. Public A
 
 Implicit defaults are acceptable when they follow a common mental model and remain local, deterministic, documented, observable, and easy to override. A sensible default value or an unambiguous local convention can reduce boilerplate; silently discovering project files, changing the module graph, or selecting project behavior from unrelated filesystem state does not meet that standard.
 
-For the current Vite integration, application JavaScript or TypeScript explicitly imports every story module it uses and combines their `fragments` exports. Project-scoped JavaScript and JSON are imported by that same application entry. The Vite plugin transforms explicitly imported authoring files and does not scan for or aggregate a project behind a virtual alias.
+For the current Vite integration, application JavaScript or TypeScript explicitly imports every story module it uses and combines their default `PassageSet` exports with `definePassages`. Project-scoped JavaScript and JSON are imported by that same application entry. The Vite plugin transforms explicitly imported authoring files and does not scan for or aggregate a project behind a virtual alias.
 
 Every dialect is registered explicitly in `vite.config.ts`, including Inkdown. Registered dialects determine which file extensions the plugin claims; registration does not select application modules.
 
@@ -26,7 +26,7 @@ Every dialect is registered explicitly in `vite.config.ts`, including Inkdown. R
 
 Bulk importing a large number of story files is a real problem. Requiring one handwritten import and merge per file is inspectable, but it does not scale well. A future design may provide an application-owned manifest or barrel, an explicit glob, dialect-level include syntax, or another bulk-import mechanism. It must define inclusion, ordering, diagnostics, tool portability, and override behavior before adoption instead of restoring project-wide discovery as an incidental Vite feature.
 
-The distinction between a `passage` and `passages` also needs clarification. Today one Inkdown, Karlowe, or Sugarcast source file can define multiple passages and compile to one module whose `fragments` export is a collection. The source file is therefore neither exactly one passage nor the complete project passage set. At the same time, an authoring file cannot currently compose a passage set by importing several other authoring files, so file-local collections and project-level collections are easy to conflate.
+ADR 0002 subsequently resolved the passage/source-module distinction: one source file default-exports a keyed `PassageSet`, while application code composes sets explicitly with `definePassages`.
 
 Before adding cross-file composition to a dialect, the project should decide whether imports compose source files, compiled modules, passages, or passage collections; how names and collisions work; and whether the result belongs to dialect syntax, ordinary JavaScript or TypeScript, or a separate manifest. That discussion may justify a new explicit bulk API, but it should not make Vite the hidden owner of the project model.
 
@@ -35,6 +35,6 @@ Before adding cross-file composition to a dialect, the project should decide whe
 - The source entry is the complete, inspectable project module graph.
 - TypeScript, Vite, tests, and alternative bundlers see the same imports.
 - Adding a story file does not silently ship it.
-- Multi-file applications perform an explicit merge, for example `Object.values({ ...chapterOne, ...chapterTwo })`.
+- Multi-file applications perform explicit `definePassages(chapterOne, chapterTwo)` composition.
 - Defaults remain available where they express an unsurprising local choice without concealing project composition.
 - Large projects retain some import boilerplate until the bulk-import and passage-collection semantics are deliberately designed.

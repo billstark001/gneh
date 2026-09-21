@@ -36,25 +36,18 @@ The former CLI `init`, `dev`, and HTML `build` commands were intentionally remov
 
 CLI project discovery may read `gneh.config.json`. It may define `entry`, `sources`, `state`, `stateTypes`, `dialect`, and `live`. This file is CLI/LSP input only: the importer does not create it and Vite does not discover or execute it. Applications put project-scoped code and data in their explicit JavaScript/TypeScript entry, which may import JSON normally. `sources` contains relative files or directories, not glob expressions. Discovery is recursive and ignores hidden, dependency, build, standalone, and verification directories.
 
-Recognized source extensions are `.inkdown`, `.karlowe`, `.sugarcast`, `.md`, `.twee`, and `.tw`. Neutral extensions default to Inkdown unless config or metadata selects a dialect. In Vite, the neutral extensions instead require an explicit `?gneh` query so the plugin can coexist with ordinary Markdown tooling.
+Recognized native source extensions are `.inkdown`, `.karlowe`, and `.sugarcast`. `.twee` and `.tw` are interchange formats accepted only through explicit import or migration; `.md` remains documentation. A project may still select one dialect explicitly for a directly supplied file through the compiler API, but discovery does not claim ambiguous extensions.
 
 ## Vite story modules
 
 Direct imports are the default application boundary:
 
 ```ts
-import Start, { fragments } from './story/chapter.karlowe';
-const Card = fragments.Card;
+import chapter from './story/chapter.karlowe';
+const Card = chapter.Card;
 ```
 
 The plugin does not emit declarations beside sources. TypeScript projects include the client declaration for each selected frontend, such as `@gneh/karlowe/client`; these are conservative module types, while the language server provides concrete passage diagnostics.
-
-Ambiguous source extensions require an explicit opt-in:
-
-```ts
-import Start from './chapter.inkdown';
-import Notes from './notes.md?gneh';
-```
 
 Compose multiple files explicitly or with Vite's standard `import.meta.glob`; gneh does not add a second virtual-module aggregation interface.
 
@@ -72,7 +65,7 @@ The plugin does not install a full-page reload hook. Normal Vite module propagat
 gneh extract compiled-story.html -o extracted-story
 ```
 
-`import-twine` maps Harlowe to Karlowe or SugarCube to Sugarcast and writes one editable story source. The Twine entry and title are placed in source front matter; it does not generate project configuration, declarations, or reports by default:
+`import-twine` maps Harlowe to Karlowe or SugarCube to Sugarcast and writes one editable story source. The Twine entry receives the `[start]` tag and the title is stored in file YAML module metadata; it does not generate project configuration, declarations, or reports by default:
 
 ```sh
 gneh import-twine compiled-story.html -o imported-story
@@ -90,7 +83,7 @@ Neither command executes the HTML or claims engine equivalence. Output directori
 - `--level syntax`: per-source lowered syntax and diagnostics before project resolution;
 - `--level ir`: the resolved Story IR and project diagnostics (the default).
 
-Use `--passage <id-or-name>` to narrow the result and `-o` to write it to a file. The records are public gneh structures, not Karlowe lexer tokens or another frontend's private parser nodes.
+Use `--passage <canonical-id>` to narrow the result and `-o` to write it to a file. The records are public gneh structures, not Karlowe lexer tokens or another frontend's private parser nodes.
 
 ## Compatibility audit
 
