@@ -146,7 +146,17 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
   const error = (code: string, message: string, span: Span, hint?: string) =>
     diagnostics.push({ code, severity: 'error', message, span, hint });
   for (const p of passages) {
-    if (ids.has(p.id)) error('DUPLICATE_ID', `Duplicate passage id: ${p.id}`, p.span);
+    if (
+      ids.has(p.id) &&
+      !diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === 'DUPLICATE_ID' &&
+          diagnostic.span.file === p.span.file &&
+          diagnostic.span.start === p.span.start &&
+          diagnostic.span.end === p.span.end,
+      )
+    )
+      error('DUPLICATE_ID', `Duplicate passage id: ${p.id}`, p.span);
     ids.set(p.id, p);
   }
   for (const p of passages) {
