@@ -56,6 +56,10 @@ const example = true;
 
 This prevents headings, separators, and shorter fences inside an input document from being interpreted as conformance structure.
 
+## Robustness smoke tests
+
+`test/robustness.test.ts` complements the authored specifications with small deterministic generated suites. Fixed seeds exercise malformed input across every dialect and CST entry point, require metadata failures to remain typed, and compile and render generated valid stories in all three dialects. The checked-in counts are intentionally bounded so normal conformance runs stay fast; concrete failures discovered by larger exploratory fuzzing belong in an owning package's regression tests or in an authored conformance case.
+
 ## Output formats
 
 `text` uses `renderText()` and is useful for semantic results where structure is irrelevant. `xml` uses the canonical `XMLRenderer` and covers node kinds, sorted JSON-encoded attributes, stable keys, and callback handles. Expected output is exact; whitespace inside fences is data.
