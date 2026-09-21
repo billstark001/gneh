@@ -34,6 +34,14 @@ export function createProject(destination: string, template: TemplateKind = 'van
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
   };
+  const packageVersion = (
+    JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as {
+      version: string;
+    }
+  ).version;
+  for (const dependencies of [manifest.dependencies, manifest.devDependencies])
+    for (const [name, range] of Object.entries(dependencies))
+      if (name.startsWith('@gneh/') && range === 'workspace:*') dependencies[name] = `^${packageVersion}`;
   manifest.name = packageName(destination);
   if (template === 'react') {
     manifest.dependencies.react = '^19.1.0';

@@ -1,0 +1,48 @@
+:root {
+  color: #e9dfcc;
+  background: #15120f;
+  font:
+    17px/1.65 Georgia,
+    serif;
+}
+
+body {
+  margin: 0;
+  min-width: 20rem;
+}
+
+#story {
+  box-sizing: border-box;
+  width: min(52rem, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(2rem, 8vw, 6rem) clamp(1.25rem, 6vw, 4rem);
+  border-inline: 1px solid #4e3f2c;
+  background: #1c1813;
+}
+
+a,
+button {
+  color: #e1b96f;
+}
+
+button {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #80633a;
+  border-radius: 0.25rem;
+  background: #2a2118;
+  font: inherit;
+}
+
+.gneh-choice {
+  display: block;
+  margin-block: 0.8rem;
+}
+
+.enemy-card,
+.dialogue {
+  margin-block: 1.5rem;
+  padding: 1rem;
+  border-left: 0.25rem solid #9f7941;
+  background: #241e17;
+}

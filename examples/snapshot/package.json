@@ -1,9 +1,11 @@
 {
-  "name": "@gneh/example-vite",
+  "name": "@gneh/example-snapshot",
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "vite",
     "dev": "vite",
+    "check": "gneh check .",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -13,10 +15,9 @@
     "@gneh/runtime": "workspace:*"
   },
   "devDependencies": {
+    "@gneh/cli": "workspace:*",
     "@gneh/inkdown": "workspace:*",
     "@gneh/vite": "workspace:*",
-    "@types/node": "^22.20.3",
-    "typescript": "7.0.2",
     "vite": "^8.3.0"
   }
 }

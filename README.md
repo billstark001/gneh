@@ -45,7 +45,7 @@ pnpm typecheck
 pnpm lint
 pnpm fmt:check
 pnpm test
-pnpm demos
+pnpm build:examples
 pnpm test:browser
 ```
 
@@ -57,7 +57,9 @@ The workspace uses pnpm 12, TypeScript 7 for builds, Oxlint, and Oxfmt. The lang
 2. `dist/gneh*.global.js`: browser IIFE bundles built by Vite.
 3. `standalone/`: a standard dependency-free Node module graph derived from the package outputs by `scripts/standalone.mjs`.
 
-All three directories are generated. `demo/` is also generated, from `examples/`, by `pnpm demos`. See [Generated artifacts](docs/GENERATED_ARTIFACTS.md) for the exact provenance and regeneration commands.
+All three directories are generated. Each example owns its commands and writes generated output to its own `dist/`; `pnpm build:examples` runs those package scripts. See [Generated artifacts](docs/GENERATED_ARTIFACTS.md) for the exact provenance and regeneration commands.
+
+Each project under `examples/` is an independently runnable Vite application. From an example directory, `pnpm start` runs its development server, `pnpm check` validates its story sources, `pnpm build` emits a deployable `dist/index.html`, and `pnpm preview` serves that production build.
 
 ## One source module, several passages
 
@@ -66,6 +68,10 @@ All three directories are generated. `demo/` is also generated, from `examples/`
 metadata:
   tags: [chapter-one]
 ---
+@view EnemyCard({ enemy }) {
+  **{{ enemy.name }}** / HP: {{ enemy.hp }}
+}
+
 :: Start [start] {"title":"The Night Archive"}
 @action takeKey {
   @do $hasKey = true;
@@ -81,14 +87,11 @@ metadata:
 
 @EnemyCard({ enemy: $enemy })
 
-:: EnemyCard {"params":["enemy"],"paramTypes":{"enemy":"{name: string; hp: number}"},"presentation":{"tone":"muted"}}
-**{{ enemy.name }}** / HP: {{ enemy.hp }}
-
 :: Room
 The room beyond the door is quiet.
 ```
 
-`$hp` in prose is syntax sugar for `{{ $hp }}`. Complex access stays explicit: `{{ $player.stats.hp }}`. Initial state is ordinary application data passed to `Story`; reusable source defaults may also live in story metadata.
+`$hp`, `$player.stats.hp`, and `_items[0]?.name` in prose use pure-expr's interpolation scanner and are syntax sugar for explicit `{{ ... }}` values. Use `@view` for reusable Inkdown render behavior; a `::` header always declares a navigable passage, never an implicit view. Initial state is ordinary application data passed to `Story`.
 
 File YAML owns module metadata, imports, named exports, and setup. Passage metadata lives only in Twee header JSON. The generated module default-exports an immutable `PassageSet` keyed by canonical ID.
 
@@ -100,7 +103,6 @@ import { definePassage, v } from '@gneh/runtime';
 /** @typedef {{label: string}} Props */
 export default definePassage({
   id: 'native:Counter',
-  metadata: { params: ['label'] },
   capabilities: ['live'],
   render(ctx, props) {
     return v.p(

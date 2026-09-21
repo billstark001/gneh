@@ -36,6 +36,62 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@22.20.3)(vite@8.3.0(@types/node@22.20.3))
 
+  examples/playground:
+    dependencies:
+      '@gneh/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@gneh/renderer-dom':
+        specifier: workspace:*
+        version: link:../../packages/renderer-dom
+      '@gneh/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+    devDependencies:
+      '@gneh/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@gneh/inkdown':
+        specifier: workspace:*
+        version: link:../../packages/inkdown
+      '@gneh/karlowe':
+        specifier: workspace:*
+        version: link:../../packages/karlowe
+      '@gneh/sugarcast':
+        specifier: workspace:*
+        version: link:../../packages/sugarcast
+      '@gneh/vite':
+        specifier: workspace:*
+        version: link:../../packages/vite
+      vite:
+        specifier: ^8.3.0
+        version: 8.3.0(@types/node@22.20.3)
+
+  examples/snapshot:
+    dependencies:
+      '@gneh/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@gneh/renderer-dom':
+        specifier: workspace:*
+        version: link:../../packages/renderer-dom
+      '@gneh/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+    devDependencies:
+      '@gneh/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@gneh/inkdown':
+        specifier: workspace:*
+        version: link:../../packages/inkdown
+      '@gneh/vite':
+        specifier: workspace:*
+        version: link:../../packages/vite
+      vite:
+        specifier: ^8.3.0
+        version: 8.3.0(@types/node@22.20.3)
+
   examples/vite-app:
     dependencies:
       '@gneh/core':
@@ -54,6 +110,12 @@ importers:
       '@gneh/vite':
         specifier: workspace:*
         version: link:../../packages/vite
+      '@types/node':
+        specifier: ^22.20.3
+        version: 22.20.3
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
       vite:
         specifier: ^8.3.0
         version: 8.3.0(@types/node@22.20.3)
@@ -183,6 +245,34 @@ importers:
       vue-tsc:
         specifier: ^3.3.11
         version: 3.3.11(typescript@6.0.3)
+
+  packages/create/template:
+    dependencies:
+      '@gneh/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@gneh/renderer-dom':
+        specifier: workspace:*
+        version: link:../../renderer-dom
+      '@gneh/runtime':
+        specifier: workspace:*
+        version: link:../../runtime
+    devDependencies:
+      '@gneh/inkdown':
+        specifier: workspace:*
+        version: link:../../inkdown
+      '@gneh/vite':
+        specifier: workspace:*
+        version: link:../../vite
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.3
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vite:
+        specifier: ^8.0.0
+        version: 8.3.0(@types/node@22.20.3)
 
   packages/expression:
     dependencies:

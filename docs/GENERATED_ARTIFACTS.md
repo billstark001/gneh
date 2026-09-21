@@ -7,19 +7,20 @@ Generated files are deliberately excluded from Git. Source changes belong in `pa
 | `packages/*/dist/` | `packages/*/src`, tsconfig files | `tsc -b` | ESM, declarations, source maps |
 | `dist/` | vendor entries plus package source | `scripts/bundle.mjs` | Browser IIFE bundles |
 | `standalone/` | package dist, package manifests, browser bundles, licenses | `scripts/standalone.mjs` | Dependency-free Node distribution |
-| `demo/` | `packages/create/template` and `examples/vite-app` | `scripts/demos.mjs` | Generated Vite applications |
+| `examples/*/dist/` | each example's sources and package manifest | its Vite `build` script | Independently deployable example application |
+| `packages/create/template/dist/` | editable starter sources | its `build` script | Starter Vite output used by browser conformance |
 | `verification/` | any local audit or visual-QA command | Maintainer-selected commands | Unversioned evidence and scratch reports |
 
 ## Rebuild
 
 ```sh
 pnpm build
-pnpm demos
+pnpm build:examples
 ```
 
 `pnpm build` cleans package dist directories, root `dist/`, `standalone/`, and the TypeScript build-info cache before rebuilding. It then runs the browser bundler and standalone derivation. The standalone generator uses a normal `node_modules/@gneh/*` graph and copies the ordinary emitted packages without rewriting imports. Copied manifests replace `workspace:*` ranges with the release version and omit workspace-only LSP, language service, and Vite dependencies.
 
-`pnpm demos` asks Vite to build the editable starter and the coexistence example, then deletes and recreates `demo/`. Its `generation.json` records both source projects. The landing page is also generated, so there is no hidden handwritten demo source.
+`pnpm build:examples` delegates to the `build` script in each example package and the editable starter. No root demo tree or bespoke derivation format exists; every output stays beside the project that owns it.
 
 ## Verification is local by design
 

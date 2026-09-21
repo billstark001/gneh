@@ -19,6 +19,8 @@ test('@gneh/create copies an editable Vite application and never overwrites file
     assert.equal(manifest.name, 'my-story');
     assert.equal(manifest.scripts.dev, 'vite');
     assert.equal(manifest.dependencies.preact, undefined);
+    assert.equal(manifest.dependencies['@gneh/runtime'], '^0.1.0');
+    assert.equal(manifest.devDependencies['@gneh/vite'], '^0.1.0');
     assert.match(await fs.readFile(path.join(destination, 'src/ui.ts'), 'utf8'), /createApp/);
     const styles = await fs.readFile(path.join(destination, 'src/style.css'), 'utf8');
     assert.doesNotMatch(styles, /article\s*\{[^}]*max-width:\s*50rem/s);

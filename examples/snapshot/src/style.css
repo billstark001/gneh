@@ -1,0 +1,27 @@
+:root {
+  color: #25282e;
+  background: #e8e9ec;
+  font:
+    17px/1.65 system-ui,
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 20rem;
+}
+
+#story {
+  box-sizing: border-box;
+  width: min(52rem, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(2rem, 8vw, 6rem) clamp(1.25rem, 6vw, 4rem);
+  background: white;
+  box-shadow: 0 0 2rem #aeb1b94d;
+}
+
+.gneh-choice {
+  display: block;
+  margin-block: 0.8rem;
+}

@@ -5,7 +5,7 @@ The supported toolchain is Node.js 22.16 or newer, pnpm 12, TypeScript 7, Oxlint
 ```sh
 pnpm install --no-frozen-lockfile
 pnpm check
-pnpm demos
+pnpm build:examples
 pnpm test:browser
 ```
 
@@ -36,7 +36,7 @@ Never silently accept an incompatible legacy macro as prose. Update `docs/LANGUA
 3. build browser bundles with `scripts/bundle.mjs`;
 4. derive `standalone/` with `scripts/standalone.mjs`.
 
-`pnpm demos` derives `demo/` from `examples/`. Neither directory is source. See `docs/GENERATED_ARTIFACTS.md` before changing either pipeline.
+`pnpm build:examples` delegates to the package scripts owned by the three projects in `examples/` and the editable starter. Their `dist/` directories are generated; the example directories themselves are source. See `docs/GENERATED_ARTIFACTS.md` before changing the pipeline.
 
 ## Offline fallback
 
@@ -47,7 +47,7 @@ GNEH_TYPESCRIPT_API=/path/to/typescript-package \
 pnpm build:offline
 ```
 
-Do not distribute `node_modules`, `.tsbuildinfo`, machine paths, `demo/`, `verification/`, or other local output.
+Do not distribute `node_modules`, `.tsbuildinfo`, machine paths, `verification/`, or other local output.
 
 ## Browser and compatibility tests
 
@@ -56,7 +56,7 @@ pnpm build
 pnpm test:browser
 ```
 
-`test:browser` rebuilds both the workspace and the derived demos before launching the suite. It uses `puppeteer-core` and a system Chrome/Chromium. Set `GNEH_CHROMIUM` when automatic discovery is insufficient.
+`test:browser` rebuilds both the workspace and the independently owned Vite examples before launching the suite. It uses `puppeteer-core` and a system Chrome/Chromium. Set `GNEH_CHROMIUM` when automatic discovery is insufficient.
 
 External compiled Twine samples may be placed in a sibling `gneh-ws` directory and audited without copying them into the repository:
 

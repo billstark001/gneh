@@ -87,7 +87,7 @@ Use `npm run build` and `npm run preview` for the web application.
 
 ## Workspace examples and verification
 
-`examples/vite-app` demonstrates a story mounted beside an unrelated DOM root, a regular Markdown `?raw` import, and a handwritten JavaScript Fragment. The complete editable starter lives in `packages/create/template`; `pnpm demos` builds both with Vite into ignored `demo/` output.
+`examples/playground` is a three-dialect application, `examples/snapshot` demonstrates a non-live document, and `examples/vite-app` mounts a story beside an unrelated DOM root while importing regular Markdown and handwritten JavaScript Fragments. Each example supports `start`, `check`, `build`, and `preview`; its production build is a deployable `dist/index.html`. The complete editable starter lives in `packages/create/template`; `pnpm build:examples` runs every example's own build script and keeps output beside its project.
 
 ```sh
 pnpm check

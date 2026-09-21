@@ -147,6 +147,5 @@ vite.config.ts.timestamp-*
 package-lock.json
 
 # Reproducible local artifacts. See docs/GENERATED_ARTIFACTS.md.
-/demo/
 /standalone/
 /verification/

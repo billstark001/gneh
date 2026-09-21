@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - packages/create/template
   - examples/*
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:

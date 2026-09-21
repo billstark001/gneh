@@ -16,7 +16,7 @@
     "fmt": "oxfmt packages scripts examples docs verification *.md && oxlint --config .oxlint-format.json --fix packages scripts examples",
     "fmt:check": "oxfmt --check packages scripts examples docs verification *.md && oxlint --config .oxlint-format.json packages scripts examples",
     "test": "pnpm build && pnpm -r --workspace-concurrency=1 --if-present test",
-    "test:browser": "pnpm demos && vitest run packages/renderer-dom/test/browser-suite.test.ts",
+    "test:browser": "pnpm build && pnpm build:examples && vitest run packages/renderer-dom/test/browser-suite.test.ts",
     "audit:twine": "pnpm build && node scripts/audit-twine-html.mjs",
     "check": "pnpm lint && pnpm fmt:check && pnpm test",
     "gneh": "node packages/cli/dist/index.js",
@@ -25,7 +25,7 @@
     "lsp": "node packages/lsp/dist/index.js --stdio",
     "build:offline": "node scripts/offline-build.mjs && node scripts/bundle.mjs --offline && node scripts/standalone.mjs",
     "test:offline": "pnpm build:offline && pnpm -r --workspace-concurrency=1 --if-present test",
-    "demos": "pnpm build && node scripts/demos.mjs",
+    "build:examples": "pnpm --filter @gneh/example-playground build && pnpm --filter @gneh/example-snapshot build && pnpm --filter @gneh/example-vite build && pnpm --filter gneh-story build",
     "audit:samples": "pnpm build && node scripts/audit-samples.mjs"
   },
   "devDependencies": {

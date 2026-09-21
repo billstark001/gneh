@@ -1,5 +1,8 @@
 ---
 imports:
+  ./Badge.mjs:
+    default: Badge
+    badgeDescription: =
   ./Panel.mjs:
     default: Panel
     description: =
@@ -8,10 +11,9 @@ imports:
 
 # Markdown is one source representation
 
-The Panel below is handwritten `.mjs`. It can be embedded or used as a navigation
-target.
+@Badge({ label: "Native view", detail: badgeDescription })
 
-@Panel({ label: "A prop from Inkdown" })
+The Panel below is a handwritten `.mjs` passage and is used as a navigation target.
 
 [[Open the native JavaScript Fragment -> Panel({label: "As a page"})]]
 

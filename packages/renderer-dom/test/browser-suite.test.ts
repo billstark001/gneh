@@ -1,4 +1,4 @@
-/** Browser conformance for the generated Vite applications. */
+/** Browser conformance for the independently built Vite applications. */
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -7,9 +7,14 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { test } from 'vitest';
 
-test('generated Vite applications conform in a real browser', { timeout: 60_000 }, async () => {
+test('independently built Vite applications conform in a real browser', { timeout: 60_000 }, async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-  const demo = path.join(root, 'demo');
+  const sites = new Map([
+    ['starter', path.join(root, 'packages/create/template/dist')],
+    ['playground', path.join(root, 'examples/playground/dist')],
+    ['snapshot', path.join(root, 'examples/snapshot/dist')],
+    ['vite-app', path.join(root, 'examples/vite-app/dist')],
+  ]);
   const reportDirectory = path.join(root, 'verification');
   fs.mkdirSync(reportDirectory, { recursive: true });
   const checks = [];
@@ -50,8 +55,11 @@ test('generated Vite applications conform in a real browser', { timeout: 60_000 
   };
   const server = http.createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname);
-    let file = path.join(demo, pathname);
-    if (!file.startsWith(demo)) return response.writeHead(403).end();
+    const [, site, ...rest] = pathname.split('/');
+    const directory = sites.get(site);
+    if (!directory) return response.writeHead(404).end();
+    let file = path.join(directory, ...rest);
+    if (!file.startsWith(directory)) return response.writeHead(403).end();
     if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
     if (!fs.existsSync(file)) return response.writeHead(404).end();
     response.setHeader('content-type', types[path.extname(file)] ?? 'application/octet-stream');
@@ -141,6 +149,38 @@ test('generated Vite applications conform in a real browser', { timeout: 60_000 
     );
     await page.close();
 
+    page = await pageAt('/playground/');
+    await page.waitForFunction(() => window.gnehApp?.story);
+    check(
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'The Nocturne Archive',
+      'playground: production HTML boots the Inkdown entry passage',
+    );
+    await page.locator(aria('link', 'Enter the reading room - Karlowe')).click();
+    check(
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'Reading room',
+      'playground: production HTML navigates into Karlowe',
+    );
+    await page.locator(aria('link', 'Return to the entrance')).click();
+    await page.locator(aria('link', 'Enter the vault - Sugarcast')).click();
+    check(
+      (await page.$eval('#story', (node) => node.textContent)).includes('A faceless warden blocks the way'),
+      'playground: production HTML navigates into Sugarcast',
+    );
+    await page.close();
+
+    page = await pageAt('/snapshot/');
+    await page.waitForFunction(() => window.gnehApp?.story);
+    check(
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'A document without live behavior',
+      'snapshot: production HTML boots the static entry passage',
+    );
+    await page.locator(aria('link', 'Next page')).click();
+    check(
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'Second page',
+      'snapshot: production HTML keeps passage navigation',
+    );
+    await page.close();
+
     page = await pageAt('/vite-app/');
     await page.waitForFunction(() => window.app?.story);
     check(
@@ -151,7 +191,14 @@ test('generated Vite applications conform in a real browser', { timeout: 60_000 
       (await page.$eval('#story h1', (node) => node.textContent)).includes('Markdown'),
       'Vite: gneh mounts beside existing DOM instead of owning the page',
     );
+    check(
+      (await page.$eval('#story', (node) => node.textContent)).includes(
+        'Rendered by a handwritten defineView() callable.',
+      ),
+      'Vite: imported defineView callables render inside Inkdown',
+    );
     const before = await page.evaluate(() => window.app.story.state.count);
+    await page.locator(aria('link', 'Open the native JavaScript Fragment')).click();
     await page.locator(aria('button', 'Increment')).click();
     check(
       await page.evaluate((value) => window.app.story.state.count === value + 1, before),
