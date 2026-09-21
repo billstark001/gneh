@@ -10,7 +10,7 @@ export function bindPattern(pattern: BindingPattern, value: unknown, ctx: Evalua
   switch (pattern.type) {
     case 'Identifier':
       invariant(!pattern.name.startsWith('$'), 'E_BINDING', 'Persistent state cannot be declared as a local binding.');
-      scope[safeKey(pattern.name.replace(/^_/, ''))] = value;
+      scope[safeKey(pattern.name)] = value;
       return;
     case 'AssignmentPattern':
       bindPattern(
@@ -62,6 +62,46 @@ export function bindPattern(pattern: BindingPattern, value: unknown, ctx: Evalua
   }
 }
 
+function declaredNames(pattern: BindingPattern): string[] {
+  switch (pattern.type) {
+    case 'Identifier':
+      return [pattern.name];
+    case 'AssignmentPattern':
+      return declaredNames(pattern.left);
+    case 'RestElement':
+      return declaredNames(pattern.argument);
+    case 'ArrayPattern':
+      return pattern.elements.flatMap((item) => (item ? declaredNames(item) : []));
+    case 'ObjectPattern':
+      return pattern.properties.flatMap((item) =>
+        item.type === 'RestElement' ? declaredNames(item) : declaredNames(item.value),
+      );
+  }
+}
+
+function declarePattern(
+  pattern: BindingPattern,
+  value: unknown,
+  mutable: boolean,
+  ctx: EvaluationContext,
+  scope: Scope,
+): void {
+  if (pattern.type === 'Identifier' && pattern.name.startsWith('$')) {
+    invariant(mutable, 'E_BINDING', 'Persistent state cannot be declared constant.');
+    ctx.state[safeKey(pattern.name.slice(1))] = value as never;
+    return;
+  }
+  for (const name of declaredNames(pattern)) {
+    invariant(!name.startsWith('$'), 'E_BINDING', 'Persistent state cannot be declared as a lexical binding.');
+    const key = safeKey(name);
+    invariant(!Object.hasOwn(scope, key), 'DUPLICATE_BINDING', `Duplicate lexical declaration: ${name}`);
+    Object.defineProperty(scope, key, { value: undefined, writable: true, enumerable: true, configurable: true });
+  }
+  bindPattern(pattern, value, ctx, scope);
+  if (!mutable)
+    for (const name of declaredNames(pattern)) Object.defineProperty(scope, safeKey(name), { writable: false });
+}
+
 export interface EffectCallableRuntime {
   invokeEffect(call: CallableCallIR, ctx: EvaluationContext, scope: Scope, values?: readonly unknown[]): void;
   callableValue(callable: CallableIR, scope: Scope): unknown;
@@ -75,6 +115,8 @@ export function bindParameters(
 ): void {
   for (let index = 0; index < patterns.length; index++) {
     const pattern = patterns[index];
+    for (const name of declaredNames(pattern))
+      invariant(!Object.hasOwn(scope, safeKey(name)), 'DUPLICATE_BINDING', `Duplicate parameter: ${name}`);
     if (pattern.type === 'RestElement') {
       bindPattern(pattern, values.slice(index), ctx, scope);
       break;
@@ -98,7 +140,13 @@ export function executeEffects(
         evaluateExpression(effect.expression, ctx, scope);
         break;
       case 'bind':
-        bindPattern(effect.binding, evaluateExpression(effect.value, ctx, scope), ctx, scope);
+        declarePattern(
+          effect.binding,
+          evaluateExpression(effect.value, ctx, scope),
+          effect.mutable ?? true,
+          ctx,
+          scope,
+        );
         break;
       case 'if':
         executeEffects(
@@ -130,6 +178,11 @@ export function executeEffects(
           ctx,
           child,
         );
+        break;
+      }
+      case 'publish-callable': {
+        invariant('publish' in ctx && typeof ctx.publish === 'function', 'E_PUBLISH', 'Publication requires a Story.');
+        ctx.publish(effect.name, runtime.callableValue(effect.callable, scope));
         break;
       }
       case 'call': {

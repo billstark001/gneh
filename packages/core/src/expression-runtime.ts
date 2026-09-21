@@ -40,8 +40,6 @@ const intrinsicValues = Object.freeze({
 });
 
 function variables(ctx: EvaluationContext, scope: Scope): BindingStore {
-  const temporary = scope.__temporary;
-  const temporaryScope = temporary && typeof temporary === 'object' ? (temporary as Scope) : undefined;
   const localName = (name: string) => name.slice(1);
   return {
     has(name) {
@@ -49,10 +47,7 @@ function variables(ctx: EvaluationContext, scope: Scope): BindingStore {
     },
     get(name) {
       if (name.startsWith('$')) return ctx.state[safeKey(localName(name))];
-      if (name.startsWith('_')) {
-        const key = safeKey(localName(name));
-        return bindingOwner(scope, key)?.[key] ?? temporaryScope?.[key];
-      }
+      if (name.startsWith('_')) return bindingOwner(scope, safeKey(name))?.[safeKey(name)];
       return bindingOwner(scope, name)?.[name];
     },
     set(name, value) {
@@ -61,13 +56,10 @@ function variables(ctx: EvaluationContext, scope: Scope): BindingStore {
         return;
       }
       if (name.startsWith('_')) {
-        const key = safeKey(localName(name));
+        const key = safeKey(name);
         const owner = bindingOwner(scope, key);
         if (owner) owner[key] = value;
-        else {
-          invariant(temporaryScope, 'E_ASSIGN', 'Missing temporary scope.');
-          temporaryScope[key] = value;
-        }
+        else scope[key] = value;
         return;
       }
       invariant(name !== 'props' && name !== 'state', 'E_ASSIGN', 'Cannot replace a context binding.');
@@ -78,9 +70,9 @@ function variables(ctx: EvaluationContext, scope: Scope): BindingStore {
     delete(name) {
       if (name.startsWith('$')) return delete ctx.state[safeKey(localName(name))];
       if (name.startsWith('_')) {
-        const key = safeKey(localName(name));
+        const key = safeKey(name);
         const owner = bindingOwner(scope, key);
-        return owner ? delete owner[key] : !!temporaryScope && delete temporaryScope[key];
+        return owner ? delete owner[key] : false;
       }
       return false;
     },
@@ -105,6 +97,7 @@ function capabilities(ctx: EvaluationContext, scope: Scope): Record<string, unkn
       invariant(ctx.makeCallable, 'E_CALLABLE', 'Callable construction is unavailable in this expression context.');
       return ctx.makeCallable(id, scope);
     },
+    gnehRegistry: (name: string) => ctx.bindings[safeKey(name)],
     gnehCallValue: (value: unknown, ...args: unknown[]) => {
       invariant(ctx.invokeValueCallable, 'E_CALLABLE', 'Value callable invocation is unavailable.');
       return ctx.invokeValueCallable(value, args, scope);

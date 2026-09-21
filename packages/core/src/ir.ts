@@ -26,6 +26,8 @@ export interface CallableIR {
   body: StoryNode[] | EffectNode[] | ValueCallableBodyIR;
   source: string;
   span: Span;
+  /** Unbounded declarations escape only after their source-order declaration runs. */
+  escape?: 'publish' | 'export';
 }
 
 export type CallableCalleeIR =
@@ -40,7 +42,7 @@ export interface CallableCallIR {
 
 export type EffectNode =
   | { type: 'expression'; expression: ExpressionNode }
-  | { type: 'bind'; binding: BindingPattern; value: ExpressionNode }
+  | { type: 'bind'; binding: BindingPattern; value: ExpressionNode; mutable?: boolean }
   | { type: 'if'; test: ExpressionNode; yes: EffectNode[]; no: EffectNode[] }
   | { type: 'each'; binding: BindingPattern; items: ExpressionNode; body: EffectNode[] }
   | {
@@ -48,6 +50,7 @@ export type EffectNode =
       target: Extract<ExpressionNode, { type: 'Identifier' | 'MemberExpression' }>;
       callable: CallableIR;
     }
+  | { type: 'publish-callable'; name: string; callable: CallableIR }
   | { type: 'call'; call: CallableCallIR };
 
 export interface ImportIR {
@@ -102,6 +105,7 @@ export type StoryNode =
   | { type: 'button'; action: CallableCallIR; children: StoryNode[]; span: Span }
   | { type: 'call'; call: CallableCallIR; children: StoryNode[]; span: Span }
   | { type: 'callable'; callable: CallableIR; span: Span }
+  | { type: 'publish'; names: string[] | '*'; span: Span }
   | { type: 'children'; span: Span }
   | {
       type: 'interaction';
@@ -162,10 +166,7 @@ export interface PassageIR {
   body: StoryNode[];
   /** Reactive documents recompute from state; materialized documents memoize source-order evaluation per mount. */
   evaluation: 'reactive' | 'materialized';
-  enter: EffectNode[];
   constants: Record<string, Expression>;
-  imports: ImportIR[];
-  exports: string[];
   capabilities: string[];
 }
 
@@ -175,6 +176,7 @@ export interface StoryIR {
   state: State;
   metadata: Metadata;
   passages: PassageIR[];
+  setup?: string[];
 }
 
 export interface ParsedPassage {
@@ -189,6 +191,21 @@ export interface ParsedPassage {
 export interface ParseResult {
   passages: PassageIR[];
   diagnostics: Diagnostic[];
+  module?: SourceModuleIR;
+}
+
+export interface ExportIR {
+  local: string;
+  exported: string;
+}
+
+/** File-level linkage and initialization. The primary initializer is never a route. */
+export interface SourceModuleIR {
+  metadata: Metadata;
+  imports: ImportIR[];
+  exports: ExportIR[];
+  setup: string[];
+  primary?: PassageIR;
 }
 
 export interface CompileResult extends ParseResult {

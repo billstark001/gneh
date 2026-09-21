@@ -52,6 +52,8 @@ export interface RegionHandle {
 export interface FragmentContext extends EvaluationContext {
   readonly live: boolean;
   readonly instanceId: string;
+  /** True only while rebuilding transient runtime structure from a save. */
+  readonly restoring: boolean;
   dispatch(action: (ctx: FragmentContext) => void): void;
   regionView(name: string, fallback: () => View[]): View;
   navigate<P extends object>(target: Fragment<P>, ...args: {} extends P ? [props?: P] : [props: P]): void;
@@ -72,6 +74,8 @@ export interface FragmentContext extends EvaluationContext {
   region(name: string): RegionHandle;
   wikify?: (source: string, dialect?: Dialect) => Fragment;
   onDispose(cleanup: () => void): void;
+  /** Stage a callable in this Story's transient registry. */
+  publish(name: string, value: unknown): void;
 }
 
 export interface Fragment<P extends object = FragmentProps> {
