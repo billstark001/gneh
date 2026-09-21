@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { balanced, splitTopLevel } from '../dist/index.js';
+import { balanced, splitTopLevel, splitWikiLink } from '../dist/index.js';
 
 describe('@gneh/syntax', () => {
   test('balances JavaScript delimiters through strings and nested expressions', () => {
@@ -11,5 +11,13 @@ describe('@gneh/syntax', () => {
 
   test('splits only top-level separators', () => {
     expect(splitTopLevel('one, fn(two, three), "four,five"')).toEqual(['one', 'fn(two, three)', '"four,five"']);
+  });
+
+  test('splits wiki links under the selected dialect policy', () => {
+    expect(splitWikiLink('Continue|Route->East', 'source-order')).toEqual({
+      label: 'Continue',
+      target: 'Route->East',
+    });
+    expect(splitWikiLink('A->B<-Continue', 'rightmost-arrow')).toEqual({ label: 'Continue', target: 'A->B' });
   });
 });

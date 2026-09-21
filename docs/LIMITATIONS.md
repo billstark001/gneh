@@ -23,6 +23,8 @@ gneh 0.1 is a working reference implementation, not an audited game engine or an
 
 Portable expressions do not use `eval` or `new Function`. They use pure-expr's parser/evaluator and access-policy APIs, deep read-only render state, finite Story execution budgets, and post-transaction JSON validation. gneh is not a hostile-code sandbox: source, imported bindings, and extensions are application-owned, and permissive call access is deliberate.
 
+Structural parsers, nested lists, runtime IR traversal, and portable JSON validation also enforce nesting budgets. Excessively nested Karlowe input fails with a typed CST diagnostic, while Sugarcast's inspection CST preserves the over-deep remainder as lossless text and reports a diagnostic. Lists, StoryNode evaluation, metadata, and story state deeper than 128 containers are rejected before the JavaScript call stack can overflow. These limits are resource boundaries, not additional language features.
+
 Imported `.mjs`, module helpers, and renderer extensions are normal trusted host JavaScript. Passing them to the runtime does not sandbox them. Their purity and host permissions remain the application's responsibility.
 
 Interpolation emits scalar text and never reparses a returned string as HTML or markup. The DOM renderer does not use `innerHTML` and filters URL schemes. This is defense in depth, not an independent security audit. Host isolation and resource limits are still required for hostile files, remote plugins, or very large input.

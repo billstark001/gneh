@@ -1,5 +1,7 @@
 import { GnehError } from '@gneh/core';
 
+const maxKarloweCSTDepth = 100;
+
 export interface KarloweMacroToken {
   type: 'macro';
   name: string;
@@ -238,8 +240,9 @@ export function lexKarlowe(source: string): KarloweToken[] {
   return tokens;
 }
 
-/** Lossless registry-independent structure; semantic macro names are never consulted. */
-export function parseKarloweCST(source: string, base = 0): KarloweDocumentCST {
+function parseKarloweCSTAt(source: string, base: number, depth: number): KarloweDocumentCST {
+  if (depth >= maxKarloweCSTDepth)
+    throw new GnehError('KARLOWE_CST_DEPTH', `Karlowe CST nesting exceeds the depth limit of ${maxKarloweCSTDepth}.`);
   const children = lexKarlowe(source).map((token): KarloweCSTNode => {
     if (token.type === 'macro')
       return {
@@ -255,8 +258,14 @@ export function parseKarloweCST(source: string, base = 0): KarloweDocumentCST {
       end: token.end + base,
       bodyStart: token.bodyStart + base,
       bodyEnd: token.bodyEnd + base,
-      children: parseKarloweCST(source.slice(token.bodyStart, token.bodyEnd), base + token.bodyStart).children,
+      children: parseKarloweCSTAt(source.slice(token.bodyStart, token.bodyEnd), base + token.bodyStart, depth + 1)
+        .children,
     };
   });
   return { type: 'document', source, children };
+}
+
+/** Lossless registry-independent structure; semantic macro names are never consulted. */
+export function parseKarloweCST(source: string, base = 0): KarloweDocumentCST {
+  return parseKarloweCSTAt(source, base, 0);
 }

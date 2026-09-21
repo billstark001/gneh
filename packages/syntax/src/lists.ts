@@ -9,6 +9,8 @@ export interface ListLine {
 
 export type ListLineReader = (line: string) => ListLine | undefined;
 
+const maxListDepth = 128;
+
 /** Builds nested list IR from a dialect-owned line recognizer. */
 export function readList(
   source: string,
@@ -26,6 +28,10 @@ export function readList(
     const end = lineEnd(cursor),
       match = readLine(source.slice(cursor, end));
     if (!match) break;
+    if (!Number.isSafeInteger(match.depth) || match.depth < 1)
+      parser.error('LIST_DEPTH', 'List readers must return a positive integer depth.', base + cursor, base + end);
+    if (match.depth > maxListDepth)
+      parser.error('LIST_DEPTH', `List nesting exceeds the depth limit of ${maxListDepth}.`, base + cursor, base + end);
     entries.push({ ...match, start: cursor, end });
     cursor = end;
   }

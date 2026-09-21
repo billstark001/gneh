@@ -9,6 +9,7 @@ import type {
 } from '@gneh/core';
 import type { MarkupParser } from './parser.js';
 
+/** Derive the host/runtime capabilities reachable from a passage and its nested callables. */
 export function storyCapabilities(body: StoryNode[], extra: readonly CallableIR[] = []): string[] {
   const capabilities = new Set<string>();
   function visitCallable(callable: CallableIR) {
@@ -53,6 +54,7 @@ export function storyCapabilities(body: StoryNode[], extra: readonly CallableIR[
   return [...capabilities];
 }
 
+/** Lower a container passage through a configured markup parser into the shared PassageIR shape. */
 export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: MarkupParser): PassageIR {
   const body = parser.blocks(parsed.body, parsed.bodyOffset);
   return {

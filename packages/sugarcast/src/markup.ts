@@ -12,18 +12,22 @@ function nakedVariableEnd(source: string, index: number): number | undefined {
   if (!['$', '_'].includes(source[index]) || !/^[A-Za-z_]/.test(source[index + 1] ?? '')) return;
   if (source.startsWith('__', index) || (source[index] === '_' && /[\w$]/.test(source[index - 1] ?? ''))) return;
   let end = index + /^[$_][A-Za-z_]\w*/.exec(source.slice(index))![0].length;
-  while (source[end] === '.' && /^[A-Za-z_]\w*/.test(source.slice(end + 1))) {
-    end += 1 + /^[A-Za-z_]\w*/.exec(source.slice(end + 1))![0].length;
+  while (end < source.length) {
+    const property = source[end] === '.' ? /^[A-Za-z_]\w*/.exec(source.slice(end + 1)) : undefined;
+    if (property) {
+      end += 1 + property[0].length;
+      continue;
+    }
+    if (source[end] !== '[') break;
+    try {
+      const group = balanced(source, end);
+      if (!/^(?:\d+|[$_][A-Za-z_]\w*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$/.test(group.content.trim())) break;
+      end = group.end;
+    } catch {
+      break;
+    }
   }
-  if (source[end] !== '[') return end;
-  try {
-    const group = balanced(source, end);
-    return /^(?:\d+|[$_][A-Za-z_]\w*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$/.test(group.content.trim())
-      ? group.end
-      : end;
-  } catch {
-    return end;
-  }
+  return end;
 }
 
 function inline(source: string, index: number, base: number, parser: MarkupParser): ReadResult | undefined {
@@ -176,6 +180,7 @@ function block(
 
 export const sugarcastMarkup: MarkupDialect = {
   inline,
+  linkSeparators: 'source-order',
   inlineMarks: [
     ['//', 'emphasis'],
     ["''", 'strong'],

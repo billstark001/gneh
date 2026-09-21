@@ -16,6 +16,7 @@ import { firstString, sugarExpression as expr, wikiLink } from './arguments.js';
 import { actionBody } from './actions.js';
 import { sugarcastMarkup } from './markup.js';
 import { discoverWidgets, widgetHeader } from './widgets.js';
+import { cstDepthFallback, maxSugarcastCSTDepth } from './cst.js';
 
 export interface SugarcastMacroToken {
   name: string;
@@ -136,7 +137,9 @@ export function parseSugarcastCST(source: string): SugarcastDocumentCST {
     endIndex: number,
     contentStart: number,
     contentEnd: number,
+    depth = 0,
   ): SugarcastCSTNode[] => {
+    if (depth >= maxSugarcastCSTDepth) return cstDepthFallback(source, contentStart, contentEnd, diagnostics);
     const children: SugarcastCSTNode[] = [];
     let textStart = contentStart;
     const text = (end: number) => {
@@ -175,7 +178,7 @@ export function parseSugarcastCST(source: string): SugarcastDocumentCST {
         type: 'macro',
         fullEnd: closing.end,
         closing,
-        children: structure(index + 1, closeIndex, token.end, closing.start),
+        children: structure(index + 1, closeIndex, token.end, closing.start, depth + 1),
       });
       index = closeIndex;
       textStart = closing.end;

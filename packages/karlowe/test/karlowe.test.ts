@@ -17,4 +17,14 @@ describe('@gneh/karlowe', () => {
     expect(lowered.diagnostics).toEqual([]);
     expect(lowered.passages[0]?.capabilities).toContain('runtime-extension:karlowe/mystery');
   });
+
+  test('bounds adversarial CST nesting without overflowing the JavaScript stack', () => {
+    const depth = 5_000;
+    expect(() => parseKarloweCST('['.repeat(depth) + 'x' + ']'.repeat(depth))).toThrow(/CST nesting/);
+  });
+
+  test('bounds adversarial list nesting without overflowing the JavaScript stack', () => {
+    const body = Array.from({ length: 200 }, (_, index) => `${'*'.repeat(index + 1)} item`).join('\n');
+    expect(parseKarlowe(`:: Start\n${body}`).diagnostics[0]?.code).toBe('LIST_DEPTH');
+  });
 });

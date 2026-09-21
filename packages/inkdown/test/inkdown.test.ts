@@ -77,4 +77,9 @@ line`,
     expect(headings[0]).toMatchObject({ children: [{ type: 'text', value: 'heading#' }] });
     expect(headings[1]).toMatchObject({ children: [{ type: 'text', value: 'closed' }] });
   });
+
+  test('bounds adversarial list nesting before the JavaScript stack overflows', () => {
+    const body = Array.from({ length: 200 }, (_, index) => `${'  '.repeat(index)}- item`).join('\n');
+    expect(parseInkdown(`:: Start\n${body}`).diagnostics[0]?.code).toBe('LIST_DEPTH');
+  });
 });

@@ -166,17 +166,17 @@ $hidden
 
 ```sugarcast
 :: Start [start]
-<<set _local = { name: "temporary" }>>$hero.name $items[1] $hero[$key] _local.name $$hero <nowiki>$hero.name //raw//</nowiki> `$name`
+<<set _local = { name: "temporary" }>>$hero.name $items[1] $hero[$key] _local.name $party[0].name $matrix[0][1] $$hero <nowiki>$hero.name //raw//</nowiki> `$name`
 ```
 
 ```json
 {
-  "state": { "hero": { "name": "Mara", "title": "Captain" }, "items": ["zero", "one"], "key": "title", "name": "Mara" }
+  "state": { "hero": { "name": "Mara", "title": "Captain" }, "items": ["zero", "one"], "key": "title", "name": "Mara", "party": [{ "name": "Iris" }], "matrix": [[1, 2]] }
 }
 ```
 
 ```text
-Mara one Captain temporary $hero $hero.name //raw// `Mara`
+Mara one Captain temporary Iris 2 $hero $hero.name //raw// `Mara`
 ```
 
 ## Reuse, loops, and interaction
@@ -257,6 +257,27 @@ Total: <<print $total>>
 
 ```text
 Total: 5
+```
+
+--------
+
+### Wiki links use the first separator
+
+SugarCube recognizes the first pipe or arrow as the text/target boundary; arrow-like text after that boundary remains part of the passage name.
+
+```sugarcast
+:: Start [start]
+[[Continue|Route->East]]
+:: Route->East
+Arrived
+```
+
+```json
+{ "steps": [{ "activate": "Continue" }], "expect": { "current": "Route->East" } }
+```
+
+```text
+Arrived
 ```
 
 --------

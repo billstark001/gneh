@@ -13,6 +13,9 @@ import {
   type StoryNode,
 } from '@gneh/core';
 import { balanced, splitTopLevel } from './delimiters.js';
+import { splitWikiLink, type LinkSeparatorPolicy } from './links.js';
+
+const defaultMaxDepth = 100;
 
 export interface ReadResult {
   nodes: StoryNode[];
@@ -69,6 +72,8 @@ export interface MarkupDialect {
   heading?: (line: string) => HeadingMatch | undefined;
   rule?: (line: string) => boolean;
   quote?: (line: string) => QuoteMatch | undefined;
+  /** How generic wiki links choose among mixed `|`, `->`, and `<-` separators. */
+  linkSeparators?: LinkSeparatorPolicy;
   paragraphs?: boolean;
   preserveBlankLines?: boolean;
 }
@@ -154,7 +159,7 @@ export class MarkupParser {
   }
   private guard<T>(fn: () => T): T {
     // All recursive paths pass through one budget, including dialect callbacks.
-    if (++this.depth > (this.options.maxDepth ?? 100))
+    if (++this.depth > (this.options.maxDepth ?? defaultMaxDepth))
       throw new GnehError('PARSE_DEPTH', 'Maximum syntax nesting exceeded.');
     try {
       return fn();
@@ -276,15 +281,8 @@ export class MarkupParser {
             label = inside.slice(0, at).trim();
             target = inside.slice(at + 2).trim();
             action = true;
-          } else if ((at = inside.lastIndexOf('->')) >= 0) {
-            label = inside.slice(0, at).trim();
-            target = inside.slice(at + 2).trim();
-          } else if ((at = inside.lastIndexOf('<-')) >= 0) {
-            target = inside.slice(0, at).trim();
-            label = inside.slice(at + 2).trim();
-          } else if ((at = inside.indexOf('|')) >= 0) {
-            label = inside.slice(0, at).trim();
-            target = inside.slice(at + 1).trim();
+          } else {
+            ({ label, target } = splitWikiLink(inside, this.options.markup.linkSeparators));
           }
           const children = this.inline(label, base + i + 2 + inside.indexOf(label));
           const span = this.span(base + i, base + end + 2);

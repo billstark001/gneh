@@ -264,13 +264,13 @@ ABC
 
 ```karlowe
 :: Start [start]
-[[A->B->End]]
-:: End
+[[A->B<-Continue]]
+:: A->B
 (print: (a: "first", "second")'s ($position))
 ```
 
 ```json
-{ "state": { "position": 2 }, "steps": [{ "activate": "A->B" }] }
+{ "state": { "position": 2 }, "steps": [{ "activate": "Continue" }] }
 ```
 
 ```text
