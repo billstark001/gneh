@@ -13,7 +13,7 @@ describe('@gneh/karlowe', () => {
       type: 'macro',
       name: 'mystery',
     });
-    const lowered = parseKarlowe('(mystery: $hp)', 'story.karlowe');
+    const lowered = parseKarlowe(':: Start [start]\n(mystery: $hp)', 'story.karlowe');
     expect(lowered.diagnostics).toEqual([]);
     expect(lowered.passages[0]?.capabilities).toContain('runtime-extension:karlowe/mystery');
   });

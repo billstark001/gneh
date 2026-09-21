@@ -8,7 +8,6 @@ import {
   type EffectNode,
   type BindingPattern,
   type Expression,
-  type ImportIR,
   type Metadata,
   type Span,
   type StoryNode,
@@ -86,6 +85,9 @@ export interface SyntaxOptions {
   /** Extend a prose paragraph when an inline dialect construct spans blank lines. */
   extendParagraph?: (source: string, start: number, end: number) => number;
   maxDepth?: number;
+  /** Stable enclosing source name used by unnamed top-level callable declarations. */
+  contextName?: string;
+  initializer?: boolean;
 }
 
 /**
@@ -96,17 +98,17 @@ export interface SyntaxOptions {
  */
 export class MarkupParser {
   evaluation: 'reactive' | 'materialized' = 'reactive';
-  readonly enter: EffectNode[] = [];
   readonly constants: Record<string, Expression> = {};
-  readonly imports: ImportIR[] = [];
-  readonly exports: string[] = [];
   private depth = 0;
   constructor(readonly options: SyntaxOptions) {}
   get nesting(): number {
     return this.depth;
   }
-  addEnter(effects: EffectNode[]): void {
-    this.enter.push(...effects);
+  get contextName(): string | undefined {
+    return this.options.contextName;
+  }
+  get initializer(): boolean {
+    return this.options.initializer ?? false;
   }
   span(start: number, end: number): Span {
     return { file: this.options.file, start, end };

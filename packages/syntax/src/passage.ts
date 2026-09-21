@@ -18,7 +18,7 @@ export function storyCapabilities(body: StoryNode[], extra: readonly CallableIR[
   }
   function visitEffects(effects: EffectNode[]) {
     for (const effect of effects) {
-      if (effect.type === 'assign-callable') visitCallable(effect.callable);
+      if (effect.type === 'assign-callable' || effect.type === 'publish-callable') visitCallable(effect.callable);
       else if (effect.type === 'call' && effect.call.callee.type === 'inline')
         visitCallable(effect.call.callee.callable);
       else if (effect.type === 'if') {
@@ -64,10 +64,7 @@ export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: Mar
     span: parsed.span,
     body,
     evaluation: parser.evaluation,
-    enter: parser.enter,
     constants: parser.constants,
-    imports: parser.imports,
-    exports: parser.exports,
     capabilities: storyCapabilities(body),
   };
 }

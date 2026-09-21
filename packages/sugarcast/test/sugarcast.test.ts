@@ -13,7 +13,7 @@ describe('@gneh/sugarcast', () => {
   });
 
   test('lowers portable macros into story IR', () => {
-    const result = parseSugarcast('<<set $hp = 2>><<print $hp>>', 'story.sugarcast');
+    const result = parseSugarcast(':: Start [start]\n<<set $hp = 2>><<print $hp>>', 'story.sugarcast');
     expect(result.diagnostics).toEqual([]);
     expect(result.passages[0]?.body[0]).toMatchObject({ type: 'effect' });
   });

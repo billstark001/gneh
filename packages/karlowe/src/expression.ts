@@ -157,7 +157,10 @@ export function parseKarloweExpression(
               )
             : [];
           atom = dynamic
-            ? call(identifier('gnehCallValue'), [identifier(name), ...args])
+            ? call(identifier('gnehCallValue'), [
+                name.startsWith('$') ? call(identifier('gnehRegistry'), [literal(name.slice(1))]) : identifier(name),
+                ...args,
+              ])
             : hostOperations[name]
               ? call(identifier('host'), [literal(hostOperations[name]), ...args])
               : call(identifier(known[name]), args);

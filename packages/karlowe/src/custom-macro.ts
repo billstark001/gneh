@@ -80,7 +80,7 @@ export function customMacroAssignment(
         { effects: prefix, result: parser.expr(macro.args, bodyOffset + macro.argsStart) },
         body,
         declarationSpan,
-        'story',
+        'lexical',
       );
       cursor = macro.end;
       break;
@@ -100,7 +100,7 @@ export function customMacroAssignment(
           false,
         ),
       );
-      callable = parser.callable('view', undefined, params, nodes, body, declarationSpan, 'story');
+      callable = parser.callable('view', undefined, params, nodes, body, declarationSpan, 'lexical');
       cursor = attached.end;
       break;
     }
@@ -121,5 +121,7 @@ export function customMacroAssignment(
       'Custom macro assignment target must be a variable or property.',
       target.span.start,
     );
+  if (target.ast.type === 'Identifier' && target.ast.name.startsWith('$'))
+    return { type: 'publish-callable', name: target.ast.name.slice(1), callable };
   return { type: 'assign-callable', target: target.ast, callable };
 }

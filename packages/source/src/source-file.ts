@@ -1,11 +1,16 @@
 /** Twee 3 passage container parsing, emission and source positions. */
 import { GnehError, assertJson, type Diagnostic, type Metadata, type ParsedPassage, type Span } from '@gneh/core';
-import { mergeMetadata, metadataFailure, parseMetadata, sourceLines, type SourceLine } from './metadata.js';
+import { metadataFailure, sourceLines, type SourceLine } from './metadata.js';
+import { frontMatter, moduleLinkage, type SourceLinkage } from './module-metadata.js';
+
+export type { SourceExport, SourceImport, SourceLinkage } from './module-metadata.js';
 
 export interface SourceFile {
   passages: ParsedPassage[];
+  primary?: ParsedPassage;
   diagnostics: Diagnostic[];
   metadata: Metadata;
+  linkage: SourceLinkage;
 }
 
 export interface Header {
@@ -62,39 +67,31 @@ export function parseHeader(line: string): Header {
   return { name, tags, metadata };
 }
 
-function frontMatter(text: string): {
-  metadata: Metadata;
-  body: string;
-  removed: number;
-} {
-  const ls = sourceLines(text);
-  if (!ls.length || ls[0].text.replace(/^\uFEFF/, '').trim() !== '---') return { metadata: {}, body: text, removed: 0 };
-  let end = 1;
-  while (end < ls.length && !/^(?:---|\.\.\.)\s*$/.test(ls[end].text)) end++;
-  if (end === ls.length) metadataFailure('Unclosed metadata block.');
-  const removed = ls[end].end;
-  return {
-    metadata: parseMetadata(text.slice(ls[0].end, ls[end].start)),
-    body: text.slice(removed),
-    removed,
-  };
-}
-
 /** Same container syntax for all three dialects. Header markers in fenced code stay text. */
 export function splitPassages(source: string, file = 'story.inkdown'): SourceFile {
   const diagnostics: Diagnostic[] = [];
   const passages: ParsedPassage[] = [];
-  let defaults: Metadata = {};
+  let metadata: Metadata = {};
+  let links: SourceLinkage = { imports: [], exports: [], setup: [] };
   let content = source;
   let base = 0;
   try {
     const f = frontMatter(source);
-    defaults = f.metadata;
+    const parsed = moduleLinkage(f.metadata);
+    metadata = parsed.metadata;
+    links = parsed.linkage;
     content = f.body;
     base = f.removed;
+    if (f.removed && frontMatter(content).removed)
+      diagnostics.push({
+        code: 'FILE_METADATA_DUPLICATE',
+        severity: 'error',
+        message: 'A source file may contain only one YAML metadata block.',
+        span: { file, start: base, end: Math.min(source.length, base + 3) },
+      });
   } catch (e) {
     diagnostics.push(diag(e, { file, start: 0, end: Math.min(source.length, 3) }));
-    return { passages, diagnostics, metadata: {} };
+    return { passages, diagnostics, metadata: {}, linkage: links };
   }
   const ls = sourceLines(content),
     headers: SourceLine[] = [];
@@ -105,6 +102,12 @@ export function splitPassages(source: string, file = 'story.inkdown'): SourceFil
   for (const line of ls) {
     const t = line.text;
     if (afterHeader && t === '---') {
+      diagnostics.push({
+        code: 'PASSAGE_FRONT_MATTER',
+        severity: 'error',
+        message: 'Passage-level YAML front matter is not supported; use header JSON metadata.',
+        span: { file, start: base + line.start, end: base + line.end },
+      });
       inMeta = true;
       afterHeader = false;
       continue;
@@ -136,50 +139,41 @@ export function splitPassages(source: string, file = 'story.inkdown'): SourceFil
     tags: string[] = [],
   ): void {
     try {
-      const f = frontMatter(body);
-      const fileDefaults = { ...defaults };
-      if (headers.length) delete fileDefaults.id;
-      const metadata = mergeMetadata(fileDefaults, { tags }, header, f.metadata);
-      const id = typeof metadata.id === 'string' ? metadata.id : name;
+      const passageMetadata: Metadata = { ...header, tags };
+      const id = typeof passageMetadata.id === 'string' ? passageMetadata.id : name;
       if (!id.trim()) metadataFailure('Passage id cannot be empty.');
-      metadata.id = id;
-      metadata.name = name;
-      if (!Array.isArray(metadata.tags)) metadataFailure('Metadata tags must be an array.');
+      passageMetadata.id = id;
+      passageMetadata.name = name;
+      if (!Array.isArray(passageMetadata.tags)) metadataFailure('Metadata tags must be an array.');
       if (
-        metadata.params !== undefined &&
-        (!Array.isArray(metadata.params) || metadata.params.some((x) => typeof x !== 'string'))
+        passageMetadata.params !== undefined &&
+        (!Array.isArray(passageMetadata.params) || passageMetadata.params.some((x) => typeof x !== 'string'))
       )
         metadataFailure('params must be an array of names.');
       passages.push({
         id,
         name,
-        body: f.body,
-        metadata,
+        body,
+        metadata: passageMetadata,
         span: { file, start, end },
-        bodyOffset: bodyStart + f.removed,
+        bodyOffset: bodyStart,
       });
     } catch (e) {
       diagnostics.push(diag(e, { file, start, end }));
     }
   }
-  if (!headers.length) {
-    const name =
-      typeof defaults.id === 'string'
-        ? defaults.id
-        : file
-            .replaceAll('\\', '/')
-            .split('/')
-            .pop()!
-            .replace(/\.(?:inkdown|karlowe|sugarcast|md|twee|tw)$/i, '');
-    add(name, content, base, 0, source.length);
-  } else {
-    if (content.slice(0, headers[0].start).trim())
-      diagnostics.push({
-        code: 'SOURCE_PREAMBLE',
-        severity: 'warning',
-        message: 'Text before the first passage header is ignored. Use file front matter for defaults.',
-        span: { file, start: base, end: base + headers[0].start },
-      });
+  let primary: ParsedPassage | undefined;
+  const primaryEnd = headers[0]?.start ?? content.length;
+  if (content.slice(0, primaryEnd).trim())
+    primary = {
+      id: 'primary',
+      name: 'primary',
+      body: content.slice(0, primaryEnd),
+      metadata: {},
+      span: { file, start: base, end: base + primaryEnd },
+      bodyOffset: base,
+    };
+  if (headers.length) {
     for (let i = 0; i < headers.length; i++) {
       const h = headers[i],
         end = headers[i + 1]?.start ?? content.length;
@@ -210,7 +204,15 @@ export function splitPassages(source: string, file = 'story.inkdown'): SourceFil
       });
     ids.add(p.id);
   }
-  return { passages, diagnostics, metadata: defaults };
+  for (const id of links.setup)
+    if (!passages.some((passage) => passage.id === id))
+      diagnostics.push({
+        code: 'SETUP_MISSING',
+        severity: 'error',
+        message: `Unknown setup passage in this module: ${id}`,
+        span: { file, start: 0, end: Math.min(source.length, 3) },
+      });
+  return { passages, primary, diagnostics, metadata, linkage: links };
 }
 
 export function diag(error: unknown, span: Span): Diagnostic {

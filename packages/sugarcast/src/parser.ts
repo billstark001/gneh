@@ -1,4 +1,4 @@
-import { GnehError, type CallableIR, type ParseResult, type StoryNode } from '@gneh/core';
+import { GnehError, type ParseResult, type StoryNode } from '@gneh/core';
 import { splitPassages, diag } from '@gneh/source';
 import { parseSugarArguments, parseSugarExpression } from '@gneh/expression';
 import {
@@ -383,7 +383,7 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
         nodes: [
           {
             type: 'each',
-            name: match[1].replace(/^_/, ''),
+            name: match[1],
             items,
             children: body,
             span: p.span(base + index, base + b.end),
@@ -544,21 +544,20 @@ const expandSugarcast: MacroLowering<SugarcastMacroCST, SugarcastMacroMeta> = ({
           base + m.argStart,
           base + m.end - 2,
         );
-      const block = readSugarcastBlock(source, m, registry);
-      if (p.nesting > 1) {
-        const section = block.sections[0];
-        const span = p.span(base + m.start, base + block.end);
-        const callable = p.callable(
-          'view',
-          header.name,
-          [{ type: 'RestElement', argument: { type: 'Identifier', name: '_args' } }],
-          p.children(section.body, base + section.base, false),
-          source.slice(m.start, block.end),
-          span,
-        );
-        return { nodes: [{ type: 'callable', callable, span }], end: block.end, block: true };
-      }
-      return { nodes: [], end: block.end, block: true };
+      const block = m.closing ? readSugarcastBlock(source, m, registry) : undefined;
+      const section = block?.sections[0] ?? { body: source.slice(m.end), base: m.end };
+      const end = block?.end ?? source.length;
+      const callableSpan = p.span(base + m.start, base + end);
+      const callable = p.callable(
+        'view',
+        header.name,
+        [{ type: 'RestElement', argument: { type: 'Identifier', name: '_args' } }],
+        p.children(section.body, base + section.base, false),
+        source.slice(m.start, end),
+        callableSpan,
+      );
+      if (!header.local) callable.escape = p.initializer ? (block ? undefined : 'export') : 'publish';
+      return { nodes: [{ type: 'callable', callable, span: callableSpan }], end, block: true };
     }
   }
 };
@@ -694,12 +693,16 @@ export function parseSugarcast(
   const lowerings = options.lowerings ?? createSugarcastLowerings();
   const split = splitPassages(source, file),
     result: ParseResult = { passages: [], diagnostics: [...split.diagnostics] };
-  const widgets = discoverWidgets(split.passages, file, parseSugarcastCST);
+  const widgets = discoverWidgets(
+    split.primary ? [split.primary, ...split.passages] : split.passages,
+    file,
+    parseSugarcastCST,
+  );
   const widgetContainers = new Set(
     [...widgets.values()].filter((widget) => widget.container).map((widget) => widget.name),
   );
   const widgetNames = new Set(widgets.keys());
-  for (const passage of split.passages)
+  const parse = (passage: (typeof split.passages)[number], initializer = false) => {
     try {
       const parser = new MarkupParser({
         file,
@@ -711,28 +714,34 @@ export function parseSugarcast(
           return !!match;
         },
         extendParagraph: (source, start, end) => extendParagraph(source, start, end, lowerings),
+        contextName: passage.name,
+        initializer,
       });
       const parsed = basePassage(passage, 'sugarcast', parser);
-      const declarations: CallableIR[] = [...widgets.values()]
-        .filter((widget) => widget.scope === 'module')
-        .map((widget) =>
-          parser.callable(
-            'view',
-            widget.name,
-            [{ type: 'RestElement', argument: { type: 'Identifier', name: '_args' } }],
-            parser.children(widget.body, widget.bodyOffset, false),
-            widget.source,
-            widget.span,
-          ),
-        );
-      parsed.body.unshift(
-        ...declarations.map((callable) => ({ type: 'callable' as const, callable, span: callable.span })),
-      );
+      if (initializer && parsed.body.some((node) => node.type !== 'callable' && node.type !== 'effect'))
+        throw new Error('Bare render output is not allowed in the primary initializer.');
       parsed.capabilities = storyCapabilities(parsed.body);
       parsed.evaluation = 'materialized';
-      result.passages.push(parsed);
+      if (!initializer) result.passages.push(parsed);
+      return parsed;
     } catch (e) {
       result.diagnostics.push(diag(e, passage.span));
     }
+  };
+  const primary = split.primary ? parse(split.primary, true) : undefined;
+  for (const passage of split.passages) parse(passage);
+  const automatic =
+    primary?.body.flatMap((node) =>
+      node.type === 'callable' && node.callable.escape === 'export' && node.callable.name
+        ? [{ local: node.callable.name, exported: node.callable.name }]
+        : [],
+    ) ?? [];
+  result.module = {
+    metadata: split.metadata,
+    imports: split.linkage.imports,
+    exports: [...split.linkage.exports, ...automatic],
+    setup: split.linkage.setup,
+    primary,
+  };
   return result;
 }

@@ -1,4 +1,4 @@
-import type { ImportIR, StoryNode } from '@gneh/core';
+import type { StoryNode } from '@gneh/core';
 import { type BindingPattern, type ExpressionNode } from '@gneh/expression';
 import {
   balanced,
@@ -10,7 +10,7 @@ import {
 } from '@gneh/syntax';
 import { parseEffects } from './effects.js';
 import { balancedMarkup } from './delimiters.js';
-import { declarationPosition, paramsAt, topLevelEquals } from './directive-utils.js';
+import { paramsAt } from './directive-utils.js';
 import { readConditional, readLoop, readRegion } from './structural.js';
 
 export interface InkdownMacroToken {
@@ -93,18 +93,6 @@ const reservedBindings = new Set([
 
 const isHostBindingName = (name: string) => /^[A-Za-z][\w$]*$/.test(name) && !reservedBindings.has(name);
 
-function parseImport(text: string, parser: MarkupParser, start: number): ImportIR[] {
-  const match = /^\{([\s\S]*)\}\s+from\s+(["'])([^"']+)\2\s*$/.exec(text);
-  if (!match) parser.error('IMPORT_SYNTAX', 'Use @import { name as local } from "module".', start);
-  return splitTopLevel(match[1]).map((specifier) => {
-    const names = /^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(specifier.trim());
-    if (!names) parser.error('IMPORT_SYNTAX', `Invalid import specifier: ${specifier}`, start);
-    const local = names[2] ?? names[1];
-    if (!isHostBindingName(local)) parser.error('IMPORT_BINDING', `Invalid local import name: ${local}`, start);
-    return { source: match[3], imported: names[1], local };
-  });
-}
-
 function readLine(source: string, start: number): { text: string; end: number } {
   const newline = source.indexOf('\n', start);
   const end = newline < 0 ? source.length : newline;
@@ -163,33 +151,39 @@ export function createInkdownLowerings(): InkdownLowerings {
   registry.register(['module', 'script'], ({ node: token, parser, base }) =>
     parser.error(
       'REMOVED_DIRECTIVE',
-      `@${token.name} is not an Inkdown construct. Put JavaScript in an ESM file and use @import.`,
+      `@${token.name} is not an Inkdown construct. Put JavaScript in an ESM file and link it from file YAML.`,
       base + token.start,
       base + token.headEnd,
     ),
   );
-  registry.register(['enter', 'action', 'view'], ({ node: token, parser, source, base, inline }) => {
-    if (token.name === 'enter') declarationPosition(parser, token, base, inline);
-    else if (inline) parser.error('DECLARATION_POSITION', `@${token.name} is a block declaration.`, base + token.start);
+  registry.register(['action', 'view'], ({ node: token, parser, source, base, inline }) => {
+    if (inline) parser.error('DECLARATION_POSITION', `@${token.name} is a block declaration.`, base + token.start);
     let cursor = token.argsStart;
     let name = '';
     let params: BindingPattern[] = [];
-    if (token.name !== 'enter') {
+    {
       const identifier = /^[A-Za-z_][\w-]*/.exec(source.slice(cursor));
-      if (!identifier) parser.error('DECLARATION_NAME', `@${token.name} requires a name.`, base + cursor);
-      name = identifier![0];
-      cursor = spaces(source, cursor + name.length);
+      if (identifier) {
+        name = identifier[0];
+        cursor = spaces(source, cursor + name.length);
+      } else if (token.name === 'action') parser.error('DECLARATION_NAME', '@action requires a name.', base + cursor);
+      else if (source[cursor] === '(' && parser.nesting === 1 && parser.contextName) name = parser.contextName;
+      else parser.error('DECLARATION_NAME', '@view requires a name in this container.', base + cursor);
       const parsed = paramsAt(source, cursor, parser, base);
       params = parsed.params;
       cursor = spaces(source, parsed.end);
     }
-    if (source[cursor] !== '{') parser.error('DECLARATION_BODY', `@${token.name} requires a body.`, base + cursor);
-    const body = token.name === 'view' ? balancedMarkup(source, cursor) : balanced(source, cursor);
+    const bounded = source[cursor] === '{';
+    const body = bounded
+      ? token.name === 'view'
+        ? balancedMarkup(source, cursor)
+        : balanced(source, cursor)
+      : {
+          content: source.slice(source[cursor] === '\n' ? cursor + 1 : cursor),
+          start: source[cursor] === '\n' ? cursor + 1 : cursor,
+          end: source.length,
+        };
     const span = parser.span(base + token.start, base + body.end);
-    if (token.name === 'enter') {
-      parser.addEnter(parseEffects(body.content, base + body.start, parser));
-      return { nodes: [], end: body.end, block: true };
-    }
     const callable =
       token.name === 'action'
         ? parser.callable(
@@ -201,27 +195,55 @@ export function createInkdownLowerings(): InkdownLowerings {
             span,
           )
         : parser.addView(name, params, parser.children(body.content, base + body.start, false), body.content, span);
+    if (!bounded) callable.escape = parser.initializer ? 'export' : 'publish';
     return { nodes: [{ type: 'callable', callable, span }], end: body.end, block: true };
   });
-  registry.register(['import', 'export', 'const'], ({ node: token, parser, source, base, inline }) => {
-    declarationPosition(parser, token, base, inline);
+  registry.register(['import', 'export', 'enter'], ({ node: token, parser, base }) =>
+    parser.error(
+      'REMOVED_DIRECTIVE',
+      token.name === 'enter'
+        ? '@enter was removed; use source-order @do, @let, or @const statements.'
+        : `@${token.name} was removed; declare ESM linkage in the file YAML block.`,
+      base + token.start,
+      base + token.headEnd,
+    ),
+  );
+  registry.register(['let', 'const', 'do'], ({ node: token, parser, source, base, inline }) => {
+    if (inline) parser.error('DECLARATION_POSITION', `@${token.name} is a block statement.`, base + token.start);
     const line = readLine(source, token.argsStart);
-    if (token.name === 'import') parser.imports.push(...parseImport(line.text, parser, base + token.argsStart));
-    else if (token.name === 'export') {
-      const match = /^\{([\s\S]*)\}$/.exec(line.text);
-      if (!match) parser.error('EXPORT_SYNTAX', 'Use @export { name, otherName }.', base + token.argsStart);
-      const names = splitTopLevel(match![1]).map((name) => name.trim());
-      if (names.some((name) => !isHostBindingName(name)))
-        parser.error('EXPORT_BINDING', 'Export names must be local ESM binding names.', base + token.argsStart);
-      parser.exports.push(...names);
-    } else {
-      const equals = topLevelEquals(line.text);
-      const name = line.text.slice(0, equals).trim();
-      if (equals < 0 || !isHostBindingName(name))
-        parser.error('CONST_SYNTAX', 'Use @const name = expression.', base + token.argsStart);
-      parser.constants[name] = parser.expr(line.text.slice(equals + 1).trim(), base + token.argsStart + equals + 1);
-    }
-    return { nodes: [], end: line.end, block: true };
+    const statement = `@${token.name} ${line.text};`;
+    return {
+      nodes: [
+        {
+          type: 'effect',
+          effects: parseEffects(statement, base + token.start, parser),
+          span: parser.span(base + token.start, base + line.end),
+        },
+      ],
+      end: line.end,
+      block: true,
+    };
+  });
+  registry.register('publish', ({ node: token, parser, source, base, inline }) => {
+    if (inline) parser.error('DECLARATION_POSITION', '@publish is a block statement.', base + token.start);
+    if (parser.initializer) parser.error('PRIMARY_PUBLISH', '@publish requires a Story.', base + token.start);
+    const line = readLine(source, token.argsStart);
+    const names =
+      line.text === '*'
+        ? '*'
+        : (() => {
+            const match = /^\{([\s\S]*)\}$/.exec(line.text);
+            if (!match) parser.error('PUBLISH_SYNTAX', 'Use @publish { name } or @publish *.', base + token.argsStart);
+            const values = splitTopLevel(match![1]).map((name) => name.trim());
+            if (values.some((name) => !isHostBindingName(name)))
+              parser.error('PUBLISH_BINDING', 'Published names must be lexical binding names.', base + token.argsStart);
+            return values;
+          })();
+    return {
+      nodes: [{ type: 'publish', names, span: parser.span(base + token.start, base + line.end) }],
+      end: line.end,
+      block: true,
+    };
   });
   registry.register('effect', ({ node: token, parser, source, base, inline }) => {
     parser.evaluation = 'materialized';

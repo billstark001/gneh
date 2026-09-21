@@ -36,10 +36,10 @@ function wrap<T>(span: Span | undefined, code: string, read: () => T): T {
   }
 }
 
-function validateBinding(pattern: BindingPattern, span?: Span): void {
+function validateBinding(pattern: BindingPattern, span?: Span, allowState = false): void {
   switch (pattern.type) {
     case 'Identifier':
-      if (pattern.name.startsWith('$'))
+      if (pattern.name.startsWith('$') && !allowState)
         throw new GnehError(
           'BINDING_STATE',
           'Persistent state identifiers cannot be declared as local bindings.',
@@ -47,17 +47,17 @@ function validateBinding(pattern: BindingPattern, span?: Span): void {
         );
       return;
     case 'AssignmentPattern':
-      validateBinding(pattern.left, span);
+      validateBinding(pattern.left, span, allowState);
       return;
     case 'RestElement':
-      validateBinding(pattern.argument, span);
+      validateBinding(pattern.argument, span, allowState);
       return;
     case 'ArrayPattern':
-      for (const element of pattern.elements) if (element) validateBinding(element, span);
+      for (const element of pattern.elements) if (element) validateBinding(element, span, allowState);
       return;
     case 'ObjectPattern':
       for (const property of pattern.properties)
-        validateBinding(property.type === 'RestElement' ? property.argument : property.value, span);
+        validateBinding(property.type === 'RestElement' ? property.argument : property.value, span, allowState);
   }
 }
 
@@ -94,6 +94,7 @@ export function scanBindingPattern(
   span?: Span,
   boundary: (token: { kind: string; value: string }, depth: number) => boolean = () => false,
   start = 0,
+  options: { allowState?: boolean } = {},
 ): BindingPatternScanResult {
   const result = wrap(span, 'BINDING_SYNTAX', () =>
     scanPureBindingPattern(source, {
@@ -102,7 +103,7 @@ export function scanBindingPattern(
       boundary: ({ token, depth }) => boundary(token, depth),
     }),
   );
-  validateBinding(result.pattern, span);
+  validateBinding(result.pattern, span, options.allowState);
   return result;
 }
 

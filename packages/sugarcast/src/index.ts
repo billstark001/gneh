@@ -27,7 +27,7 @@ import { parseSugarcast, type SugarcastLowerings } from './parser.js';
 export function sugarcast(lowerings?: SugarcastLowerings) {
   return {
     dialect: 'sugarcast' as const,
-    extensions: ['sugarcast', 'sugar'],
+    extensions: ['sugarcast'],
     parse: (source: string, file: string) => parseSugarcast(source, file, { lowerings }),
   };
 }

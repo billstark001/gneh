@@ -1,6 +1,23 @@
 import type { EffectNode } from '@gneh/core';
-import { parseIterationClause, scanBindingPattern, scanExpression } from '@gneh/expression';
+import { parseIterationClause, scanBindingPattern, scanExpression, type BindingPattern } from '@gneh/expression';
 import { balanced, type MarkupParser } from '@gneh/syntax';
+
+function bindingNames(pattern: BindingPattern): string[] {
+  switch (pattern.type) {
+    case 'Identifier':
+      return [pattern.name];
+    case 'AssignmentPattern':
+      return bindingNames(pattern.left);
+    case 'RestElement':
+      return bindingNames(pattern.argument);
+    case 'ArrayPattern':
+      return pattern.elements.flatMap((item) => (item ? bindingNames(item) : []));
+    case 'ObjectPattern':
+      return pattern.properties.flatMap((item) =>
+        item.type === 'RestElement' ? bindingNames(item) : bindingNames(item.value),
+      );
+  }
+}
 
 const spaces = (source: string, start: number) => {
   while (/\s/.test(source[start] ?? '')) start++;
@@ -27,12 +44,13 @@ export function parseEffects(source: string, base: number, parser: MarkupParser)
       index = terminator + 1;
       continue;
     }
-    if (name === 'let') {
+    if (name === 'let' || name === 'const') {
       const binding = scanBindingPattern(
         source,
         parser.span(base + cursor, base + source.length),
         (token, depth) => depth === 0 && token.kind === 'op' && token.value === '=',
         cursor,
+        { allowState: true },
       );
       const equals = spaces(source, binding.next);
       if (source[equals] !== '=')
@@ -41,7 +59,17 @@ export function parseEffects(source: string, base: number, parser: MarkupParser)
       const terminator = spaces(source, value.next);
       if (source[terminator] !== ';')
         parser.error('EFFECT_TERMINATOR', 'Effect directives must end with a semicolon.', base + terminator);
-      effects.push({ type: 'bind', binding: binding.pattern, value: value.expression });
+      const stateNames = bindingNames(binding.pattern).filter((bindingName) => bindingName.startsWith('$'));
+      if (stateNames.length && (name === 'const' || binding.pattern.type !== 'Identifier'))
+        parser.error(
+          'EFFECT_BINDING',
+          name === 'const'
+            ? '@const cannot declare persistent Story state.'
+            : '@let can bind Story state only as a single identifier.',
+          base + cursor,
+          base + binding.next,
+        );
+      effects.push({ type: 'bind', binding: binding.pattern, value: value.expression, mutable: name === 'let' });
       index = terminator + 1;
       continue;
     }

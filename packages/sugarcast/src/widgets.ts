@@ -28,12 +28,12 @@ export interface SugarcastWidgetSource {
   scope: 'module' | 'lexical';
 }
 
-export function widgetHeader(source: string): { name: string; container: boolean } | undefined {
-  const match = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')(?:\s+(container))?\s*$/i.exec(source.trim());
+export function widgetHeader(source: string): { name: string; container: boolean; local: boolean } | undefined {
+  const match = /^(?:(local)\s+)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')(?:\s+(container))?\s*$/i.exec(source.trim());
   if (!match) return;
-  const name = parseSugarExpression(match[1]).ast;
+  const name = parseSugarExpression(match[2]).ast;
   if (name.type !== 'Literal' || typeof name.value !== 'string') return;
-  return { name: name.value.toLowerCase(), container: !!match[2] };
+  return { name: name.value.toLowerCase(), container: !!match[3], local: !!match[1] };
 }
 
 export function discoverWidgets(

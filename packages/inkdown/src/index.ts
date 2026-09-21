@@ -19,28 +19,48 @@ export function parseInkdown(source: string, file = 'story.inkdown', options: In
   const lowerings = options.lowerings ?? createInkdownLowerings();
   const split = splitPassages(source, file);
   const result: ParseResult = { passages: [], diagnostics: [...split.diagnostics] };
-  for (const passage of split.passages) {
+  const parse = (passage: (typeof split.passages)[number], initializer = false) => {
     try {
-      result.passages.push(
-        basePassage(
-          passage,
-          'inkdown',
-          new MarkupParser({
-            file,
-            expression: parseExpression,
-            markup: inkdownMarkup,
-            special: createInkdownDirectiveReader(lowerings),
-            isBlockStart: (line) => {
-              const match = /^\s*@([A-Za-z_][\w-]*)\b/.exec(line);
-              return !!match && lowerings.has(match[1]);
-            },
-          }),
-        ),
+      const value = basePassage(
+        passage,
+        'inkdown',
+        new MarkupParser({
+          file,
+          expression: parseExpression,
+          markup: inkdownMarkup,
+          special: createInkdownDirectiveReader(lowerings),
+          isBlockStart: (line) => {
+            const match = /^\s*@([A-Za-z_][\w-]*)\b/.exec(line);
+            return !!match && lowerings.has(match[1]);
+          },
+          contextName: passage.name,
+          initializer,
+        }),
       );
+      if (initializer) {
+        const bare = value.body.find((node) => node.type !== 'callable' && node.type !== 'effect');
+        if (bare) throw new Error('Bare render output is not allowed in the primary initializer.');
+      } else result.passages.push(value);
+      return value;
     } catch (error) {
       result.diagnostics.push(diag(error, passage.span));
     }
-  }
+  };
+  const primary = split.primary ? parse(split.primary, true) : undefined;
+  for (const passage of split.passages) parse(passage);
+  const automatic =
+    primary?.body.flatMap((node) =>
+      node.type === 'callable' && node.callable.escape === 'export' && node.callable.name
+        ? [{ local: node.callable.name, exported: node.callable.name }]
+        : [],
+    ) ?? [];
+  result.module = {
+    metadata: split.metadata,
+    imports: split.linkage.imports,
+    exports: [...split.linkage.exports, ...automatic],
+    setup: split.linkage.setup,
+    primary,
+  };
   return result;
 }
 

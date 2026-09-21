@@ -1,17 +1,14 @@
-import { type EffectNode, type Expression, type ParseResult, type StoryNode } from '@gneh/core';
-import { splitPassages, diag } from '@gneh/source';
+import { type EffectNode, type Expression, type StoryNode } from '@gneh/core';
 import {
   MacroLoweringRegistry,
   MarkupParser,
-  basePassage,
   splitTopLevel,
   type MacroLowering,
   type SpecialReader,
 } from '@gneh/syntax';
-import { parseKarloweExpression, karloweAssignments } from './expression.js';
+import { karloweAssignments } from './expression.js';
 import { customMacroAssignment } from './custom-macro.js';
 import { readKarloweAttachment, type KarloweAttachment } from './attachment.js';
-import { karloweMarkup } from './markup.js';
 import { harloweMacroName } from './names.js';
 import {
   parseKarloweCST,
@@ -216,6 +213,44 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
   const value = readKarloweAttachment(source, first);
   const span = p.span(base + first.start, base + value.end);
 
+  if (name === 'view') {
+    const parts = first.args.trim() ? splitTopLevel(first.args) : [];
+    const target = parts.shift()?.trim();
+    let callableName: string;
+    let publication: string | undefined;
+    if (target) {
+      if (!/^[$_][A-Za-z]\w*$/.test(target))
+        p.error('KARLOWE_VIEW_TARGET', '(view:) target must be a $ global or _ lexical name.', base + first.argsStart);
+      callableName = target.startsWith('$') ? target.slice(1) : target;
+      if (target.startsWith('$')) publication = callableName;
+    } else {
+      if (p.nesting !== 1 || !p.contextName)
+        p.error('KARLOWE_VIEW_TARGET', 'An unnamed (view:) requires a stable source container.', base + first.start);
+      callableName = p.contextName!;
+    }
+    const params = parts.map((part) => {
+      const match = /^(_[A-Za-z]\w*)$/.exec(part.trim());
+      if (!match)
+        p.error('KARLOWE_VIEW_PARAM', '(view:) parameters must be temporary variable names.', base + first.argsStart);
+      return { type: 'Identifier' as const, name: match![1] };
+    });
+    const hook = value.hook;
+    const bodyStart = hook?.bodyStart ?? first.end;
+    const bodyEnd = hook?.bodyEnd ?? source.length;
+    const end = hook?.end ?? source.length;
+    const callable = p.callable(
+      'view',
+      callableName,
+      params,
+      p.children(source.slice(bodyStart, bodyEnd), base + bodyStart, false),
+      source.slice(first.start, end),
+      p.span(base + first.start, base + end),
+    );
+    if (publication) callable.escape = 'publish';
+    else if (!hook) callable.escape = p.initializer ? 'export' : 'publish';
+    return { nodes: [{ type: 'callable', callable, span: callable.span }], end, block: true };
+  }
+
   if (name === 'set') {
     const callable = customMacroAssignment(first, p, base, readKarloweAttachment);
     if (callable) return { nodes: [effect([callable], first, p, base)], end: first.end, block: !inline };
@@ -384,7 +419,7 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
       nodes: [
         {
           type: 'each',
-          name: variable[1].replace(/^_/, ''),
+          name: variable[1],
           items,
           children: p.children(source.slice(hook.bodyStart, hook.bodyEnd), base + hook.bodyStart, inline),
           span: p.span(base + first.start, base + hook.end),
@@ -516,6 +551,7 @@ export function createKarloweLowerings(): KarloweLowerings {
       'save-game',
       'load-game',
       'link-undo',
+      'view',
     ],
     expandKarlowe,
   );
@@ -588,7 +624,9 @@ export function createKarloweMacroReader(registry: KarloweLowerings = createKarl
           {
             type: 'call',
             call: {
-              callee: { type: 'expression', expression: parser.expr(token.name, base + token.start + 1) },
+              callee: token.name.startsWith('$')
+                ? { type: 'binding', name: token.name.slice(1) }
+                : { type: 'expression', expression: parser.expr(token.name, base + token.start + 1) },
               args,
             },
             children: attachment.hook
@@ -657,7 +695,7 @@ export function createKarloweMacroReader(registry: KarloweLowerings = createKarl
 
 export const readKarlowe: SpecialReader = createKarloweMacroReader();
 
-function extendParagraph(source: string, start: number, initialEnd: number): number {
+export function extendKarloweParagraph(source: string, start: number, initialEnd: number): number {
   let end = initialEnd;
   let cursor = start;
   while (cursor <= end) {
@@ -693,37 +731,4 @@ function extendParagraph(source: string, start: number, initialEnd: number): num
     } else cursor = index + 1;
   }
   return end;
-}
-
-export interface KarloweParseOptions {
-  lowerings?: KarloweLowerings;
-}
-
-export function parseKarlowe(source: string, file = 'story.karlowe', options: KarloweParseOptions = {}): ParseResult {
-  const lowerings = options.lowerings ?? createKarloweLowerings();
-  const split = splitPassages(source, file);
-  const result: ParseResult = { passages: [], diagnostics: [...split.diagnostics] };
-  for (const passage of split.passages)
-    try {
-      const parsed = basePassage(
-        passage,
-        'karlowe',
-        new MarkupParser({
-          file,
-          expression: parseKarloweExpression,
-          markup: karloweMarkup,
-          special: createKarloweMacroReader(lowerings),
-          isBlockStart: (line) => {
-            const match = /^\s*\(([\w-]+)\s*:/.exec(line);
-            return !!match;
-          },
-          extendParagraph,
-        }),
-      );
-      parsed.evaluation = 'materialized';
-      result.passages.push(parsed);
-    } catch (error) {
-      result.diagnostics.push(diag(error, passage.span));
-    }
-  return result;
 }

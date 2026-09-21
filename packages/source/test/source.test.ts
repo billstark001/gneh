@@ -2,23 +2,27 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { splitPassages, parseHeader, parseMetadata, mergeMetadata, emitTwee, metadataJSON } from '../dist/index.js';
 
-test('Twee header JSON and both front matter scopes merge deterministically', () => {
+test('file YAML owns module linkage while header JSON owns passage metadata', () => {
   const source =
-    '---\ntags: [book]\nlayout:\n  density: loose\n---\n:: Card [component] {"position":"1,2","layout":{"tone":"quiet"}}\n---\nid: EnemyCard\nparams: [enemy]\nlayout:\n  density: compact\n---\nHello';
+    '---\nmetadata:\n  title: Book\nimports:\n  ./panel.mjs: Panel\nexports: [CardView]\nsetup: [EnemyCard]\n---\n:: Card [component] {"id":"EnemyCard","position":"1,2","params":["enemy"],"layout":{"tone":"quiet"}}\nHello';
   const result = splitPassages(source, 'card.inkdown');
   assert.deepEqual(result.diagnostics, []);
   const p = result.passages[0];
   assert.equal(p.id, 'EnemyCard');
   assert.equal(p.name, 'Card');
-  assert.deepEqual(p.metadata.tags, ['book', 'component']);
-  assert.deepEqual(p.metadata.layout, { density: 'compact', tone: 'quiet' });
+  assert.deepEqual(p.metadata.tags, ['component']);
+  assert.deepEqual(p.metadata.layout, { tone: 'quiet' });
+  assert.deepEqual(result.metadata, { title: 'Book' });
+  assert.deepEqual(result.linkage.imports, [{ source: './panel.mjs', imported: 'default', local: 'Panel' }]);
+  assert.deepEqual(result.linkage.exports, [{ local: 'CardView', exported: 'CardView' }]);
+  assert.deepEqual(result.linkage.setup, ['EnemyCard']);
   assert.equal(source.slice(p.bodyOffset), 'Hello');
   assert.equal(JSON.parse(metadataJSON(result)).EnemyCard.position, '1,2');
 });
 
 test('all dialects use exactly the same container parser', () => {
   for (const ext of ['inkdown', 'karlowe', 'sugarcast']) {
-    const parsed = splitPassages(':: One [tag] {"x":1}\n---\nparams: [enemy]\n---\nbody\n:: Two\nsecond', `x.${ext}`);
+    const parsed = splitPassages(':: One [tag] {"x":1,"params":["enemy"]}\nbody\n:: Two\nsecond', `x.${ext}`);
     assert.deepEqual(
       parsed.passages.map((p) => p.id),
       ['One', 'Two'],
@@ -43,14 +47,15 @@ test('CRLF, Unicode and escaped header names retain source offsets', () => {
   assert.equal(source.slice(result.passages[0].bodyOffset, result.passages[0].span.end), '你好\r\n');
 });
 
-test('standalone YAML id names an implicit default passage', () => {
-  const result = splitPassages('---\nid: Standalone\nparams: [value]\n---\nbody', 'large.md');
-  assert.equal(result.passages[0].id, 'Standalone');
-  assert.equal(result.passages[0].body, 'body');
+test('headerless source is a primary initializer, never an implicit passage', () => {
+  const result = splitPassages('---\nmetadata:\n  title: Standalone\n---\n@const value = 1', 'large.inkdown');
+  assert.equal(result.passages.length, 0);
+  assert.equal(result.primary?.id, 'primary');
+  assert.equal(result.primary?.body, '@const value = 1');
 });
 
 test('canonical metadata output round trips both formats', () => {
-  const source = '---\ntags: [one]\n---\n:: A [two] {"x":{"a":1}}\n---\nx:\n  b: 2\n---\nbody';
+  const source = ':: A [two] {"x":{"a":1}}\nbody';
   const first = splitPassages(source);
   const second = splitPassages(emitTwee(first.passages));
   assert.deepEqual(second.passages[0].metadata, first.passages[0].metadata);
@@ -89,5 +94,28 @@ test('unsafe metadata constructs and duplicate YAML keys are diagnosed', () => {
 test('unclosed YAML, duplicate ids and invalid params are errors, never ignored', () => {
   assert.equal(splitPassages('---\nid: bad').diagnostics[0].severity, 'error');
   assert.equal(splitPassages(':: A\nx\n:: A\ny').diagnostics[0].code, 'DUPLICATE_ID');
-  assert.equal(splitPassages('---\nparams: nope\n---\nx').diagnostics[0].severity, 'error');
+  assert.equal(splitPassages(':: A {"params":"nope"}\nx').diagnostics[0].severity, 'error');
+});
+
+test('duplicate file YAML and passage front matter are rejected explicitly', () => {
+  const duplicate = splitPassages('---\nmetadata: {title: A}\n---\n---\nmetadata: {title: B}\n---\n:: Start\nbody');
+  assert.ok(duplicate.diagnostics.some((diagnostic) => diagnostic.code === 'FILE_METADATA_DUPLICATE'));
+  const passage = splitPassages(':: Start\n---\nparams: [value]\n---\nbody');
+  assert.ok(passage.diagnostics.some((diagnostic) => diagnostic.code === 'PASSAGE_FRONT_MATTER'));
+});
+
+test('module linkage rejects ambiguous or invalid ESM binding names', () => {
+  for (const yaml of [
+    'imports: {"./x.mjs": {$value: =}}',
+    'imports: {"./x.mjs": [same, same]}',
+    'exports: {one: default}',
+    'exports: {one: shared, two: shared}',
+    'setup: [Start, Start]',
+  ]) {
+    const parsed = splitPassages(`---\n${yaml}\n---\n:: Start\nbody`);
+    assert.ok(
+      parsed.diagnostics.some((diagnostic) => diagnostic.severity === 'error'),
+      yaml,
+    );
+  }
 });
