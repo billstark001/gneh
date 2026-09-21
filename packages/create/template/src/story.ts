@@ -1,5 +1,5 @@
-import type { AnyFragment, State } from '@gneh/core';
-import { Story, type StoryOptions } from '@gneh/runtime';
+import type { State } from '@gneh/core';
+import { Story, type PassageSet, type StoryOptions } from '@gneh/runtime';
 
 export interface StoryAppOptions {
   entry: string;
@@ -37,6 +37,6 @@ function browserHost(operation: string, args: readonly unknown[], story: Story):
   }
 }
 
-export function createStory(fragments: readonly AnyFragment[], options: StoryAppOptions): Story {
-  return new Story([...fragments], { ...options, host: options.host ?? browserHost });
+export function createStory(passages: PassageSet, options: StoryAppOptions): Story {
+  return new Story(passages, { ...options, host: options.host ?? browserHost });
 }

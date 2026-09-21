@@ -59,7 +59,7 @@ export function App({ story }: { story: Story }) {
         <aside>
           <p>PASSAGES</p>
           <nav>
-            {[...story.fragments.values()]
+            {[...story.passages.values()]
               .filter(
                 (fragment) =>
                   fragment.metadata.nav !== false &&

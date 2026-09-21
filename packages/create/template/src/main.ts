@@ -1,4 +1,4 @@
-import { fragments } from './story/main.inkdown';
+import passages from './story/main.inkdown';
 import { createApp } from './ui';
 import './style.css';
 
@@ -12,7 +12,7 @@ const environment = ['wiki', 'story-flow', 'visual-novel'].includes(requested ??
   ? (requested as 'wiki' | 'story-flow' | 'visual-novel')
   : undefined;
 
-const app = createApp(host, Object.values(fragments), {
+const app = createApp(host, passages, {
   entry: 'Start',
   state: { visits: 0 },
   environment,

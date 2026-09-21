@@ -1,17 +1,17 @@
-import { defineFragment, v } from '@gneh/runtime';
-import Start from './story.inkdown';
+import { definePassage, v } from '@gneh/runtime';
+import passages from './story.inkdown';
 
 export const description = 'A normal ESM named export.';
 
 /** @typedef {{ label?: string }} Props */
-/** @type {import('@gneh/core').Fragment<Props>} */
-export default defineFragment({
+/** @type {import('@gneh/runtime').Passage<Props>} */
+export default definePassage({
   id: 'Panel',
   metadata: { title: 'Native JavaScript', optionalParams: ['label'] },
   capabilities: ['live'],
   bindings: {
     get Start() {
-      return Start;
+      return passages.Start;
     },
   },
   enter(ctx) {
@@ -34,7 +34,7 @@ export default defineFragment({
         ctx.region('message').set(v.p('Replacement occurs in the semantic tree, not the DOM.'));
       }),
       v.button('Reset region', () => ctx.region('message').reset()),
-      v.choice('Entrance', Start.id, () => ctx.navigate(Start)),
+      v.choice('Entrance', passages.Start.id, () => ctx.navigate(passages.Start)),
     ];
   },
 });

@@ -49,7 +49,7 @@ onBeforeUnmount(() => {
         <p>PASSAGES</p>
         <nav>
           <button
-            v-for="fragment in [...story.fragments.values()].filter(
+            v-for="fragment in [...story.passages.values()].filter(
               (item) =>
                 item.metadata.nav !== false && !(Array.isArray(item.metadata.params) && item.metadata.params.length),
             )"

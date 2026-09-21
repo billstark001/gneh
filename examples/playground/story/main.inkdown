@@ -1,13 +1,10 @@
 ---
-tags: [archive]
-layout:
-  atmosphere: nocturne
+metadata:
+  tags: [archive]
+  layout:
+    atmosphere: nocturne
 ---
-:: Start [start] {"title":"01 / The Nocturne Archive","layout":{"column":"reading"}}
----
-layout:
-  accent: brass
----
+:: Start [start] {"title":"01 / The Nocturne Archive","layout":{"column":"reading","accent":"brass"}}
 @action takeKey {
   @do $hasKey = true;
   @do $insight += 1;
@@ -55,14 +52,7 @@ but the things people forgot they once knew.
 :: Status {"nav":false}
 Known things: **$insight**. Key: {{ $hasKey ? "held" : "not yet found" }}.
 
-:: EnemyCard [reusable] {"nav":false,"presentation":{"tone":"muted"}}
----
-params: [enemy]
-paramTypes:
-  enemy: '{name: string; hp: number; maxHp: number}'
-presentation:
-  density: compact
----
+:: EnemyCard [reusable] {"nav":false,"params":["enemy"],"paramTypes":{"enemy":"{name: string; hp: number; maxHp: number}"},"presentation":{"tone":"muted","density":"compact"}}
 ::: status {.enemy-card}
 **{{ enemy.name }}**
 

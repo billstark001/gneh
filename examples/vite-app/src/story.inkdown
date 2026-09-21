@@ -1,6 +1,10 @@
+---
+imports:
+  ./Panel.mjs:
+    default: Panel
+    description: =
+---
 :: Start [start]
-@import { default as Panel, description } from "./Panel.mjs"
-@export { description }
 
 # Markdown is one source representation
 
@@ -16,6 +20,6 @@ target.
 :: About
 # About
 
-The same direct module import exposes this passage as `fragments.About`.
+The source module's default `PassageSet` exposes this passage as `passages.About`.
 
 [[Return -> Start]]

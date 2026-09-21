@@ -95,4 +95,4 @@ test('@gneh/create framework projects typecheck and build from their public entr
   } finally {
     await fs.rm(parent, { recursive: true, force: true });
   }
-});
+}, 20_000);

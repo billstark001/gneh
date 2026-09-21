@@ -1,4 +1,5 @@
-import type { AnyFragment, View } from '@gneh/core';
+import type { View } from '@gneh/core';
+import type { PassageSet } from '@gneh/runtime';
 import { DOMRenderer, type DOMMount } from '@gneh/renderer-dom';
 import { createStory, type StoryAppOptions } from './story';
 
@@ -30,8 +31,8 @@ function visualNovelView(view: View[]): { beats: View[][]; choices: View[] } {
 }
 
 /** Application code, intentionally kept in the generated project for editing or replacement. */
-export function createApp(host: HTMLElement, fragments: readonly AnyFragment[], options: AppOptions) {
-  const story = createStory(fragments, options);
+export function createApp(host: HTMLElement, passages: PassageSet, options: AppOptions) {
+  const story = createStory(passages, options);
   const renderer = new DOMRenderer({
     onError(error) {
       status.textContent = error instanceof Error ? error.message : String(error);
@@ -79,7 +80,7 @@ export function createApp(host: HTMLElement, fragments: readonly AnyFragment[], 
   const buttons = new Map<string, HTMLButtonElement>();
   select.value = environment;
 
-  for (const fragment of story.fragments.values()) {
+  for (const fragment of story.passages.values()) {
     if (fragment.metadata.nav === false || (Array.isArray(fragment.metadata.params) && fragment.metadata.params.length))
       continue;
     const button = document.createElement('button');

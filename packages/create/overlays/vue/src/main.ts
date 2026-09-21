@@ -1,11 +1,11 @@
 import { createApp } from 'vue';
 import App from './App.vue';
-import { fragments } from './story/main.inkdown';
+import passages from './story/main.inkdown';
 import { createStory } from './story';
 import './style.css';
 
 document.documentElement.dataset.gnehEnvironment = 'story-flow';
-const story = createStory(Object.values(fragments), { entry: 'Start', state: { visits: 0 } }).start();
+const story = createStory(passages, { entry: 'Start', state: { visits: 0 } }).start();
 const application = createApp(App, { story });
 application.mount('#app');
 
