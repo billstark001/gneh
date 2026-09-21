@@ -66,9 +66,9 @@ const story = new Story(result.story, {
 
 The compiler emits `RUNTIME_EXTENSION_UNDECLARED` when an invocation has no declared ID. The runtime separately rejects missing implementations and phase mismatches. This makes builds auditable without coupling the parser or core IR to DOM behavior.
 
-## Deferred source-defined declarations
+## Source-defined callables and host extensions
 
-Sugarcast supports the declarative part of SugarCube `<<widget>>`: static literal names, `_args`, and container `_contents` lower to the shared view IR. This is not an extension registration API and provides no `MacroContext`, DOM output, or JavaScript callback. `Macro.add`, Harlowe custom macros, and equivalent runtime facilities remain intentionally unimplemented. New executable host behavior must use the same explicit `invoke`/`RuntimeExtension` contract instead of creating a second privileged runtime. Scripts, DOM queries, and runtime code injection remain outside the portable profiles.
+Inkdown `@action`/`@view`, Sugarcast `<<widget>>`, and portable Karlowe `(macro:)` values lower to the shared phase-typed callable IR. These are story declarations, not extension registration APIs: they receive lexical or story capture according to their dialect, but no `MacroContext`, DOM output, or JavaScript callback. `Macro.add`, arbitrary Harlowe macro protocols, and new executable host behavior still use the explicit `invoke`/`RuntimeExtension` boundary instead of creating a second privileged runtime. Scripts, DOM queries, and runtime code injection remain outside the portable profiles.
 
 The story ABI remains version 1. It was never a production ABI, so the old registry option and type names are removed rather than retained as aliases.
 

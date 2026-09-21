@@ -85,7 +85,7 @@ These semantics belong to gneh. Familiar surface syntax does not import the sour
 }
 ```
 
-Loop keys must be unique strings or numbers. Without an explicit key, gneh uses `item.id` when available and otherwise the index, with a warning. `@enter`, `@action`, `@view`, `@import`, `@export`, and `@const` are top-level declarations and may not be hidden in a reactive branch.
+Loop keys must be unique strings or numbers. Without an explicit key, gneh uses `item.id` when available and otherwise the index, with a warning. `@enter`, `@import`, `@export`, and `@const` are passage-level declarations. `@action` and `@view` are lexically scoped declarations: a declaration in a branch or loop iteration is visible only in that block and closes over that block's locals.
 
 Navigation uses `[[Label -> Target]]`, `[[Target]]`, and optional props such as `[[Inspect -> Card({enemy: $enemy})]]`. An action button uses `[[Label => actionName(args)]]`. `@view` and `@action` both accept pure-expr binding-pattern parameters; a view call renders nodes, while an action call runs effects in the current transaction. `@children` inserts the caller-provided body inside a view.
 
@@ -147,9 +147,13 @@ Render expressions are evaluated with writes denied. Enter/action expressions co
 (print: $hp + 1)
 (link-goto: "Continue", "Next")
 (link-repeat: "Heal")[(set: $hp to $hp + 1)]
+(set: $double to (macro: num-type _n, [(output-data: _n * 2)]))
+(set: $badge to (macro: str-type _label, [(output:)[Badge: (print: _label)]]))
+(print: ($double: 4))
+($badge: "ready")
 ```
 
-Supported constructs include `set`/`put`, `print`, `if`/`else-if`/`else`, `display`, `link-goto`, reveal and repeat links, a basic `for`, `goto`, dropdown/checkbox bindings, mapped boolean/numeric/collection operations, `array`/`datamap`, `either`/`random`, possessive access and method calls. `/` and `%` are independent operators in the new Karlowe lexer.
+Supported constructs include `set`/`put`, `print`, `if`/`else-if`/`else`, `display`, `link-goto`, reveal and repeat links, a basic `for`, `goto`, dropdown/checkbox bindings, mapped boolean/numeric/collection operations, `array`/`datamap`, `either`/`random`, possessive access and method calls, and portable `(macro:)` values ending in `(output-data:)` or `(output:)[...]`. `/` and `%` are independent operators in the new Karlowe lexer.
 
 Karlowe prose follows Harlowe's own markup profile rather than the Inkdown/Markdown profile. Newlines become semantic line breaks; adjacent backslashes join lines; `#` headings, `*`/`0.` nested lists, horizontal rules, modal aligners (`==>`, `<==`, `<==>`, and mixed `=><=` forms), collapsing whitespace, grave-delimited verbatim text, and Harlowe's bold/italic/emphasis/strong/strike/superscript marks retain their source meanings. Harlowe's equal-precedence `and`/`or`, documented comparison precedence, inferred comparisons, inferred `it` within simple logical chains, and one-based computed possessive access are lowered before reaching the shared expression runtime.
 
@@ -157,7 +161,9 @@ Karlowe materializes a mounted passage in source order. Thus `(set:$x to 1)(prin
 
 Anonymous hooks are structural containers. `|name>[...]` and `[...]<name|` create instance-local semantic regions; `replace`, `append`, and `prepend` can target a `?name` reference. Presentation-only changer composition supports color, font, text-style, size, border and corner radius through renderer-neutral extension data. `?sidebar` is a host portal rather than a global DOM selector.
 
-`enchant`, text/DOM queries, `click` target matching, source-defined executable macros, scripts, and undocumented changer composition remain explicit errors. Host-owned operations such as portals and external navigation require an application callback. Karlowe does not recognize Inkdown directives. Macro names follow Harlowe's ASCII-case-insensitive, internal-hyphen-optional lookup rule. Trusted build tooling can add portable lowerings through the caller-owned registry described in [Syntax and runtime extensions](EXTENSIONS.md); that is not a Harlowe macro runtime.
+Karlowe macro values use story capture: the save stores a declaration reference, while `$` state remains live when the macro is called. Temporary `_` parameters and locals belong to each invocation and are not persisted. A value macro may compute through temporary locals before `(output-data:)`, but its value phase cannot write `$` story state or consume effect-time randomness. A view macro renders its hook body through the same callable runtime; explicit source-position effects there keep normal materialized semantics.
+
+`enchant`, text/DOM queries, `click` target matching, scripts, arbitrary Harlowe macro bodies, and undocumented changer composition remain explicit errors. Host-owned operations such as portals and external navigation require an application callback. Karlowe does not recognize Inkdown directives. Built-in macro names follow Harlowe's ASCII-case-insensitive, internal-hyphen-optional lookup rule. Trusted build tooling can add portable lowerings through the caller-owned registry described in [Syntax and runtime extensions](EXTENSIONS.md); that is not a Harlowe runtime.
 
 ## Sugarcast profile
 
@@ -181,7 +187,7 @@ Sugarcast prose likewise selects SugarCube markup rules: `!` headings, `*`/`#` n
 
 Sugarcast also materializes in source order. Writes are explicit IR effect nodes, not hoisted entry code, so output before and after a write observes the corresponding state.
 
-Static `<<widget "name">>` declarations are file-wide and lower to the same portable view declarations used by Inkdown. `_args` is an array of evaluated call arguments. A `container` widget may render its caller body with `<<print _contents>>` or `<<= _contents>>`. Widget bodies may use the supported Sugarcast constructs, including state-writing effect macros; they do not receive SugarCube's `MacroContext`, shadow store, DOM output object, or JavaScript callback APIs.
+Top-level `<<widget "name">>` declarations are file-wide. A widget declared in a conditional, loop, or widget body is lexical to that block and closes over its locals. Both forms lower to shared view callables. `_args` is an array of evaluated call arguments. A `container` widget may render its caller body with `<<print _contents>>` or `<<= _contents>>`. Widget bodies may use the supported Sugarcast constructs, including state-writing effect macros; they do not receive SugarCube's `MacroContext`, shadow store, DOM output object, or JavaScript callback APIs.
 
 Range and C-style loops, `<<capture>>` shadowing, scripts, source-level `Macro.add`, Wikifier, jQuery, and DOM macros are outside the profile. Widget names must be literal strings and definitions are declarative rather than runtime mutations. Sugarcast does not recognize Inkdown directives. Trusted build tooling may register additional IR lowerings without enabling those runtime APIs.
 

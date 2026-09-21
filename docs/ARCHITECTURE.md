@@ -39,7 +39,7 @@ Expressions are the restricted ESTree subset owned by `pure-expr`; gneh has no p
 
 Render and effect phases select separate evaluator policies. Render denies writes and sees deeply read-only state. Enter/actions enable identifier and member writes, but those writes target the Story transaction's private state copy. Gneh owns a small effect IR (`expression`, `bind`, `if`, `each`, and named effect invocation), not JavaScript statements. pure-expr owns expression and binding-pattern parsing, calls, property access, optional chains, assignments, and updates.
 
-Unknown compatibility macros lower to `invoke` IR. Compilation requires the application to declare each extension ID; execution requires a matching phase-limited `RuntimeExtension`. This is intentionally parallel to renderer and host boundaries. Sugarcast's static `<<widget>>` declarations are resolved during lowering and become ordinary view declarations; source code still cannot register runtime extensions, scripts, or DOM operations.
+Unknown compatibility macros lower to `invoke` IR. Compilation requires the application to declare each extension ID; execution requires a matching phase-limited `RuntimeExtension`. This is intentionally parallel to renderer and host boundaries. Sugarcast `<<widget>>` declarations and portable Karlowe `(macro:)` values lower to authored callables; source code still cannot register runtime extensions, scripts, or DOM operations.
 
 ## Dependency direction
 
@@ -69,7 +69,7 @@ The diagram omits some direct imports, but its ownership rules are strict:
 - `core` has no parser, DOM, build-tool, or application dependency.
 - `source` parses Twee/front matter and does not choose a story language.
 - `syntax` is dialect-neutral infrastructure. `MarkupParser` receives both an expression parser and an optional special-syntax reader from its caller. Its caller-owned `MacroLoweringRegistry` dispatches dialect tokens without global state or a dependency from core to authoring syntax.
-- Inkdown owns structural `@if`/`@each`, effect `@action`/`@effect`, reusable `@view`, and declarative `@import`/`@export` directives. It has no embedded JavaScript module or script block.
+- Inkdown owns structural `@if`/`@each`, lexical `@action`/`@view`, source-position `@effect`, and declarative `@import`/`@export` directives. It has no embedded JavaScript module or script block.
 - Karlowe and Sugarcast own their compatibility syntax and do not recognize Inkdown directives. Shared tools do not imply a shared surface language.
 - All dialects lower to the same IR and never own a separate runtime. None is enabled implicitly, including Inkdown.
 - The compiler has no CLI I/O; the CLI composes compiler and filesystem concerns.
@@ -102,7 +102,15 @@ The statement that `.inkdown` and `.mjs` are equivalent means that they meet at 
 
 ## Modules and large projects
 
-A multi-passage source file has one generated ESM scope. Declarative `@import` records become static ESM imports and enter each passage through a binding table with live getters. `@export` may expose an imported binding from the generated module. Local entries in `fragments` share that table, and a local passage or `@view` named `Card` resolves before an external fragment registry entry.
+A multi-passage source file has one generated ESM scope. Declarative `@import` records become static ESM imports and enter each passage through a binding table with live getters. `@export` may expose an imported binding from the generated module. Local entries in `fragments` share that table. Authored callables resolve lexically before an imported Fragment or external registry entry with the same name.
+
+## Authored callables and lexical environments
+
+Value, view, and effect callables share one phase-typed IR. A call records its callee as a lexical binding, an expression value, or an inline declaration; the runtime rejects phase mismatches instead of relying on separate action/view lookup tables. Every declaration states whether it captures its lexical environment or reconstructs from story state.
+
+Lexical environments are parent-linked records. A block hoists its named declarations into its own environment, calls allocate child environments for parameters and locals, and closures retain only the outward chain that they captured. Environments never retain child call frames. Unmounting a Fragment clears its local, region, prop, and cleanup stores, so unreachable closure graphs remain collectable by the JavaScript runtime.
+
+Inkdown actions and views use lexical capture. Top-level Sugarcast widgets are module-visible, while widgets nested in control flow are lexical to that block. Karlowe macro values use story capture: JSON state contains a stable declaration reference rather than a JavaScript closure, and invocation obtains current story state plus a fresh temporary scope. Value callables always execute in a read-only story-state phase; they may update invocation-local temporaries but cannot consume effect-time randomness.
 
 Generated modules preserve authored Fragment IDs. Because application code explicitly combines story modules, those IDs are project-global at the composition boundary and `Story` rejects collisions instead of silently namespacing or overwriting them. Applications that rename IDs or require long-term save compatibility should own a route/state migration policy.
 
