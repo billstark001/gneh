@@ -23,10 +23,12 @@ function unescapeHeaderName(value: string): string {
   return value.replace(/\\(.)/g, (match, character: string) => ('[]{}\\'.includes(character) ? character : match));
 }
 
-function escapeHeaderName(value: string): string {
+/** Escape the punctuation that has structural meaning in a Twee 3 passage header. */
+export function escapeTweeHeaderName(value: string): string {
   return [...value].map((character) => ('[]{}\\'.includes(character) ? '\\' + character : character)).join('');
 }
 
+/** Parse one complete Twee 3 `::` header, including tags and JSON metadata. */
 export function parseHeader(line: string): Header {
   if (!line.startsWith('::') || line.startsWith(':::')) metadataFailure('Expected a Twee 3 passage header.');
   const text = line.slice(2).trim();
@@ -215,6 +217,7 @@ export function splitPassages(source: string, file = 'story.inkdown'): SourceFil
   return { passages, primary, diagnostics, metadata, linkage: links };
 }
 
+/** Normalize thrown parser failures without discarding a typed GnehError code or span. */
 export function diag(error: unknown, span: Span): Diagnostic {
   return {
     code: error instanceof GnehError ? error.code : 'PARSE_ERROR',
@@ -224,10 +227,12 @@ export function diag(error: unknown, span: Span): Diagnostic {
   };
 }
 
+/** Serialize passage metadata as a stable, human-readable id-to-metadata map. */
 export function metadataJSON(file: SourceFile): string {
   return JSON.stringify(Object.fromEntries(file.passages.map((p) => [p.id, p.metadata])), null, 2) + '\n';
 }
 
+/** Emit canonical Twee 3 source suitable for reparsing by {@link splitPassages}. */
 export function emitTwee(passages: ParsedPassage[]): string {
   return passages
     .map((p) => {
@@ -235,12 +240,13 @@ export function emitTwee(passages: ParsedPassage[]): string {
       delete metadata.name;
       const tags = Array.isArray(metadata.tags) ? metadata.tags.map(String) : [];
       delete metadata.tags;
-      const name = escapeHeaderName(p.name);
+      const name = escapeTweeHeaderName(p.name);
       return `:: ${name}${tags.length ? ' [' + tags.join(' ') + ']' : ''} ${JSON.stringify(metadata)}\n${p.body.trimEnd()}\n`;
     })
     .join('\n');
 }
 
+/** Convert a UTF-16 source offset to the zero-based line/character coordinates used by LSP. */
 export function offsetToPosition(
   source: string,
   offset: number,

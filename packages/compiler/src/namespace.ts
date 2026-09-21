@@ -1,21 +1,4 @@
-import type { BindingPattern, EffectNode, PassageIR, StoryNode } from '@gneh/core';
-
-function bindingNames(pattern: BindingPattern): string[] {
-  switch (pattern.type) {
-    case 'Identifier':
-      return [pattern.name];
-    case 'AssignmentPattern':
-      return bindingNames(pattern.left);
-    case 'RestElement':
-      return bindingNames(pattern.argument);
-    case 'ArrayPattern':
-      return pattern.elements.flatMap((item) => (item ? bindingNames(item) : []));
-    case 'ObjectPattern':
-      return pattern.properties.flatMap((item) =>
-        item.type === 'RestElement' ? bindingNames(item) : bindingNames(item.value),
-      );
-  }
-}
+import { bindingNames, type EffectNode, type PassageIR, type StoryNode } from '@gneh/core';
 
 export function effectBindings(effects: readonly EffectNode[]): string[] {
   return effects.flatMap((effect) => {

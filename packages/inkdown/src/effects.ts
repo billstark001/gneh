@@ -1,23 +1,6 @@
-import type { EffectNode } from '@gneh/core';
-import { parseIterationClause, scanBindingPattern, scanExpression, type BindingPattern } from '@gneh/expression';
+import { bindingNames, type EffectNode } from '@gneh/core';
+import { parseIterationClause, scanBindingPattern, scanExpression } from '@gneh/expression';
 import { balanced, type MarkupParser } from '@gneh/syntax';
-
-function bindingNames(pattern: BindingPattern): string[] {
-  switch (pattern.type) {
-    case 'Identifier':
-      return [pattern.name];
-    case 'AssignmentPattern':
-      return bindingNames(pattern.left);
-    case 'RestElement':
-      return bindingNames(pattern.argument);
-    case 'ArrayPattern':
-      return pattern.elements.flatMap((item) => (item ? bindingNames(item) : []));
-    case 'ObjectPattern':
-      return pattern.properties.flatMap((item) =>
-        item.type === 'RestElement' ? bindingNames(item) : bindingNames(item.value),
-      );
-  }
-}
 
 const spaces = (source: string, start: number) => {
   while (/\s/.test(source[start] ?? '')) start++;

@@ -62,19 +62,20 @@ export function bindPattern(pattern: BindingPattern, value: unknown, ctx: Evalua
   }
 }
 
-function declaredNames(pattern: BindingPattern): string[] {
+/** Return every identifier introduced by a binding pattern in source order. */
+export function bindingNames(pattern: BindingPattern): string[] {
   switch (pattern.type) {
     case 'Identifier':
       return [pattern.name];
     case 'AssignmentPattern':
-      return declaredNames(pattern.left);
+      return bindingNames(pattern.left);
     case 'RestElement':
-      return declaredNames(pattern.argument);
+      return bindingNames(pattern.argument);
     case 'ArrayPattern':
-      return pattern.elements.flatMap((item) => (item ? declaredNames(item) : []));
+      return pattern.elements.flatMap((item) => (item ? bindingNames(item) : []));
     case 'ObjectPattern':
       return pattern.properties.flatMap((item) =>
-        item.type === 'RestElement' ? declaredNames(item) : declaredNames(item.value),
+        item.type === 'RestElement' ? bindingNames(item) : bindingNames(item.value),
       );
   }
 }
@@ -91,7 +92,7 @@ function declarePattern(
     ctx.state[safeKey(pattern.name.slice(1))] = value as never;
     return;
   }
-  for (const name of declaredNames(pattern)) {
+  for (const name of bindingNames(pattern)) {
     invariant(!name.startsWith('$'), 'E_BINDING', 'Persistent state cannot be declared as a lexical binding.');
     const key = safeKey(name);
     invariant(!Object.hasOwn(scope, key), 'DUPLICATE_BINDING', `Duplicate lexical declaration: ${name}`);
@@ -99,7 +100,7 @@ function declarePattern(
   }
   bindPattern(pattern, value, ctx, scope);
   if (!mutable)
-    for (const name of declaredNames(pattern)) Object.defineProperty(scope, safeKey(name), { writable: false });
+    for (const name of bindingNames(pattern)) Object.defineProperty(scope, safeKey(name), { writable: false });
 }
 
 export interface EffectCallableRuntime {
@@ -115,7 +116,7 @@ export function bindParameters(
 ): void {
   for (let index = 0; index < patterns.length; index++) {
     const pattern = patterns[index];
-    for (const name of declaredNames(pattern)) {
+    for (const name of bindingNames(pattern)) {
       invariant(!Object.hasOwn(scope, safeKey(name)), 'DUPLICATE_BINDING', `Duplicate parameter: ${name}`);
       Object.defineProperty(scope, safeKey(name), {
         value: undefined,

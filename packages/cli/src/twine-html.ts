@@ -1,5 +1,6 @@
 import { parse, type DefaultTreeAdapterTypes } from 'parse5';
 import type { Dialect, Metadata } from '@gneh/core';
+import { escapeTweeHeaderName } from '@gneh/source';
 
 type Element = DefaultTreeAdapterTypes.Element;
 
@@ -137,10 +138,6 @@ export function twineDialect(story: TwineStoryData): Dialect | undefined {
   return format === 'harlowe' ? 'karlowe' : format === 'sugarcube' ? 'sugarcast' : undefined;
 }
 
-function escapeHeaderName(value: string): string {
-  return [...value].map((character) => ('[]{}\\'.includes(character) ? '\\' + character : character)).join('');
-}
-
 /** Emit one Twee 3 file while retaining every Twine passage attribute as metadata. */
 export function emitTwineTwee(story: TwineStoryData): string {
   const entry = twineEntry(story);
@@ -151,7 +148,7 @@ export function emitTwineTwee(story: TwineStoryData): string {
       if (passage.name === entry && !passageTags.includes('start')) passageTags.push('start');
       const tags = passageTags.length ? ` [${passageTags.join(' ')}]` : '';
       const body = passage.source.endsWith('\n') ? passage.source : passage.source + '\n';
-      return `:: ${escapeHeaderName(passage.name)}${tags} ${JSON.stringify(metadata)}\n${body}`;
+      return `:: ${escapeTweeHeaderName(passage.name)}${tags} ${JSON.stringify(metadata)}\n${body}`;
     })
     .join('\n');
 }
