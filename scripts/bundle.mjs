@@ -16,6 +16,7 @@ const out = path.join(root, 'dist');
 fs.mkdirSync(out, { recursive: true });
 
 const offline = process.argv.includes('--offline');
+const offlineBrowserDependencies = new Set(['pure-expr', 'pure-expr/expr']);
 
 /** Only the emergency/offline path uses this static CJS linker. No eval/new Function. */
 async function offlineBundle(entry, output) {
@@ -24,6 +25,7 @@ async function offlineBundle(entry, output) {
   const modules = new Map();
   function resolve(specifier, parent) {
     if (specifier.startsWith('@gneh/')) return path.join(root, 'packages', specifier.slice(6), 'src/index.ts');
+    if (offlineBrowserDependencies.has(specifier)) return require.resolve(specifier, { paths: [path.dirname(parent)] });
     if (specifier.startsWith('.')) {
       const full = path.resolve(path.dirname(parent), specifier);
       for (const candidate of [full.replace(/\.js$/, '.ts'), full, full + '/index.ts'])
