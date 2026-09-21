@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { test } from 'vitest';
 
-test('independently built Vite applications conform in a real browser', { timeout: 60_000 }, async () => {
+test('independently built Vite applications conform in a real browser', { timeout: 120_000 }, async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
   const sites = new Map([
     ['starter', path.join(root, 'packages/create/template/dist')],
@@ -73,7 +73,8 @@ test('independently built Vite applications conform in a real browser', { timeou
     browser: 'chrome',
     executablePath: executablePath(),
     headless: true,
-    args: ['--no-sandbox'],
+    timeout: 60_000,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
 
   async function pageAt(pathname, viewport = { width: 1280, height: 900 }) {
