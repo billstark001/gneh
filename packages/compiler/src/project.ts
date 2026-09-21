@@ -3,6 +3,7 @@ import {
   ABI_VERSION,
   GnehError,
   assertJson,
+  type CallableIR,
   type CompileResult,
   type Diagnostic,
   type Dialect,
@@ -13,6 +14,7 @@ import {
   type Span,
   type State,
   type StoryNode,
+  type ValueCallableBodyIR,
 } from '@gneh/core';
 import { mergeMetadata, splitPassages } from '@gneh/source';
 
@@ -86,6 +88,8 @@ export function walkNodes(nodes: StoryNode[], fn: (node: StoryNode) => void): vo
     if (n.type === 'if') {
       walkNodes(n.yes, fn);
       walkNodes(n.no, fn);
+    } else if (n.type === 'callable' && n.callable.phase === 'view') {
+      walkNodes(n.callable.body as StoryNode[], fn);
     } else {
       if ('children' in n) walkNodes(n.children, fn);
       if (n.type === 'interaction') walkNodes(n.label, fn);
@@ -212,15 +216,12 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
           }
         }
       }
-      if ((n.type === 'button' || n.type === 'control') && !p.effects[n.action.name])
-        error('ACTION_MISSING', `Unknown action: ${n.action.name}`, n.span);
-      if (n.type === 'view-call' && !p.views[n.name]) {
-        const dest = ids.get(n.name) ?? ids.get(aliases.get(n.name) ?? '');
-        if (!dest && !p.imports.some((binding) => binding.local === n.name))
-          error('VIEW_MISSING', `Unknown view or fragment: ${n.name}`, n.span);
-        if (dest) n.name = dest.id;
+      if (n.type === 'call' && n.call.callee.type === 'binding') {
+        const name = n.call.callee.name;
+        const dest = ids.get(name) ?? ids.get(aliases.get(name) ?? '');
+        if (dest) n.call.callee.name = dest.id;
         const params = dest?.metadata.params;
-        const props = n.args[0]?.ast;
+        const props = n.call.args[0]?.ast;
         if (dest && Array.isArray(params) && params.length && (!props || props.type === 'ObjectExpression')) {
           const provided =
             props?.type === 'ObjectExpression'
@@ -237,7 +238,7 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
           const optional = Array.isArray(dest.metadata.optionalParams) ? dest.metadata.optionalParams : [];
           for (const param of params)
             if (typeof param === 'string' && !provided.includes(param) && !optional.includes(param))
-              error('PROPS_MISSING', `${n.name} requires prop ${param}.`, n.span);
+              error('PROPS_MISSING', `${name} requires prop ${param}.`, n.span);
         }
       }
       if (n.type === 'invoke' && !(options.runtimeExtensionIds ?? []).includes(n.id))
@@ -256,32 +257,68 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
           span: n.span,
         });
     };
-    walkNodes(p.body, (node) => {
-      validateNode(node);
-      if (node.type === 'children')
-        error('CHILDREN_POSITION', '@children is only valid inside an @view body.', node.span);
-    });
-    for (const view of Object.values(p.views)) walkNodes(view.body, validateNode);
-
-    const validateEffects = (effects: EffectNode[], span: Span): void => {
+    function validateCallable(callable: CallableIR, span: Span, names: ReadonlyMap<string, string>): void {
+      if (callable.phase === 'view') validateBlock(callable.body as StoryNode[], new Map(names), true);
+      else if (callable.phase === 'effect') validateEffects(callable.body as EffectNode[], span, names);
+      else validateEffects((callable.body as ValueCallableBodyIR).effects, span, names);
+    }
+    function validateEffects(effects: EffectNode[], span: Span, names: ReadonlyMap<string, string>): void {
       for (const effect of effects) {
-        if (effect.type === 'invoke' && !p.effects[effect.name])
-          error('ACTION_MISSING', `Unknown action: ${effect.name}`, span);
-        else if (effect.type === 'if') {
-          validateEffects(effect.yes, span);
-          validateEffects(effect.no, span);
-        } else if (effect.type === 'each') validateEffects(effect.body, span);
+        if (effect.type === 'call') {
+          if (effect.call.callee.type === 'inline') {
+            if (effect.call.callee.callable.phase !== 'effect')
+              error('CALLABLE_PHASE', 'An effect position requires an effect callable.', span);
+            validateCallable(effect.call.callee.callable, span, names);
+          }
+          if (effect.call.callee.type === 'binding' && names.get(effect.call.callee.name) !== 'effect')
+            error('ACTION_MISSING', `Unknown effect callable: ${effect.call.callee.name}`, span);
+        } else if (effect.type === 'assign-callable') {
+          validateCallable(effect.callable, span, names);
+        } else if (effect.type === 'if') {
+          validateEffects(effect.yes, span, names);
+          validateEffects(effect.no, span, names);
+        } else if (effect.type === 'each') validateEffects(effect.body, span, names);
       }
-    };
-    validateEffects(p.enter, p.span);
-    for (const declaration of Object.values(p.effects)) validateEffects(declaration.body, declaration.span);
-    walkNodes(p.body, (node) => {
-      if (node.type === 'effect') validateEffects(node.effects, node.span);
-    });
-    for (const view of Object.values(p.views))
-      walkNodes(view.body, (node) => {
-        if (node.type === 'effect') validateEffects(node.effects, node.span);
-      });
+    }
+    function validateBlock(nodes: StoryNode[], inherited = new Map<string, string>(), inView = false): void {
+      const names = new Map(inherited);
+      for (const node of nodes)
+        if (node.type === 'callable' && node.callable.name) {
+          if (names.has(node.callable.name) && !inherited.has(node.callable.name))
+            error('DUPLICATE_CALLABLE', `Duplicate callable: ${node.callable.name}`, node.span);
+          names.set(node.callable.name, node.callable.phase);
+        }
+      for (const node of nodes) {
+        validateNode(node);
+        if (node.type === 'children' && !inView)
+          error('CHILDREN_POSITION', '@children is only valid inside a view callable.', node.span);
+        if (
+          (node.type === 'button' || node.type === 'control') &&
+          node.action.callee.type === 'binding' &&
+          names.get(node.action.callee.name) !== 'effect'
+        )
+          error('ACTION_MISSING', `Unknown effect callable: ${node.action.callee.name}`, node.span);
+        if (node.type === 'call' && node.call.callee.type === 'binding') {
+          const name = node.call.callee.name;
+          const phase = names.get(name);
+          if (phase && phase !== 'view')
+            error('CALLABLE_PHASE', `Cannot call a ${phase} callable as a view.`, node.span);
+          else if (!phase && !ids.has(name) && !p.imports.some((binding) => binding.local === name))
+            error('VIEW_MISSING', `Unknown view callable or fragment: ${name}`, node.span);
+        }
+        if (node.type === 'effect') validateEffects(node.effects, node.span, names);
+        if (node.type === 'if') {
+          validateBlock(node.yes, names, inView);
+          validateBlock(node.no, names, inView);
+        } else if (node.type === 'callable') validateCallable(node.callable, node.span, names);
+        else if ('children' in node) validateBlock(node.children, names, inView);
+      }
+    }
+    const rootNames = new Map<string, string>();
+    for (const node of p.body)
+      if (node.type === 'callable' && node.callable.name) rootNames.set(node.callable.name, node.callable.phase);
+    validateEffects(p.enter, p.span, rootNames);
+    validateBlock(p.body);
   }
   const sourceEntry = passages.map((p) => p.metadata.start).find((value): value is string => typeof value === 'string');
   let entry =

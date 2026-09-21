@@ -9,24 +9,19 @@ import {
   type SpecialReader,
 } from '@gneh/syntax';
 import { parseKarloweExpression, karloweAssignments } from './expression.js';
+import { customMacroAssignment } from './custom-macro.js';
+import { readKarloweAttachment, type KarloweAttachment } from './attachment.js';
 import { karloweMarkup } from './markup.js';
 import { harloweMacroName } from './names.js';
 import {
   parseKarloweCST,
   readKarloweHook,
   readKarloweMacro,
-  readKarloweToken,
   type KarloweCSTNode,
   type KarloweDocumentCST,
   type KarloweHookToken,
   type KarloweMacroToken,
 } from './lexer.js';
-
-export interface KarloweAttachment {
-  macros: KarloweMacroToken[];
-  hook?: KarloweHookToken;
-  end: number;
-}
 
 export interface KarloweMacroMeta {
   presentation?: string;
@@ -39,34 +34,6 @@ const spaces = (source: string, start: number) => {
   while (/\s/.test(source[i] ?? '')) i++;
   return i;
 };
-
-export function readKarloweAttachment(source: string, first: KarloweMacroToken): KarloweAttachment {
-  const macros = [first];
-  let cursor = spaces(source, first.end);
-  while (source[cursor] === '+') {
-    const next = readKarloweMacro(source, spaces(source, cursor + 1));
-    if (!next) break;
-    macros.push(next);
-    cursor = spaces(source, next.end);
-  }
-  let hook = readKarloweHook(source, cursor);
-  // Harlowe permits a changer to attach directly to link markup. Model that
-  // as an anonymous hook whose body is the complete link, without making `[[`
-  // ambiguous everywhere else in the lexer.
-  if (!hook && source.startsWith('[[', cursor) && source[cursor + 2] !== '[') {
-    const link = readKarloweToken(source, cursor);
-    if (link?.type === 'link')
-      hook = {
-        type: 'hook',
-        hidden: false,
-        start: cursor,
-        bodyStart: cursor,
-        bodyEnd: link.end,
-        end: link.end,
-      };
-  }
-  return { macros, hook, end: hook?.end ?? first.end };
-}
 
 function requireHook(value: KarloweAttachment, p: MarkupParser, base: number): KarloweHookToken {
   if (!value.hook)
@@ -223,6 +190,7 @@ function parseControl(
     ],
     macro.args,
     p.span(base + macro.argsStart, base + macro.end - 1),
+    [{ type: 'Identifier', name: 'value' }],
   );
   return {
     type: 'control',
@@ -247,6 +215,11 @@ const expandKarlowe: MacroLowering<KarloweMacroToken, KarloweMacroMeta> = ({
 }) => {
   const value = readKarloweAttachment(source, first);
   const span = p.span(base + first.start, base + value.end);
+
+  if (name === 'set') {
+    const callable = customMacroAssignment(first, p, base, readKarloweAttachment);
+    if (callable) return { nodes: [effect([callable], first, p, base)], end: first.end, block: !inline };
+  }
 
   if (name === 'set' || name === 'put')
     return {
@@ -603,6 +576,35 @@ export function createKarloweMacroReader(registry: KarloweLowerings = createKarl
       documents.set(source, document);
     }
     const token = findMacro(document.children, scanned.start) ?? scanned;
+    if (token.name.startsWith('$') || token.name.startsWith('_')) {
+      const attachment = readKarloweAttachment(source, token);
+      const args = token.args.trim()
+        ? splitTopLevel(token.args).map((argument) =>
+            parser.expr(argument, base + token.argsStart + token.args.indexOf(argument)),
+          )
+        : [];
+      return {
+        nodes: [
+          {
+            type: 'call',
+            call: {
+              callee: { type: 'expression', expression: parser.expr(token.name, base + token.start + 1) },
+              args,
+            },
+            children: attachment.hook
+              ? parser.children(
+                  source.slice(attachment.hook.bodyStart, attachment.hook.bodyEnd),
+                  base + attachment.hook.bodyStart,
+                  inline,
+                )
+              : [],
+            span: parser.span(base + token.start, base + attachment.end),
+          },
+        ],
+        end: attachment.end,
+        block: !!attachment.hook && !inline,
+      };
+    }
     const result = registry.lower(token.name, {
       source,
       index,

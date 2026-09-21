@@ -7,7 +7,9 @@ export type Scope = Record<string, unknown>;
 export interface EvaluationContext {
   readonly state: State;
   readonly bindings: Readonly<Record<string, unknown>>;
-  readonly phase: 'render' | 'enter' | 'action';
+  readonly phase: 'render' | 'enter' | 'action' | 'value';
+  makeCallable?(id: string, scope: Scope): unknown;
+  invokeValueCallable?(value: unknown, args: readonly unknown[], scope: Scope): unknown;
   step(): void;
   random(min: number, max: number): number;
 }

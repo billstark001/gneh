@@ -25,6 +25,7 @@ export interface SugarcastWidgetSource {
   bodyOffset: number;
   source: string;
   span: Span;
+  scope: 'module' | 'lexical';
 }
 
 export function widgetHeader(source: string): { name: string; container: boolean } | undefined {
@@ -43,7 +44,7 @@ export function discoverWidgets(
   const widgets = new Map<string, SugarcastWidgetSource>();
   for (const passage of passages) {
     const document = parse(passage.body);
-    const visit = (nodes: WidgetCSTNode[]) => {
+    const visit = (nodes: WidgetCSTNode[], depth: number) => {
       for (const node of nodes) {
         if (node.type !== 'macro') continue;
         if (node.name.toLowerCase() === 'widget' && node.closing) {
@@ -55,13 +56,14 @@ export function discoverWidgets(
               bodyOffset: passage.bodyOffset + node.end,
               source: passage.body.slice(node.start, node.fullEnd),
               span: { file, start: passage.bodyOffset + node.start, end: passage.bodyOffset + node.fullEnd },
+              scope: depth === 0 ? 'module' : 'lexical',
             });
           continue;
         }
-        visit(node.children);
+        visit(node.children, depth + 1);
       }
     };
-    visit(document.children);
+    visit(document.children, 0);
   }
   return widgets;
 }

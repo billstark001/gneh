@@ -10,40 +10,50 @@ export interface Expression {
   span: Span;
 }
 
+export type CallablePhase = 'value' | 'view' | 'effect';
+
+export interface ValueCallableBodyIR {
+  effects: EffectNode[];
+  result: Expression;
+}
+
+export interface CallableIR {
+  id: string;
+  phase: CallablePhase;
+  capture: 'lexical' | 'story';
+  name?: string;
+  params: BindingPattern[];
+  body: StoryNode[] | EffectNode[] | ValueCallableBodyIR;
+  source: string;
+  span: Span;
+}
+
+export type CallableCalleeIR =
+  | { type: 'binding'; name: string }
+  | { type: 'expression'; expression: Expression }
+  | { type: 'inline'; callable: CallableIR };
+
+export interface CallableCallIR {
+  callee: CallableCalleeIR;
+  args: Expression[];
+}
+
 export type EffectNode =
   | { type: 'expression'; expression: ExpressionNode }
   | { type: 'bind'; binding: BindingPattern; value: ExpressionNode }
   | { type: 'if'; test: ExpressionNode; yes: EffectNode[]; no: EffectNode[] }
   | { type: 'each'; binding: BindingPattern; items: ExpressionNode; body: EffectNode[] }
-  | { type: 'invoke'; name: string; args: ExpressionNode[] };
-
-export interface EffectDeclarationIR {
-  phase: 'effect';
-  name: string;
-  params: BindingPattern[];
-  body: EffectNode[];
-  source: string;
-  span: Span;
-}
-
-export interface ViewDeclarationIR {
-  phase: 'view';
-  name: string;
-  params: BindingPattern[];
-  body: StoryNode[];
-  source: string;
-  span: Span;
-}
+  | {
+      type: 'assign-callable';
+      target: Extract<ExpressionNode, { type: 'Identifier' | 'MemberExpression' }>;
+      callable: CallableIR;
+    }
+  | { type: 'call'; call: CallableCallIR };
 
 export interface ImportIR {
   source: string;
   imported: string;
   local: string;
-}
-
-export interface EffectCallIR {
-  name: string;
-  args: ExpressionNode[];
 }
 
 export type Dialect = 'inkdown' | 'karlowe' | 'sugarcast';
@@ -89,8 +99,9 @@ export type StoryNode =
     }
   | { type: 'include'; target: string; props?: Expression; span: Span }
   | { type: 'choice'; target: string; props?: Expression; children: StoryNode[]; span: Span }
-  | { type: 'button'; action: EffectCallIR; children: StoryNode[]; span: Span }
-  | { type: 'view-call'; name: string; args: Expression[]; children: StoryNode[]; span: Span }
+  | { type: 'button'; action: CallableCallIR; children: StoryNode[]; span: Span }
+  | { type: 'call'; call: CallableCallIR; children: StoryNode[]; span: Span }
+  | { type: 'callable'; callable: CallableIR; span: Span }
   | { type: 'children'; span: Span }
   | {
       type: 'interaction';
@@ -117,7 +128,7 @@ export type StoryNode =
   | {
       type: 'control';
       control: 'select' | 'checkbox';
-      action: EffectCallIR;
+      action: CallableCallIR;
       value: Expression;
       options: Expression[];
       label: StoryNode[];
@@ -152,8 +163,6 @@ export interface PassageIR {
   /** Reactive documents recompute from state; materialized documents memoize source-order evaluation per mount. */
   evaluation: 'reactive' | 'materialized';
   enter: EffectNode[];
-  effects: Record<string, EffectDeclarationIR>;
-  views: Record<string, ViewDeclarationIR>;
   constants: Record<string, Expression>;
   imports: ImportIR[];
   exports: string[];

@@ -1,11 +1,32 @@
-import type { Dialect, ParsedPassage, PassageIR, StoryNode, ViewDeclarationIR } from '@gneh/core';
+import type {
+  CallableIR,
+  Dialect,
+  EffectNode,
+  ParsedPassage,
+  PassageIR,
+  StoryNode,
+  ValueCallableBodyIR,
+} from '@gneh/core';
 import type { MarkupParser } from './parser.js';
 
-export function storyCapabilities(
-  body: StoryNode[],
-  views: Readonly<Record<string, ViewDeclarationIR>> = {},
-): string[] {
+export function storyCapabilities(body: StoryNode[], extra: readonly CallableIR[] = []): string[] {
   const capabilities = new Set<string>();
+  function visitCallable(callable: CallableIR) {
+    if (callable.phase === 'view') visit(callable.body as StoryNode[]);
+    else if (callable.phase === 'effect') visitEffects(callable.body as EffectNode[]);
+    else visitEffects((callable.body as ValueCallableBodyIR).effects);
+  }
+  function visitEffects(effects: EffectNode[]) {
+    for (const effect of effects) {
+      if (effect.type === 'assign-callable') visitCallable(effect.callable);
+      else if (effect.type === 'call' && effect.call.callee.type === 'inline')
+        visitCallable(effect.call.callee.callable);
+      else if (effect.type === 'if') {
+        visitEffects(effect.yes);
+        visitEffects(effect.no);
+      } else if (effect.type === 'each') visitEffects(effect.body);
+    }
+  }
   function visit(nodes: StoryNode[]) {
     for (const n of nodes) {
       if (n.type === 'button' || n.type === 'region') capabilities.add('live');
@@ -13,6 +34,10 @@ export function storyCapabilities(
       if (n.type === 'extension') capabilities.add('presentation:' + n.name);
       if (n.type === 'invoke') capabilities.add('runtime-extension:' + n.id);
       if (n.type === 'portal') capabilities.add('shell:' + n.name);
+      if (n.type === 'callable') visitCallable(n.callable);
+      if (n.type === 'effect') visitEffects(n.effects);
+      if ((n.type === 'button' || n.type === 'control') && n.action.callee.type === 'inline')
+        visitCallable(n.action.callee.callable);
       if (n.type === 'if') {
         visit(n.yes);
         visit(n.no);
@@ -24,7 +49,7 @@ export function storyCapabilities(
     }
   }
   visit(body);
-  for (const view of Object.values(views)) visit(view.body);
+  for (const callable of extra) visitCallable(callable);
   return [...capabilities];
 }
 
@@ -40,11 +65,9 @@ export function basePassage(parsed: ParsedPassage, dialect: Dialect, parser: Mar
     body,
     evaluation: parser.evaluation,
     enter: parser.enter,
-    effects: parser.effects,
-    views: parser.views,
     constants: parser.constants,
     imports: parser.imports,
     exports: parser.exports,
-    capabilities: storyCapabilities(body, parser.views),
+    capabilities: storyCapabilities(body),
   };
 }

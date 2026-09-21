@@ -1,5 +1,5 @@
 import type { ImportIR, StoryNode } from '@gneh/core';
-import { parseParameterPattern, type BindingPattern, type ExpressionNode } from '@gneh/expression';
+import { type BindingPattern, type ExpressionNode } from '@gneh/expression';
 import {
   balanced,
   MacroLoweringRegistry,
@@ -10,6 +10,7 @@ import {
 } from '@gneh/syntax';
 import { parseEffects } from './effects.js';
 import { balancedMarkup } from './delimiters.js';
+import { declarationPosition, paramsAt, topLevelEquals } from './directive-utils.js';
 import { readConditional, readLoop, readRegion } from './structural.js';
 
 export interface InkdownMacroToken {
@@ -46,45 +47,6 @@ function argumentsAt(
       : [],
     end: group.end,
   };
-}
-
-function paramsAt(source: string, start: number, parser: MarkupParser, base: number) {
-  if (source[start] !== '(') return { params: [], end: start };
-  const group = balanced(source, start);
-  const parameters = group.content.trim() ? splitTopLevel(group.content) : [];
-  const params = parameters.map((parameter) =>
-    parseParameterPattern(parameter, parser.span(base + group.start, base + group.end)),
-  );
-  const rest = params.findIndex((parameter) => parameter.type === 'RestElement');
-  if (rest >= 0 && rest !== params.length - 1)
-    parser.error('BINDING_REST', 'A rest parameter must be the last parameter.', base + group.start, base + group.end);
-  return {
-    params,
-    end: group.end,
-  };
-}
-
-function topLevelEquals(source: string): number {
-  let quote = '';
-  let depth = 0;
-  for (let index = 0; index < source.length; index++) {
-    const char = source[index];
-    if (quote) {
-      if (char === '\\') index++;
-      else if (char === quote) quote = '';
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') quote = char;
-    else if ('([{'.includes(char)) depth++;
-    else if (')]}'.includes(char)) depth--;
-    else if (char === '=' && depth === 0 && source[index + 1] !== '>' && source[index + 1] !== '=') return index;
-  }
-  return -1;
-}
-
-function declarationPosition(parser: MarkupParser, token: InkdownMacroToken, base: number, inline: boolean): void {
-  if (parser.nesting > 1 || inline)
-    parser.error('DECLARATION_POSITION', `@${token.name} is a top-level declaration.`, base + token.start);
 }
 
 const reservedBindings = new Set([
@@ -182,9 +144,11 @@ function readInkdownDirectiveWith(
   return {
     nodes: [
       {
-        type: 'view-call',
-        name: token.name,
-        args: args.args.map((ast) => ({ ast, source: '', span: parser.span(base + index, base + cursor) })),
+        type: 'call',
+        call: {
+          callee: { type: 'binding', name: token.name },
+          args: args.args.map((ast) => ({ ast, source: '', span: parser.span(base + index, base + cursor) })),
+        },
         children,
         span: parser.span(base + index, base + cursor),
       },
@@ -205,7 +169,8 @@ export function createInkdownLowerings(): InkdownLowerings {
     ),
   );
   registry.register(['enter', 'action', 'view'], ({ node: token, parser, source, base, inline }) => {
-    declarationPosition(parser, token, base, inline);
+    if (token.name === 'enter') declarationPosition(parser, token, base, inline);
+    else if (inline) parser.error('DECLARATION_POSITION', `@${token.name} is a block declaration.`, base + token.start);
     let cursor = token.argsStart;
     let name = '';
     let params: BindingPattern[] = [];
@@ -221,11 +186,22 @@ export function createInkdownLowerings(): InkdownLowerings {
     if (source[cursor] !== '{') parser.error('DECLARATION_BODY', `@${token.name} requires a body.`, base + cursor);
     const body = token.name === 'view' ? balancedMarkup(source, cursor) : balanced(source, cursor);
     const span = parser.span(base + token.start, base + body.end);
-    if (token.name === 'enter') parser.addEnter(parseEffects(body.content, base + body.start, parser));
-    else if (token.name === 'action')
-      parser.addAction(parseEffects(body.content, base + body.start, parser), body.content, span, name, params);
-    else parser.addView(name, params, parser.children(body.content, base + body.start, false), body.content, span);
-    return { nodes: [], end: body.end, block: true };
+    if (token.name === 'enter') {
+      parser.addEnter(parseEffects(body.content, base + body.start, parser));
+      return { nodes: [], end: body.end, block: true };
+    }
+    const callable =
+      token.name === 'action'
+        ? parser.callable(
+            'effect',
+            name,
+            params,
+            parseEffects(body.content, base + body.start, parser),
+            body.content,
+            span,
+          )
+        : parser.addView(name, params, parser.children(body.content, base + body.start, false), body.content, span);
+    return { nodes: [{ type: 'callable', callable, span }], end: body.end, block: true };
   });
   registry.register(['import', 'export', 'const'], ({ node: token, parser, source, base, inline }) => {
     declarationPosition(parser, token, base, inline);

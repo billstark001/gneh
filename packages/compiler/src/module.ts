@@ -1,5 +1,13 @@
 /** ESM, declaration and source-map generation for one source module. */
-import { GnehError, type Metadata, type PassageIR, type Span } from '@gneh/core';
+import {
+  GnehError,
+  type CallableIR,
+  type EffectNode,
+  type Metadata,
+  type PassageIR,
+  type Span,
+  type ValueCallableBodyIR,
+} from '@gneh/core';
 import { offsetToPosition } from '@gneh/source';
 
 function typeFor(p: PassageIR): string {
@@ -39,7 +47,33 @@ function runtimePassage(passage: PassageIR, id: string): string {
     sourceOwners.add(expression);
     spanOwners.add(expression);
   };
-  const markNodes = (nodes: PassageIR['body']): void => {
+  function markCallable(callable: CallableIR): void {
+    sourceOwners.add(callable);
+    spanOwners.add(callable);
+    if (callable.phase === 'view') markNodes(callable.body as PassageIR['body']);
+    else if (callable.phase === 'effect') markEffects(callable.body as EffectNode[]);
+    else {
+      const body = callable.body as ValueCallableBodyIR;
+      markEffects(body.effects);
+      markExpression(body.result);
+    }
+  }
+  function markCall(call: import('@gneh/core').CallableCallIR): void {
+    for (const argument of call.args) markExpression(argument);
+    if (call.callee.type === 'expression') markExpression(call.callee.expression);
+    else if (call.callee.type === 'inline') markCallable(call.callee.callable);
+  }
+  function markEffects(effects: EffectNode[]): void {
+    for (const effect of effects) {
+      if (effect.type === 'assign-callable') markCallable(effect.callable);
+      else if (effect.type === 'call') markCall(effect.call);
+      else if (effect.type === 'if') {
+        markEffects(effect.yes);
+        markEffects(effect.no);
+      } else if (effect.type === 'each') markEffects(effect.body);
+    }
+  }
+  function markNodes(nodes: PassageIR['body']): void {
     for (const node of nodes) {
       spanOwners.add(node);
       if (node.type === 'value') markExpression(node.expression);
@@ -56,10 +90,16 @@ function runtimePassage(passage: PassageIR, id: string): string {
       } else if (node.type === 'choice') {
         if (node.props) markExpression(node.props);
         markNodes(node.children);
-      } else if (node.type === 'view-call' || node.type === 'invoke') {
+      } else if (node.type === 'call') {
+        markCall(node.call);
+        markNodes(node.children);
+      } else if (node.type === 'callable') {
+        markCallable(node.callable);
+      } else if (node.type === 'invoke') {
         for (const argument of node.args) markExpression(argument);
         markNodes(node.children);
       } else if (node.type === 'control') {
+        markCall(node.action);
         markExpression(node.value);
         for (const option of node.options) markExpression(option);
         markNodes(node.label);
@@ -67,22 +107,16 @@ function runtimePassage(passage: PassageIR, id: string): string {
         for (const expression of Object.values(node.bindings)) markExpression(expression);
         markNodes(node.children);
       } else {
+        if (node.type === 'effect') markEffects(node.effects);
+        if (node.type === 'button') markCall(node.action);
         if ('children' in node) markNodes(node.children);
         if (node.type === 'interaction') markNodes(node.label);
       }
     }
-  };
+  }
   markNodes(passage.body);
+  markEffects(passage.enter);
   for (const expression of Object.values(passage.constants)) markExpression(expression);
-  for (const declaration of Object.values(passage.effects)) {
-    sourceOwners.add(declaration);
-    spanOwners.add(declaration);
-  }
-  for (const declaration of Object.values(passage.views)) {
-    sourceOwners.add(declaration);
-    spanOwners.add(declaration);
-    markNodes(declaration.body);
-  }
   const {
     name: _name,
     dialect: _dialect,

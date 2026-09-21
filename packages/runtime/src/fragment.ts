@@ -1,43 +1,19 @@
 import {
   display,
   bindParameters,
-  evaluateExpression,
   executeEffects,
   invariant,
+  lexicalScope,
   type Expression,
-  type EffectCallIR,
   type Fragment,
   type FragmentContext,
   type FragmentProps,
-  type Metadata,
   type PassageIR,
   type Scope,
   type StoryNode,
   type View,
-  type ViewInput,
 } from '@gneh/core';
-
-export interface FragmentDefinition<P extends object> {
-  id: string;
-  metadata?: Metadata;
-  capabilities?: string[];
-  bindings?: Readonly<Record<string, unknown>>;
-  enter?: (ctx: FragmentContext, props: P) => void;
-  render: (ctx: FragmentContext, props: P) => ViewInput;
-}
-
-export function defineFragment<P extends object = FragmentProps>(definition: FragmentDefinition<P>): Fragment<P> {
-  invariant(!!definition.id, 'FRAGMENT_ID', 'A fragment requires a stable id.');
-  return Object.freeze({
-    kind: 'gneh.fragment' as const,
-    id: definition.id,
-    metadata: definition.metadata ?? {},
-    capabilities: definition.capabilities ?? [],
-    bindings: definition.bindings,
-    enter: definition.enter,
-    render: definition.render,
-  });
-}
+import { CallableRuntime, type ChildrenInvocation } from './callables.js';
 
 export function defineIRFragment(
   ir: PassageIR,
@@ -45,12 +21,12 @@ export function defineIRFragment(
     bindings?: Record<string, unknown>;
   } = {},
 ): Fragment {
-  const evaluateValue = (e: Expression, ctx: FragmentContext, scope: Scope) => evaluateExpression(e.ast, ctx, scope);
-  const resolveEffect = (name: string) => ir.effects[name];
-  const invokeEffect = (name: string, args: EffectCallIR['args'], ctx: FragmentContext, scope: Scope) =>
-    executeEffects([{ type: 'invoke', name, args }], ctx, scope, resolveEffect);
+  const runtime = new CallableRuntime(ir);
+  const evaluateValue = (expression: Expression, ctx: FragmentContext, scope: Scope) =>
+    runtime.evaluate(expression, ctx, scope);
+  const blockScope = (body: StoryNode[], parent: Scope) => runtime.block(body, parent);
   const withConstants = (ctx: FragmentContext, scope: Scope): Scope => {
-    const result = { ...scope };
+    const result = lexicalScope(scope);
     for (const [name, expression] of Object.entries(ir.constants))
       result[name] = evaluateValue(expression, ctx, result);
     return result;
@@ -59,7 +35,8 @@ export function defineIRFragment(
     ir.evaluation === 'materialized'
       ? ctx.local(`value:${key}`, (initial) => evaluateValue(e, initial, scope))
       : evaluateValue(e, ctx, scope);
-  function nodes(body: StoryNode[], ctx: FragmentContext, scope: Scope, path: string): View[] {
+  function nodes(body: StoryNode[], ctx: FragmentContext, parent: Scope, path: string, existing = false): View[] {
+    const scope = existing ? parent : blockScope(body, parent);
     return body.flatMap((node, index): View[] => {
       ctx.step();
       const key = `${path}/${node.span.start}:${index}`;
@@ -76,7 +53,7 @@ export function defineIRFragment(
             },
           ];
         case 'effect':
-          ctx.effect(key, (initial) => executeEffects(node.effects, initial, { ...scope }, resolveEffect));
+          ctx.effect(key, (initial) => executeEffects(node.effects, initial, lexicalScope(scope), runtime));
           return [];
         case 'value':
           return [{ kind: 'text', key, text: display(valueAt(node.expression, ctx, scope, key)) }];
@@ -87,7 +64,7 @@ export function defineIRFragment(
           invariant(Array.isArray(items), 'E_ITERABLE', 'A structural loop requires an array.');
           const seen = new Set<string>();
           return items.flatMap((item, i) => {
-            const childScope = { ...scope, [node.name]: item, _index: i, index: i };
+            const childScope = lexicalScope(scope, { [node.name]: item, _index: i, index: i });
             const identity = node.key
               ? valueAt(node.key, ctx, childScope, key + `/key:${i}`)
               : item && typeof item === 'object' && Object.hasOwn(item, 'id')
@@ -122,7 +99,8 @@ export function defineIRFragment(
               },
             },
           ];
-        case 'button':
+        case 'button': {
+          const invocation = { call: node.action, environment: scope };
           return [
             {
               kind: 'button',
@@ -130,10 +108,11 @@ export function defineIRFragment(
               children: nodes(node.children, ctx, scope, key),
               activate: () =>
                 ctx.dispatch((actionCtx) => {
-                  invokeEffect(node.action.name, node.action.args, actionCtx, { ...scope });
+                  runtime.invokeEffect(invocation.call, actionCtx, invocation.environment);
                 }),
             },
           ];
+        }
         case 'interaction': {
           const countKey = `interaction:${key}`;
           const count = ctx.local(countKey, () => 0);
@@ -179,8 +158,7 @@ export function defineIRFragment(
           });
           return [];
         case 'control': {
-          const action = ir.effects[node.action.name];
-          invariant(action, 'ACTION_MISSING', `Unknown action: ${node.action.name}`);
+          const invocation = { call: node.action, environment: scope };
           const options = node.options.map((option, optionIndex) =>
             valueAt(option, ctx, scope, `${key}/option:${optionIndex}`),
           );
@@ -193,38 +171,53 @@ export function defineIRFragment(
               children: nodes(node.label, ctx, scope, key + '/label'),
               change: (value) =>
                 ctx.dispatch((actionCtx) =>
-                  invokeEffect(node.action.name, node.action.args, actionCtx, { ...scope, value }),
+                  runtime.invokeEffect(invocation.call, actionCtx, invocation.environment, [value]),
                 ),
             },
           ];
         }
-        case 'view-call': {
-          const declaration = ir.views[node.name];
-          if (!declaration) {
-            const props = node.args[0] ? valueAt(node.args[0], ctx, scope, `${key}/props`) : {};
+        case 'call': {
+          const rawTarget = runtime.callee(node.call, ctx, scope);
+          const target = runtime.resolve(rawTarget);
+          if (!target) {
+            const props = node.call.args[0] ? valueAt(node.call.args[0], ctx, scope, `${key}/props`) : {};
             invariant(
               props && typeof props === 'object' && !Array.isArray(props),
               'E_PROPS',
               'Fragment props must be an object.',
             );
-            return ctx.include(node.name, props as FragmentProps, key);
+            return typeof rawTarget === 'string'
+              ? ctx.include(rawTarget, props as FragmentProps, key)
+              : ctx.include(rawTarget as import('@gneh/core').AnyFragment, props as FragmentProps, key);
           }
-          const child = {
-            ...scope,
-            __children: () => nodes(node.children, ctx, scope, `${key}/children`),
-          };
-          bindParameters(
-            declaration.params,
-            node.args.map((argument, index) => valueAt(argument, ctx, scope, `${key}/argument:${index}`)),
-            ctx,
-            child,
+          const args = node.call.args.map((argument, index) =>
+            valueAt(argument, ctx, scope, `${key}/argument:${index}`),
           );
-          return nodes(declaration.body, ctx, child, `${key}/view:${node.name}`);
+          if (target.phase === 'value')
+            return [{ kind: 'text', key, text: display(runtime.invokeValue(target, args, ctx)) }];
+          invariant(target.phase === 'view', 'E_CALLABLE_PHASE', `Cannot call a ${target.phase} callable as a view.`);
+          const child = lexicalScope(target.environment, {
+            __temporary: Object.create(null) as Scope,
+            __children: {
+              body: node.children,
+              environment: scope,
+              path: `${key}/children`,
+            } satisfies ChildrenInvocation,
+          });
+          bindParameters(target.declaration.params, args, ctx, child);
+          return nodes(target.declaration.body as StoryNode[], ctx, child, `${key}/callable`, false);
         }
+        case 'callable':
+          return [];
         case 'children': {
           const renderChildren = scope.__children;
-          invariant(typeof renderChildren === 'function', 'E_CHILDREN', '@children is only available inside a view.');
-          return (renderChildren as () => View[])();
+          invariant(
+            renderChildren && typeof renderChildren === 'object',
+            'E_CHILDREN',
+            '@children is only available inside a view.',
+          );
+          const invocation = renderChildren as ChildrenInvocation;
+          return nodes(invocation.body, ctx, invocation.environment, invocation.path);
         }
         case 'extension':
           return [
@@ -272,19 +265,32 @@ export function defineIRFragment(
       executeEffects(
         ir.enter,
         ctx,
-        withConstants(ctx, {
-          ...props,
-          props,
-          __temporary: ctx.local('temporary-scope', () => ({})),
-        }),
-        resolveEffect,
+        blockScope(
+          ir.body,
+          withConstants(
+            ctx,
+            lexicalScope(undefined, {
+              ...props,
+              props,
+              __temporary: ctx.local('temporary-scope', () => Object.create(null) as Scope),
+            }),
+          ),
+        ),
+        runtime,
       ),
-    render: (ctx: FragmentContext, props: FragmentProps) =>
-      nodes(
+    render: (ctx: FragmentContext, props: FragmentProps) => {
+      const root = blockScope(
         ir.body,
-        ctx,
-        withConstants(ctx, { ...props, props, __temporary: ctx.local('temporary-scope', () => ({})) }),
-        ctx.instanceId,
-      ),
+        withConstants(
+          ctx,
+          lexicalScope(undefined, {
+            ...props,
+            props,
+            __temporary: ctx.local('temporary-scope', () => Object.create(null) as Scope),
+          }),
+        ),
+      );
+      return nodes(ir.body, ctx, root, ctx.instanceId, true);
+    },
   });
 }

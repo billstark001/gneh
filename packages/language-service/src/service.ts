@@ -149,18 +149,33 @@ export class GnehLanguageService {
     this.analyze();
     const symbols = parsed.passages.flatMap((passage) => {
       const compiled = this.result.passages.find((candidate) => candidate.id === passage.id);
+      const callables: Extract<StoryNode, { type: 'callable' }>[] = [];
+      const collect = (nodes: StoryNode[]): void => {
+        for (const node of nodes) {
+          if (node.type === 'callable') {
+            callables.push(node);
+            if (node.callable.phase === 'view') collect(node.callable.body as StoryNode[]);
+          }
+          if (node.type === 'if') {
+            collect(node.yes);
+            collect(node.no);
+          } else if ('children' in node) collect(node.children);
+        }
+      };
+      collect(compiled?.body ?? []);
       return [
         { name: passage.id, span: passage.span, kind: 'fragment' as const },
-        ...Object.values(compiled?.effects ?? {}).map((action) => ({
-          name: action.name,
-          span: action.span,
-          kind: 'action' as const,
-        })),
-        ...Object.values(compiled?.views ?? {}).map((view) => ({
-          name: view.name,
-          span: view.span,
-          kind: 'view' as const,
-        })),
+        ...callables.flatMap(({ callable }) =>
+          callable.name && callable.phase !== 'value'
+            ? [
+                {
+                  name: callable.name,
+                  span: callable.span,
+                  kind: callable.phase === 'effect' ? ('action' as const) : ('view' as const),
+                },
+              ]
+            : [],
+        ),
       ];
     });
     return [

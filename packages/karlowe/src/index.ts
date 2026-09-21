@@ -1,13 +1,9 @@
 /** Stable public Karlowe frontend API. */
-export {
-  createKarloweMacroReader,
-  createKarloweLowerings,
-  parseKarlowe,
-  readKarloweAttachment,
-  readKarlowe,
-} from './parser.js';
+export { createKarloweMacroReader, createKarloweLowerings, parseKarlowe, readKarlowe } from './parser.js';
 
-export type { KarloweMacroMeta, KarloweLowerings, KarloweParseOptions, KarloweAttachment } from './parser.js';
+export type { KarloweMacroMeta, KarloweLowerings, KarloweParseOptions } from './parser.js';
+export { readKarloweAttachment } from './attachment.js';
+export type { KarloweAttachment } from './attachment.js';
 
 export { parseKarloweExpression, karloweAssignments } from './expression.js';
 

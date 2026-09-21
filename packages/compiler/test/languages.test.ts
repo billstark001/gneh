@@ -46,7 +46,10 @@ test('dialect frontends do not expose aliases or interpret Inkdown directives', 
 
   for (const dialect of ['karlowe', 'sugarcast']) {
     const result = compiled('@action change { $value = 2; }\n@if ($value) { changed }', dialect);
-    assert.deepEqual(result.passages[0].effects, {});
+    assert.equal(
+      result.passages[0].body.some((node) => node.type === 'callable'),
+      false,
+    );
     assert.match(text(new Story(result.story).view), /@action/);
   }
 });
@@ -110,7 +113,8 @@ test('reusable passage parameters are checked and passed', () => {
 test('view-style passage calls resolve display-name aliases to runtime ids', () => {
   const source = ':: Start\n@Card()\n:: Card\n---\nid: RealCard\n---\nresolved';
   assert.equal(text(story(source).view), 'resolved');
-  assert.equal(compileSource(source).passages[0].body[0].children[0].name, 'RealCard');
+  const call = compileSource(source).passages[0].body[0].children[0];
+  assert.equal(call.type === 'call' && call.call.callee.type === 'binding' ? call.call.callee.name : '', 'RealCard');
 });
 
 test('unknown fragment references fail at compile time', () => {

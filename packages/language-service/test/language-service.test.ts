@@ -106,3 +106,14 @@ test('document symbols include actions and reusable views', options, () => {
     service.dispose();
   }
 });
+
+test('nested callable bodies participate in semantic diagnostics', options, () => {
+  const service = new Service({ state: { hp: 1 } });
+  try {
+    service.setDocument('/test/nested.inkdown', '@if (true) { @view Local() { {{ $hpp }} } @Local() }');
+    const diagnostics = service.diagnostics().filter((diagnostic) => diagnostic.code.startsWith('TS'));
+    assert.ok(diagnostics.some((diagnostic) => /hpp/.test(diagnostic.message)));
+  } finally {
+    service.dispose();
+  }
+});

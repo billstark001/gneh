@@ -2,9 +2,9 @@
 import {
   GnehError,
   safeKey,
+  type CallableCallIR,
+  type CallableIR,
   type ContentKind,
-  type EffectDeclarationIR,
-  type EffectCallIR,
   type EffectNode,
   type BindingPattern,
   type Expression,
@@ -12,7 +12,6 @@ import {
   type Metadata,
   type Span,
   type StoryNode,
-  type ViewDeclarationIR,
 } from '@gneh/core';
 import { balanced, splitTopLevel } from './delimiters.js';
 
@@ -91,20 +90,17 @@ export interface SyntaxOptions {
 
 /**
  * Shared recursive-descent context used by the three dialect frontends.
- * A parser instance owns passage-level enter/effect/view declarations and ESM
- * import/export records while every reader returns only renderer-neutral nodes.
+ * A parser instance owns passage-level lifecycle and ESM import/export records;
+ * callable declarations remain explicit nodes in their lexical source block.
  * Dialect readers plug in at token boundaries and cannot bypass depth/span tracking.
  */
 export class MarkupParser {
   evaluation: 'reactive' | 'materialized' = 'reactive';
   readonly enter: EffectNode[] = [];
-  readonly effects: Record<string, EffectDeclarationIR> = {};
-  readonly views: Record<string, ViewDeclarationIR> = {};
   readonly constants: Record<string, Expression> = {};
   readonly imports: ImportIR[] = [];
   readonly exports: string[] = [];
   private depth = 0;
-  private actionNumber = 0;
   constructor(readonly options: SyntaxOptions) {}
   get nesting(): number {
     return this.depth;
@@ -118,34 +114,38 @@ export class MarkupParser {
   expr(source: string, start: number): Expression {
     return this.options.expression(source, this.span(start, start + source.length));
   }
-  effectCall(source: string, start: number): EffectCallIR {
+  effectCall(source: string, start: number): CallableCallIR {
     const match = /^([A-Za-z_][\w-]*)(?:\(([\s\S]*)\))?$/.exec(source.trim());
     if (!match)
       this.error('EFFECT_CALL', 'Expected an effect name with optional arguments.', start, start + source.length);
     const args = match[2]?.trim()
-      ? splitTopLevel(match[2]).map((argument) => this.expr(argument, start + source.indexOf(argument)).ast)
+      ? splitTopLevel(match[2]).map((argument) => this.expr(argument, start + source.indexOf(argument)))
       : [];
-    return { name: match[1], args };
+    return { callee: { type: 'binding', name: match[1] }, args };
   }
   error(code: string, message: string, start: number, end = start + 1): never {
     throw new GnehError(code, message, this.span(start, end));
   }
-  addAction(
-    body: EffectNode[],
+  callable(
+    phase: CallableIR['phase'],
+    name: string | undefined,
+    params: BindingPattern[],
+    body: CallableIR['body'],
     source: string,
     span: Span,
-    name = `__action${this.actionNumber++}`,
-    params: BindingPattern[] = [],
-  ): EffectCallIR {
-    safeKey(name);
-    if (this.effects[name]) this.error('DUPLICATE_ACTION', `Duplicate action ${name}`, span.start, span.end);
-    this.effects[name] = { phase: 'effect', name, params, body, source, span };
-    return { name, args: [] };
+    capture: CallableIR['capture'] = 'lexical',
+  ): CallableIR {
+    if (name) safeKey(name);
+    return { id: `${span.file}:${span.start}`, phase, capture, name, params, body, source, span };
   }
-  addView(name: string, params: BindingPattern[], body: StoryNode[], source: string, span: Span): void {
-    safeKey(name);
-    if (this.views[name]) this.error('DUPLICATE_VIEW', `Duplicate view ${name}`, span.start, span.end);
-    this.views[name] = { phase: 'view', name, params, body, source, span };
+  addAction(body: EffectNode[], source: string, span: Span, params: BindingPattern[] = []): CallableCallIR {
+    return {
+      callee: { type: 'inline', callable: this.callable('effect', undefined, params, body, source, span) },
+      args: [],
+    };
+  }
+  addView(name: string, params: BindingPattern[], body: StoryNode[], source: string, span: Span): CallableIR {
+    return this.callable('view', name, params, body, source, span);
   }
   children(source: string, base: number, inline: boolean): StoryNode[] {
     return inline ? this.inline(source, base) : this.blocks(source, base);

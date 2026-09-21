@@ -12,6 +12,8 @@ export * from './ir.js';
 
 export * from './view.js';
 
+export * from './scope.js';
+
 export * from './expression-runtime.js';
 
 export * from './effects.js';

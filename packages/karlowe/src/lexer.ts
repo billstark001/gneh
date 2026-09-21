@@ -47,7 +47,7 @@ export interface KarloweDocumentCST {
   children: KarloweCSTNode[];
 }
 
-const macroHead = /^\(\s*([A-Za-z][\w-]*)\s*:\s*/;
+const macroHead = /^\(\s*([$_][A-Za-z]\w*|[A-Za-z][\w-]*)\s*:\s*/;
 
 function quoted(source: string, index: number): number {
   const quote = source[index];

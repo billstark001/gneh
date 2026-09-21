@@ -107,8 +107,16 @@ export function printEffects(effects: EffectNode[], indent = '  '): string {
           return `${indent}@if (${printExpression(s.test)}) {\n${printEffects(s.yes, indent + '  ')}\n${indent}}${s.no.length ? ` @else {\n${printEffects(s.no, indent + '  ')}\n${indent}}` : ''}`;
         case 'each':
           return `${indent}@each (${printBinding(s.binding, (name) => name)} of ${printExpression(s.items)}) {\n${printEffects(s.body, indent + '  ')}\n${indent}}`;
-        case 'invoke':
-          return `${indent}@call ${s.name}(${s.args.map((argument) => printExpression(argument)).join(', ')});`;
+        case 'call':
+          if (s.call.callee.type !== 'binding')
+            throw new GnehError('MIGRATION_UNREPRESENTABLE', 'Dynamic callable effects cannot be printed as Inkdown.');
+          return `${indent}@call ${s.call.callee.name}(${s.call.args.map((argument) => printExpression(argument.ast)).join(', ')});`;
+        case 'assign-callable':
+          throw new GnehError(
+            'MIGRATION_UNREPRESENTABLE',
+            'A callable stored in state has no behavior-preserving Inkdown spelling.',
+            s.callable.span,
+          );
       }
     })
     .join('\n');
@@ -136,7 +144,13 @@ export function toInkdown(passages: PassageIR[]): string {
           case 'choice':
             return `[[${render(n.children)} -> ${n.target}${n.props ? '(' + printExpression(n.props.ast) + ')' : ''}]]`;
           case 'button':
-            return `[[${render(n.children)} => ${n.action.name}(${n.action.args.map((argument) => printExpression(argument)).join(', ')})]]`;
+            if (n.action.callee.type !== 'binding')
+              throw new GnehError(
+                'MIGRATION_UNREPRESENTABLE',
+                'Inline callable actions cannot be printed as link actions.',
+                n.span,
+              );
+            return `[[${render(n.children)} => ${n.action.callee.name}(${n.action.args.map((argument) => printExpression(argument.ast)).join(', ')})]]`;
           case 'region':
             return `\n@region ${n.name} {\n${render(n.children)}\n}\n`;
           case 'extension':
@@ -159,8 +173,24 @@ export function toInkdown(passages: PassageIR[]): string {
               `${n.type} has no behavior-preserving Inkdown spelling. Keep the source dialect or rewrite it explicitly.`,
               n.span,
             );
-          case 'view-call':
-            return `@${n.name}(${n.args.map((argument) => printExpression(argument.ast)).join(', ')})${n.children.length ? `{${render(n.children)}}` : ''}`;
+          case 'call':
+            if (n.call.callee.type !== 'binding')
+              throw new GnehError(
+                'MIGRATION_UNREPRESENTABLE',
+                'Dynamic view callables cannot be printed as Inkdown.',
+                n.span,
+              );
+            return `@${n.call.callee.name}(${n.call.args.map((argument) => printExpression(argument.ast)).join(', ')})${n.children.length ? `{${render(n.children)}}` : ''}`;
+          case 'callable':
+            if (!n.callable.name || n.callable.phase === 'value')
+              throw new GnehError(
+                'MIGRATION_UNREPRESENTABLE',
+                'Anonymous and value callables have no declaration spelling.',
+                n.span,
+              );
+            return n.callable.phase === 'effect'
+              ? `\n@action ${n.callable.name}(${n.callable.params.map((param) => printBinding(param, (name) => name)).join(', ')}) {\n${printEffects(n.callable.body as EffectNode[])}\n}\n`
+              : `\n@view ${n.callable.name}(${n.callable.params.map((param) => printBinding(param, (name) => name)).join(', ')}) {\n${render(n.callable.body as StoryNode[]).trim()}\n}\n`;
           case 'children':
             return '@children';
           case 'content': {
@@ -218,18 +248,7 @@ export function toInkdown(passages: PassageIR[]): string {
         p.constants,
       )
         .map(([name, value]) => `@const ${name} = ${printExpression(value.ast)}\n`)
-        .join('')}${p.enter.length ? '@enter {\n' + printEffects(p.enter) + '\n}\n' : ''}${Object.values(p.effects)
-        .filter((effect) => !effect.name.startsWith('__action'))
-        .map(
-          (effect) =>
-            `@action ${effect.name}(${effect.params.map((param) => printBinding(param, (name) => name)).join(', ')}) {\n${printEffects(effect.body)}\n}\n`,
-        )
-        .join('')}${Object.values(p.views)
-        .map(
-          (view) =>
-            `@view ${view.name}(${view.params.map((param) => printBinding(param, (name) => name)).join(', ')}) {\n${render(view.body).trim()}\n}\n`,
-        )
-        .join('')}\n${render(p.body).trim()}\n`;
+        .join('')}${p.enter.length ? '@enter {\n' + printEffects(p.enter) + '\n}\n' : ''}\n${render(p.body).trim()}\n`;
     })
     .join('\n');
 }

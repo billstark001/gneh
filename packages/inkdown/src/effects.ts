@@ -54,7 +54,7 @@ export function parseEffects(source: string, base: number, parser: MarkupParser)
       if (source[terminator] !== ';')
         parser.error('EFFECT_TERMINATOR', 'Effect directives must end with a semicolon.', base + terminator);
       const call = parser.effectCall(source.slice(cursor, end), base + cursor);
-      effects.push({ type: 'invoke', name: call.name, args: call.args });
+      effects.push({ type: 'call', call });
       index = terminator + 1;
       continue;
     }

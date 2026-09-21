@@ -1,8 +1,9 @@
 import { invariant } from './errors.js';
 import { evaluateExpression } from './expression-runtime.js';
 import { safeKey } from './json.js';
+import { lexicalScope } from './scope.js';
 import type { BindingPattern } from 'pure-expr/expr';
-import type { EffectDeclarationIR, EffectNode } from './ir.js';
+import type { CallableCallIR, CallableIR, EffectNode } from './ir.js';
 import type { EvaluationContext, Scope } from './view.js';
 
 export function bindPattern(pattern: BindingPattern, value: unknown, ctx: EvaluationContext, scope: Scope): void {
@@ -61,7 +62,10 @@ export function bindPattern(pattern: BindingPattern, value: unknown, ctx: Evalua
   }
 }
 
-export type EffectResolver = (name: string) => EffectDeclarationIR | undefined;
+export interface EffectCallableRuntime {
+  invokeEffect(call: CallableCallIR, ctx: EvaluationContext, scope: Scope, values?: readonly unknown[]): void;
+  callableValue(callable: CallableIR, scope: Scope): unknown;
+}
 
 export function bindParameters(
   patterns: readonly BindingPattern[],
@@ -84,7 +88,7 @@ export function executeEffects(
   effects: EffectNode[],
   ctx: EvaluationContext,
   scope: Scope,
-  resolve: EffectResolver = () => undefined,
+  runtime: EffectCallableRuntime,
 ): void {
   invariant(ctx.phase !== 'render', 'E_PURITY', 'Effects require an enter/action context.');
   for (const effect of effects) {
@@ -97,29 +101,39 @@ export function executeEffects(
         bindPattern(effect.binding, evaluateExpression(effect.value, ctx, scope), ctx, scope);
         break;
       case 'if':
-        executeEffects(evaluateExpression(effect.test, ctx, scope) ? effect.yes : effect.no, ctx, scope, resolve);
+        executeEffects(
+          evaluateExpression(effect.test, ctx, scope) ? effect.yes : effect.no,
+          ctx,
+          lexicalScope(scope),
+          runtime,
+        );
         break;
       case 'each': {
         const items = evaluateExpression(effect.items, ctx, scope);
         invariant(Array.isArray(items), 'E_ITERABLE', 'Loop requires an array.');
         for (const item of items) {
-          const child = { ...scope };
+          const child = lexicalScope(scope);
           bindPattern(effect.binding, item, ctx, child);
-          executeEffects(effect.body, ctx, child, resolve);
+          executeEffects(effect.body, ctx, child, runtime);
         }
         break;
       }
-      case 'invoke': {
-        const declaration = resolve(effect.name);
-        invariant(declaration, 'E_EFFECT', `Unknown effect: ${effect.name}`);
-        const child = { ...scope };
-        bindParameters(
-          declaration.params,
-          effect.args.map((argument) => evaluateExpression(argument, ctx, scope)),
+      case 'assign-callable': {
+        const child = lexicalScope(scope, { gnehCallableValue: runtime.callableValue(effect.callable, scope) });
+        evaluateExpression(
+          {
+            type: 'AssignmentExpression',
+            operator: '=',
+            left: effect.target,
+            right: { type: 'Identifier', name: 'gnehCallableValue' },
+          },
           ctx,
           child,
         );
-        executeEffects(declaration.body, ctx, child, resolve);
+        break;
+      }
+      case 'call': {
+        runtime.invokeEffect(effect.call, ctx, scope);
         break;
       }
     }

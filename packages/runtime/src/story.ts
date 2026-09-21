@@ -556,6 +556,10 @@ export class Story {
       }
     }
     frame.cleanups.clear();
+    frame.locals.clear();
+    frame.regions.clear();
+    frame.declaredRegions.clear();
+    frame.props = {};
   }
   private resetFrames(): void {
     for (const frame of this.frames.values()) this.disposeFrame(frame);

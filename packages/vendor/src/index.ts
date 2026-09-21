@@ -76,7 +76,11 @@ export function createWikifier(options: {
     });
     if (p.imports.length || p.enter.length || sourceEffect)
       throw new GnehError('WIKIFY_EFFECT', 'wikify does not accept ESM imports or source effects.');
-    if (options.pure && (Object.keys(p.effects).length || p.capabilities.includes('live')))
+    let callableEffect = false;
+    walkNodes(p.body, (node) => {
+      if (node.type === 'callable' && node.callable.phase === 'effect') callableEffect = true;
+    });
+    if (options.pure && (callableEffect || p.capabilities.includes('live')))
       throw new GnehError('WIKIFY_PURE', 'wikifyPure excludes actions and mutable regions.');
     return defineIRFragment({ ...p, id, metadata: { ...p.metadata, id } });
   };

@@ -127,7 +127,7 @@ export function parseKarloweExpression(
       let atom: ExpressionNode;
       if (source[index] === '(') {
         const group = balanced(source, index, { apostropheProperty: true });
-        const macro = /^\s*([\w-]+)\s*:\s*/.exec(group.content);
+        const macro = /^\s*([$_][A-Za-z]\w*|[\w-]+)\s*:\s*/.exec(group.content);
         if (macro) {
           const name = harloweMacroName(macro[1]);
           const known: Record<string, string> = {
@@ -147,7 +147,8 @@ export function parseKarloweExpression(
             savedgames: 'saved-games',
             history: 'history',
           };
-          if (!known[name] && !hostOperations[name])
+          const dynamic = name.startsWith('$') || name.startsWith('_');
+          if (!dynamic && !known[name] && !hostOperations[name])
             throw new GnehError('KARLOWE_EXPR_MACRO', `Unsupported expression macro (${name}:)`);
           const argSource = group.content.slice(macro[0].length);
           const args = argSource.trim()
@@ -155,9 +156,11 @@ export function parseKarloweExpression(
                 recurse(part, group.start + macro[0].length + argSource.indexOf(part)),
               )
             : [];
-          atom = hostOperations[name]
-            ? call(identifier('host'), [literal(hostOperations[name]), ...args])
-            : call(identifier(known[name]), args);
+          atom = dynamic
+            ? call(identifier('gnehCallValue'), [identifier(name), ...args])
+            : hostOperations[name]
+              ? call(identifier('host'), [literal(hostOperations[name]), ...args])
+              : call(identifier(known[name]), args);
         } else atom = recurse(group.content, group.start);
         index = group.end;
       } else if (source[index] === '[' || source[index] === '{') {

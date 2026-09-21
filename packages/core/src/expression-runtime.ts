@@ -7,6 +7,7 @@ import {
 } from 'pure-expr/expr';
 import { invariant } from './errors.js';
 import { safeKey } from './json.js';
+import { bindingOwner, flattenScope, hasBinding } from './scope.js';
 import type { EvaluationContext, Scope } from './view.js';
 
 const intrinsicValues = Object.freeze({
@@ -44,15 +45,15 @@ function variables(ctx: EvaluationContext, scope: Scope): BindingStore {
   const localName = (name: string) => name.slice(1);
   return {
     has(name) {
-      return name.startsWith('$') || name.startsWith('_') || Object.hasOwn(scope, name);
+      return name.startsWith('$') || name.startsWith('_') || hasBinding(scope, name);
     },
     get(name) {
       if (name.startsWith('$')) return ctx.state[safeKey(localName(name))];
       if (name.startsWith('_')) {
         const key = safeKey(localName(name));
-        return Object.hasOwn(scope, key) ? scope[key] : temporaryScope?.[key];
+        return bindingOwner(scope, key)?.[key] ?? temporaryScope?.[key];
       }
-      return scope[name];
+      return bindingOwner(scope, name)?.[name];
     },
     set(name, value) {
       if (name.startsWith('$')) {
@@ -61,7 +62,8 @@ function variables(ctx: EvaluationContext, scope: Scope): BindingStore {
       }
       if (name.startsWith('_')) {
         const key = safeKey(localName(name));
-        if (Object.hasOwn(scope, key)) scope[key] = value;
+        const owner = bindingOwner(scope, key);
+        if (owner) owner[key] = value;
         else {
           invariant(temporaryScope, 'E_ASSIGN', 'Missing temporary scope.');
           temporaryScope[key] = value;
@@ -69,23 +71,29 @@ function variables(ctx: EvaluationContext, scope: Scope): BindingStore {
         return;
       }
       invariant(name !== 'props' && name !== 'state', 'E_ASSIGN', 'Cannot replace a context binding.');
-      invariant(Object.hasOwn(scope, name), 'E_ASSIGN', `Unknown writable binding: ${name}`);
-      scope[safeKey(name)] = value;
+      const owner = bindingOwner(scope, name);
+      invariant(owner, 'E_ASSIGN', `Unknown writable binding: ${name}`);
+      owner[safeKey(name)] = value;
     },
     delete(name) {
       if (name.startsWith('$')) return delete ctx.state[safeKey(localName(name))];
       if (name.startsWith('_')) {
         const key = safeKey(localName(name));
-        return Object.hasOwn(scope, key) ? delete scope[key] : !!temporaryScope && delete temporaryScope[key];
+        const owner = bindingOwner(scope, key);
+        return owner ? delete owner[key] : !!temporaryScope && delete temporaryScope[key];
       }
       return false;
     },
   };
 }
 
-function capabilities(ctx: EvaluationContext): Record<string, unknown> {
+function capabilities(ctx: EvaluationContext, scope: Scope): Record<string, unknown> {
   const random = (min: number, max: number) => {
-    invariant(ctx.phase !== 'render', 'E_PURITY', 'Randomness must be stored during enter/actions.');
+    invariant(
+      ctx.phase === 'enter' || ctx.phase === 'action',
+      'E_PURITY',
+      'Randomness must be stored during enter/actions.',
+    );
     return ctx.random(min, max);
   };
   return {
@@ -93,6 +101,14 @@ function capabilities(ctx: EvaluationContext): Record<string, unknown> {
     random,
     either: (...values: unknown[]) => values[random(0, values.length - 1)],
     ...ctx.bindings,
+    gnehCallableValue: (id: string) => {
+      invariant(ctx.makeCallable, 'E_CALLABLE', 'Callable construction is unavailable in this expression context.');
+      return ctx.makeCallable(id, scope);
+    },
+    gnehCallValue: (value: unknown, ...args: unknown[]) => {
+      invariant(ctx.invokeValueCallable, 'E_CALLABLE', 'Value callable invocation is unavailable.');
+      return ctx.invokeValueCallable(value, args, scope);
+    },
   };
 }
 
@@ -130,12 +146,12 @@ export function evaluateExpression(ast: ExpressionNode, ctx: EvaluationContext, 
     execute = evaluator.compile(ast);
     cache.set(ast, execute);
   }
-  const data = { ...scope, state: ctx.state };
+  const data = { ...flattenScope(scope), state: ctx.state };
   return execute(
     createEvaluationEnvironment({
       data,
       variables: variables(ctx, scope),
-      capabilities: capabilities(ctx),
+      capabilities: capabilities(ctx, scope),
     }),
   );
 }
