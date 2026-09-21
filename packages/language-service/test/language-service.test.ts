@@ -46,7 +46,7 @@ test('prop types and loop locals participate in semantic diagnostics', options, 
   try {
     service.setDocument(
       '/test/source.inkdown',
-      ":: Start\n@each (item of $items; key item.name) {\n{{ item.missing }}\n}\n:: Card\n---\nparams: [enemy]\nparamTypes:\n  enemy: '{hp: number}'\n---\n{{ enemy.hpp }}",
+      ':: Start\n@each (item of $items; key item.name) {\n{{ item.missing }}\n}\n:: Card {"params":["enemy"],"paramTypes":{"enemy":"{hp: number}"}}\n{{ enemy.hpp }}',
     );
     const d = service.diagnostics().filter((d) => d.code.startsWith('TS'));
     assert.equal(d.length, 2);
@@ -79,11 +79,11 @@ test('cross-file definition, references and conservative rename are AST-based', 
 test('virtual files are inspectable and invalidate on edit', options, () => {
   const service = new Service({ state: { hp: 1 } });
   try {
-    service.setDocument('/test/edit.md', ':: Start\n$bad');
+    service.setDocument('/test/edit.inkdown', ':: Start [start]\n$bad');
     assert.ok(service.diagnostics().some((d) => d.code.startsWith('TS')));
-    service.setDocument('/test/edit.md', ':: Start\n$hp');
+    service.setDocument('/test/edit.inkdown', ':: Start [start]\n$hp');
     assert.deepEqual(service.diagnostics(), []);
-    assert.match(service.virtualDocument('/test/edit.md'), /state\["hp"\]/);
+    assert.match(service.virtualDocument('/test/edit.inkdown'), /state\["hp"\]/);
   } finally {
     service.dispose();
   }
@@ -110,7 +110,10 @@ test('document symbols include actions and reusable views', options, () => {
 test('nested callable bodies participate in semantic diagnostics', options, () => {
   const service = new Service({ state: { hp: 1 } });
   try {
-    service.setDocument('/test/nested.inkdown', '@if (true) { @view Local() { {{ $hpp }} } @Local() }');
+    service.setDocument(
+      '/test/nested.inkdown',
+      ':: Start [start]\n@if (true) { @view Local() { {{ $hpp }} } @Local() }',
+    );
     const diagnostics = service.diagnostics().filter((diagnostic) => diagnostic.code.startsWith('TS'));
     assert.ok(diagnostics.some((diagnostic) => /hpp/.test(diagnostic.message)));
   } finally {

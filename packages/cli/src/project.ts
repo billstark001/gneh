@@ -28,7 +28,7 @@ export interface Project {
   result: CompileResult;
 }
 
-const sourceExtension = /\.(?:inkdown|karlowe|sugarcast|md|twee|tw)$/i;
+const sourceExtension = /\.(?:inkdown|karlowe|sugarcast)$/i;
 
 /** Directories ignored by discovery and by the preview server's file watcher. */
 export const ignoredDirectories = new Set([

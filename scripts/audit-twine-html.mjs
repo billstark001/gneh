@@ -222,7 +222,7 @@ export function auditTwineHTML(html, file = 'story.html', options = {}) {
     const declared = structured && undeclared.length === 0;
     const resolved = declared && unresolved.length === 0;
 
-    const result = parse(passage.source, `${file}#${passage.name}`);
+    const result = parse(`:: ${passage.name} [start]\n${passage.source}`, `${file}#${passage.name}`);
     const errors = result.diagnostics.filter((item) => item.severity === 'error');
     warnings += result.diagnostics.length - errors.length;
     for (const item of errors) increment(diagnostics, item.code);

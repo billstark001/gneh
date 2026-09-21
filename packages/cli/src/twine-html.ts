@@ -143,10 +143,13 @@ function escapeHeaderName(value: string): string {
 
 /** Emit one Twee 3 file while retaining every Twine passage attribute as metadata. */
 export function emitTwineTwee(story: TwineStoryData): string {
+  const entry = twineEntry(story);
   return story.passages
     .map((passage) => {
       const metadata: Metadata = { twine: passage.attributes };
-      const tags = passage.tags.length ? ` [${passage.tags.join(' ')}]` : '';
+      const passageTags = [...passage.tags];
+      if (passage.name === entry && !passageTags.includes('start')) passageTags.push('start');
+      const tags = passageTags.length ? ` [${passageTags.join(' ')}]` : '';
       const body = passage.source.endsWith('\n') ? passage.source : passage.source + '\n';
       return `:: ${escapeHeaderName(passage.name)}${tags} ${JSON.stringify(metadata)}\n${body}`;
     })

@@ -9,7 +9,6 @@ export interface GnehViteOptions {
   runtimeExtensionIds?: readonly string[];
 }
 
-const optInExtension = /\.(?:md|twee|tw)$/i;
 const viteAssetQueries = ['raw', 'url', 'worker', 'sharedworker', 'inline'];
 
 function request(id: string): { file: string; params: URLSearchParams } {
@@ -30,16 +29,14 @@ function dialectFor(file: string, dialects: readonly DialectFrontend[]): Dialect
 function isStoryRequest(id: string, dialects: readonly DialectFrontend[]): boolean {
   const { file, params } = request(id);
   if (viteAssetQueries.some((query) => params.has(query))) return false;
-  return Boolean(dialectFor(file, dialects)) || (optInExtension.test(file) && params.has('gneh'));
+  return Boolean(dialectFor(file, dialects));
 }
 
 function requestedDialect(id: string, dialects: readonly DialectFrontend[]): DialectFrontend | undefined {
-  const { file, params } = request(id);
+  const { file } = request(id);
   const native = dialectFor(file, dialects);
   if (native) return native;
-  const selected = params.get('gneh');
-  if (!selected) return undefined;
-  return dialects.find((frontend) => frontend.dialect === selected);
+  return undefined;
 }
 
 /** Transform only story modules imported explicitly by application code. */
@@ -69,11 +66,8 @@ export function gneh(options: GnehViteOptions): Plugin {
     },
     async transform(code, id) {
       if (!isStoryRequest(id, options.dialects)) return;
-      const { file, params } = request(id);
+      const { file } = request(id);
       const frontend = requestedDialect(id, options.dialects);
-      const selected = optInExtension.test(file) ? params.get('gneh') : undefined;
-      if (selected && !frontend)
-        this.error(`Dialect ${JSON.stringify(selected)} is not registered in gneh({ dialects: [...] }).`);
       const parsed = parseSource(code, file, frontend?.dialect, { dialects: options.dialects });
       assertValid(parsed);
       const unresolved = parsed.passages
@@ -88,7 +82,7 @@ export function gneh(options: GnehViteOptions): Plugin {
         const live = parsed.passages.find((passage) => passage.capabilities.includes('live'));
         if (live) this.error(`${live.id} requires a live context.`);
       }
-      const output = generateModule(parsed.passages, code, file);
+      const output = generateModule(parsed, code, file);
       return { code: output.code, map: output.map as never };
     },
   };

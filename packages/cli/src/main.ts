@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Command, CommanderError, Option } from 'commander';
 import { ABI_VERSION } from '@gneh/core';
-import { assertValid, generateModule, graph, toInkdown } from '@gneh/compiler';
+import { assertValid, generateModule, graph, parseSource, toInkdown } from '@gneh/compiler';
+import { inkdown } from '@gneh/inkdown';
+import { karlowe } from '@gneh/karlowe';
+import { sugarcast } from '@gneh/sugarcast';
 import { emitTwee, splitPassages } from '@gneh/source';
 import { writeFile } from './files.js';
 import { inspectProject, type InspectionLevel } from './inspect.js';
@@ -119,9 +122,11 @@ export function createProgram(): Command {
     assertValid(project.result);
     const output = path.resolve(options.output ?? path.join(project.root, '.gneh', 'esm'));
     for (const source of project.sources) {
-      const passages = project.result.passages.filter((passage) => passage.span.file === source.path);
-      if (!passages.length) continue;
-      const emitted = generateModule(passages, source.source, source.path);
+      const parsed = parseSource(source.source, source.path, source.dialect, {
+        dialects: [inkdown(), karlowe(), sugarcast()],
+      });
+      if (!parsed.passages.length) continue;
+      const emitted = generateModule(parsed, source.source, source.path);
       const name = source.path.replace(/\.[^.]+$/, '.mjs');
       writeFile(path.join(output, name), emitted.code + `//# sourceMappingURL=${path.basename(name)}.map\n`);
       writeFile(path.join(output, name + '.map'), JSON.stringify(emitted.map));

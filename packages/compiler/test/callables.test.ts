@@ -14,7 +14,7 @@ test('Inkdown callables are lexical closures with per-iteration environments', (
   assert.equal(instance.state.picked, 'b');
 });
 
-test('Karlowe custom macros are serializable value and view callables', () => {
+test('Karlowe custom macros are transient callables reconstructed after load', () => {
   const source = `(set: $double to (macro: num-type _n, [(output-data: _n * 2)]))
 (set: $badge to (macro: str-type _label, [(output:)[Badge: (print: _label)]]))
 (print: ($double: 3)) ($badge: "ready")`;
@@ -35,4 +35,13 @@ test('value callables keep local computation but cannot mutate story state or co
   assert.throws(() => story(mutation, 'karlowe', { state: { value: 1 } }));
   const randomness = `(set: $roll to (macro: [(output-data: (random: 1, 6))]))(print: ($roll:))`;
   assert.throws(() => story(randomness, 'karlowe'));
+});
+
+test('Inkdown publish-star snapshots direct callables without publishing parameters', () => {
+  const instance = story(`@view Box(value) {
+  @view Inner() { {{ value }} }
+  @publish *
+}
+@Box("captured")`);
+  assert.deepEqual([...instance.registrations.keys()], ['Inner']);
 });

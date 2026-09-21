@@ -30,20 +30,11 @@ test('Vite plugin compiles native extensions without claiming generic frontend f
         throw new Error(message);
       },
     },
-    '# Story',
+    ':: Start [start]\n# Story',
     '/src/story.inkdown',
   );
   assert.match(compiled.code, /defineIRFragment/);
-  const optedIn = await transform.call(
-    {
-      error: (message) => {
-        throw new Error(message);
-      },
-    },
-    '# Story',
-    '/src/story.md?gneh',
-  );
-  assert.match(optedIn.code, /defineIRFragment/);
+  assert.equal(await transform.call({}, '# Story', '/src/story.md?gneh'), undefined);
 });
 
 test('Vite claims only explicitly registered dialects', async () => {
@@ -52,19 +43,7 @@ test('Vite claims only explicitly registered dialects', async () => {
   const plugin = gneh({ dialects: [inkdown()] });
   const transform = plugin.transform.handler ?? plugin.transform;
   assert.equal(await transform.call({}, '(print: 1)', '/src/story.karlowe'), undefined);
-  await assert.rejects(
-    () =>
-      transform.call(
-        {
-          error: (message) => {
-            throw new Error(message);
-          },
-        },
-        '(print: 1)',
-        '/src/story.md?gneh=karlowe',
-      ),
-    /not registered/,
-  );
+  assert.equal(await transform.call({}, '(print: 1)', '/src/story.md?gneh=karlowe'), undefined);
 });
 
 test('Vite respects asset queries and dialect-owned extension aliases', async () => {
@@ -75,14 +54,13 @@ test('Vite respects asset queries and dialect-owned extension aliases', async ()
     assert.equal(await load.call({}, `/src/story.inkdown?${query}`), undefined);
     assert.equal(await transform.call({}, '# source', `/src/story.inkdown?${query}`), undefined);
   }
-  const sugar = await transform.call({ error: (message) => assert.fail(message) }, '<<print 2>>', '/src/story.sugar');
-  assert.match(sugar.code, /defineIRFragment/);
-  const karloweMarkdown = await transform.call(
+  const sugar = await transform.call(
     { error: (message) => assert.fail(message) },
-    '(print: 2)',
-    '/src/story.md?gneh=karlowe',
+    ':: Start [start]\n<<print 2>>',
+    '/src/story.sugarcast',
   );
-  assert.match(karloweMarkdown.code, /defineIRFragment/);
+  assert.match(sugar.code, /defineIRFragment/);
+  assert.equal(await transform.call({}, '(print: 2)', '/src/story.md?gneh=karlowe'), undefined);
 });
 
 test('Vite shares caller-owned CST-to-IR lowerings with frontend transforms', async () => {
@@ -101,7 +79,7 @@ test('Vite shares caller-owned CST-to-IR lowerings with frontend transforms', as
   const transform = plugin.transform.handler ?? plugin.transform;
   const result = await transform.call(
     { error: (message) => assert.fail(message) },
-    '@build-name',
+    ':: Start [start]\n@build-name',
     '/src/story.inkdown',
   );
   assert.match(result.code, /nightly/);

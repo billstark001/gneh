@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import { assert, compiled, compileProject, compileSource, story, text, click, all } from './helpers.js';
 import { toInkdown, walkNodes } from '../dist/index.js';
 import { createWikifier, readPassageData } from '../../vendor/dist/index.js';
-import { Story } from '../../runtime/dist/index.js';
+import { Story, definePassages } from '../../runtime/dist/index.js';
 import { parseExpression } from '../../expression/dist/index.js';
 import { createKarloweLowerings, karlowe, lexKarlowe, parseKarloweCST } from '../../karlowe/dist/index.js';
 import { createInkdownLowerings, inkdown } from '../../inkdown/dist/index.js';
@@ -69,7 +69,12 @@ test('expression identifiers preserve sigils while the expression wrapper carrie
     assert.equal(ast.name, source);
     assert.deepEqual(parseExpression(source, span).span, span);
   }
-  const passage = compiled('@import { helper } from "./helpers.mjs"\n{{ helper() }}').passages[0];
+  const passage = compiled(`---
+imports:
+  ./helpers.mjs: [helper]
+---
+:: Start [start]
+{{ helper() }}`).passages[0];
   const call = passage.body[0].children.find((node) => node.type === 'value').expression.ast;
   assert.deepEqual(call.callee, { type: 'Identifier', name: 'helper' });
 });
@@ -110,11 +115,12 @@ test('reusable passage parameters are checked and passed', () => {
   assert.ok(compileSource(source.replace('{enemy: $enemy}', '{}')).diagnostics.some((d) => d.code === 'PROPS_MISSING'));
 });
 
-test('view-style passage calls resolve display-name aliases to runtime ids', () => {
-  const source = ':: Start\n@Card()\n:: Card\n---\nid: RealCard\n---\nresolved';
+test('passage calls use canonical ids and do not create display-name aliases', () => {
+  const source = ':: Start\n@RealCard()\n:: Card {"id":"RealCard"}\nresolved';
   assert.equal(text(story(source).view), 'resolved');
   const call = compileSource(source).passages[0].body[0].children[0];
   assert.equal(call.type === 'call' && call.call.callee.type === 'binding' ? call.call.callee.name : '', 'RealCard');
+  assert.throws(() => story(source.replace('@RealCard()', '@Card()')), /Unknown passage: Card/);
 });
 
 test('unknown fragment references fail at compile time', () => {
@@ -330,9 +336,9 @@ test('portable Harlowe and SugarCube checkbox bindings remain live', () => {
   assert.equal(sugarcast.state.enabled, true);
 });
 
-test('entry declarations cannot hide inside reactive branches', () => {
+test('removed Inkdown entry declarations are rejected everywhere', () => {
   assert.ok(
-    compileSource('@if ($yes) {\n@enter { @do $x = 1; }\n}').diagnostics.some((d) => d.code === 'DECLARATION_POSITION'),
+    compileSource('@if ($yes) {\n@enter { @do $x = 1; }\n}').diagnostics.some((d) => d.code === 'REMOVED_DIRECTIVE'),
   );
 });
 
@@ -346,26 +352,24 @@ test('Inkdown has no JavaScript statement, module, or script escape hatch', () =
     assert.ok(compileSource(source).diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
 });
 
-test('declarative ESM records reject names that collide with state or temporary namespaces', () => {
-  for (const source of [
-    '@import { helper as $helper } from "./helpers.mjs"',
-    '@import { helper as _helper } from "./helpers.mjs"',
-    '@const $value = 1',
-    '@export { bad-name }',
-  ])
+test('removed inline ESM records and state declarations are rejected', () => {
+  for (const source of ['@import { helper } from "./helpers.mjs"', '@export { helper }', '@const $value = 1'])
     assert.ok(compileSource(source).diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
 });
 
-test('effect calls are checked inside actions and declared views are checked like passage bodies', () => {
+test('known callable phase errors are checked while dynamic registry calls remain valid', () => {
   assert.ok(
-    compileSource('@action outer { @call missing(); }\n[[Run => outer]]').diagnostics.some(
-      (diagnostic) => diagnostic.code === 'ACTION_MISSING',
+    compileSource('@view wrong() { no }\n@action outer { @call wrong(); }\n[[Run => outer]]').diagnostics.some(
+      (diagnostic) => diagnostic.code === 'CALLABLE_PHASE',
     ),
   );
   assert.ok(
-    compileSource('@view Card() { @Missing() }\n@Card()').diagnostics.some(
-      (diagnostic) => diagnostic.code === 'VIEW_MISSING',
+    compileSource('@action wrong() {}\n@view Card() { @wrong() }\n@Card()').diagnostics.some(
+      (diagnostic) => diagnostic.code === 'CALLABLE_PHASE',
     ),
+  );
+  assert.ok(
+    !compileSource('@action outer { @call installedLater(); }').diagnostics.some((d) => d.severity === 'error'),
   );
   assert.ok(compileSource('@children').diagnostics.some((diagnostic) => diagnostic.code === 'CHILDREN_POSITION'));
 });
@@ -455,7 +459,7 @@ test('vendor data compiler and optional wikifier use the same ABI', () => {
   );
   assert.equal(text(new Story(ir).view), 'HP: 2');
   const f = createWikifier({ dialects: vendorDialects })('**{{ $hp }}**');
-  assert.equal(text(new Story([f], { state: { hp: 9 } }).view), '9');
+  assert.equal(text(new Story(definePassages(f), { state: { hp: 9 }, entry: f.id }).view), '9');
 });
 
 test('wikify rejects module and source effects; pure excludes actions/regions', () => {
@@ -468,7 +472,9 @@ test('wikify rejects module and source effects; pure excludes actions/regions', 
 
 test('snapshot target rejects live requirements but retains navigation', () => {
   assert.ok(
-    compileSource('@region n { hello }', 'x.md', { live: false }).diagnostics.some((d) => d.code === 'CAPABILITY_LIVE'),
+    compileSource('@region n { hello }', 'x.inkdown', { live: false }).diagnostics.some(
+      (d) => d.code === 'CAPABILITY_LIVE',
+    ),
   );
   const s = story(':: Start\n[[Go->End]]\n:: End\nDone', 'inkdown', { live: false });
   click(s, 'Go');
@@ -476,10 +482,9 @@ test('snapshot target rejects live requirements but retains navigation', () => {
   assert.throws(() => s.mutate((state) => (state.x = 1)));
 });
 
-test('metadata-controlled .twee dialect is honored', () => {
-  const result = compileProject([
-    { path: 'test.twee', source: '---\ndialect: sugarcast\n---\n:: Start\n<<print 42>>' },
-  ]);
-  assert.deepEqual(result.diagnostics, []);
-  assert.equal(text(new Story(result.story).view), '42');
+test('dialect metadata and the ambiguous .twee extension are not accepted', () => {
+  assert.throws(
+    () => compileProject([{ path: 'test.twee', source: '---\ndialect: sugarcast\n---\n:: Start\n<<print 42>>' }]),
+    /native GNEH dialect/,
+  );
 });

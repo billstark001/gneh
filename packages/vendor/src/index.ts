@@ -65,7 +65,7 @@ export function createWikifier(options: {
   let counter = 0;
   return (source, dialect = options.dialect ?? 'inkdown') => {
     const id = `wikify_${++counter}`;
-    const parsed = parseSource(source, `${id}.${dialect}`, dialect, { dialects: options.dialects });
+    const parsed = parseSource(`:: ${id}\n${source}`, `${id}.${dialect}`, dialect, { dialects: options.dialects });
     assertValid(parsed);
     if (parsed.passages.length !== 1)
       throw new GnehError('WIKIFY_FRAGMENT', 'wikify accepts one fragment, not a multi-passage file.');
@@ -74,7 +74,7 @@ export function createWikifier(options: {
     walkNodes(p.body, (node) => {
       if (node.type === 'effect' || node.type === 'region-change' || node.type === 'portal') sourceEffect = true;
     });
-    if (p.imports.length || p.enter.length || sourceEffect)
+    if ((parsed.module?.imports.length ?? 0) || sourceEffect)
       throw new GnehError('WIKIFY_EFFECT', 'wikify does not accept ESM imports or source effects.');
     let callableEffect = false;
     walkNodes(p.body, (node) => {

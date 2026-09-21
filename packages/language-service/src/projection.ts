@@ -33,7 +33,6 @@ export function inferType(value: unknown): string {
 /** Render portable IR as type-checkable TypeScript, never as executable story code. */
 function typedIdentifier(name: string): string {
   if (name.startsWith('$')) return `state[${JSON.stringify(name.slice(1))}]`;
-  if (name.startsWith('_')) return name.slice(1);
   return name;
 }
 
@@ -78,8 +77,14 @@ function typedEffects(effects: EffectNode[], effectName: (name: string) => strin
  * The projection deliberately stubs imported runtime values as `any`: module checking
  * belongs to the real ESM/Vite project, while this layer checks portable story code.
  */
-export function createVirtualFile(passages: PassageIR[], state: State, stateTypes?: string): VirtualFile {
+export function createVirtualFile(
+  passages: PassageIR[],
+  state: State,
+  stateTypes?: string,
+  bindings: readonly string[] = [],
+): VirtualFile {
   let code = `export {};\ntype State = ${stateTypes ?? inferType(state)};\ndeclare let state: State;\ndeclare let value: unknown;\ndeclare function display(value: string|number|boolean|null|undefined): void;\ndeclare function contains(container: unknown, value: unknown): boolean;\ndeclare function random(min:number,max:number):number;\ndeclare function either<T>(...values:T[]):T;\ndeclare function array<T>(...values:T[]):T[];\ndeclare function datamap(...values:unknown[]):Record<string,unknown>;\ndeclare function navigate(id:string,props?:object):void;\ndeclare function host(operation:string,...args:unknown[]):unknown;\ndeclare function __missing_effect(...args:any[]):void;\n`;
+  for (const name of bindings) code += `declare const ${name}:any;\n`;
   const mappings: ProjectionMapping[] = [];
   const emit = (text: string, source?: Span) => {
     const start = code.length;
@@ -242,7 +247,6 @@ export function createVirtualFile(passages: PassageIR[], state: State, stateType
         .map((callable, viewIndex) => [callable.name!, `__view_${viewIndex}`]),
     );
     emit(`function __passage${index}(){\n`);
-    for (const binding of passage.imports) emit(`const ${binding.local}: any = undefined;\n`);
     const params = Array.isArray(passage.metadata.params)
       ? passage.metadata.params.filter((value): value is string => typeof value === 'string')
       : [];
@@ -268,7 +272,6 @@ export function createVirtualFile(passages: PassageIR[], state: State, stateType
       emit(';\n');
     }
     const resolveEffect = (name: string) => effectNames.get(name) ?? '__missing_effect';
-    if (passage.enter.length) emit(typedEffects(passage.enter, resolveEffect) + '\n', passage.span);
     for (const action of declarations.filter((callable) => callable.phase === 'effect')) {
       emit(`function ${resolveEffect(action.name!)}(${action.params.map(typedParameter).join(',')}){\n`);
       emit(typedEffects(action.body as EffectNode[], resolveEffect), action.span);

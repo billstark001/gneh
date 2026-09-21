@@ -113,7 +113,8 @@ export class GnehLanguageService {
     for (const [file] of this.documents) {
       const passages = this.result.passages.filter((p) => p.span.file === file);
       if (!passages.length) continue;
-      const virtual = createVirtualFile(passages, this.result.story.state, this.options.stateTypes);
+      const imports = splitPassages(this.documents.get(file)!.source, file).linkage.imports.map((item) => item.local);
+      const virtual = createVirtualFile(passages, this.result.story.state, this.options.stateTypes, imports);
       virtual.version = String(this.revision);
       this.virtuals.set(file + '.gneh.ts', virtual);
     }
@@ -235,7 +236,7 @@ export class GnehLanguageService {
         };
     }
     this.analyze();
-    const target = this.result.passages.find((p) => p.id === word.word || p.name === word.word);
+    const target = this.result.passages.find((p) => p.id === word.word);
     if (target)
       return {
         contents: `**${target.id}** · ${target.dialect}\n\n\`\`\`json\n${JSON.stringify(target.metadata, null, 2)}\n\`\`\``,
@@ -307,7 +308,7 @@ export class GnehLanguageService {
     const target =
       this.linkReferences().find((r) => r.span.file === file && offset >= r.span.start && offset <= r.span.end)
         ?.target ?? wordAt(source, offset).word;
-    const passage = this.result.passages.find((p) => p.id === target || p.name === target);
+    const passage = this.result.passages.find((p) => p.id === target);
     if (!passage) return;
     const document = this.documents.get(passage.span.file)?.source ?? '';
     const header = /^::\s*([^\n]+)/gm;
@@ -367,7 +368,7 @@ export class GnehLanguageService {
     );
     return p
       ? this.linkReferences()
-          .filter((r) => r.target === p.id || r.target === p.name)
+          .filter((r) => r.target === p.id)
           .map((r) => r.span)
       : [];
   }

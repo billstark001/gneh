@@ -3,9 +3,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { assert, compiled, story, text, click } from './helpers.js';
+import { assert, compiled, compileSource, story, text, click } from './helpers.js';
 import { generateModule } from '../dist/index.js';
-import { Story } from '../../runtime/dist/index.js';
+import { Story, definePassages } from '../../runtime/dist/index.js';
 
 const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
 
@@ -13,7 +13,7 @@ const core = new URL('../../core/dist/index.js', import.meta.url).href;
 
 async function emittedStory(source, state = {}, modules = {}) {
   const result = compiled(source, 'inkdown', { state });
-  const output = generateModule(result.passages, source, 'test.inkdown');
+  const output = generateModule(result, source, 'test.inkdown');
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-esm-'));
   const file = path.join(dir, 'story.mjs');
   for (const [name, contents] of Object.entries(modules)) await fs.writeFile(path.join(dir, name), contents);
@@ -22,7 +22,7 @@ async function emittedStory(source, state = {}, modules = {}) {
     output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)).replaceAll('"@gneh/core"', JSON.stringify(core)),
   );
   const module = await import(pathToFileURL(file).href);
-  const s = new Story(Object.values(module.fragments), {
+  const s = new Story(module.default, {
     entry: result.story.entry,
     state,
   }).start();
@@ -44,7 +44,7 @@ test('generated ESM and IR interpretation agree on mutations, conditions and nav
     click(a, 'End');
     click(b.story, 'End');
     assert.equal(text(a.view), text(b.story.view));
-    assert.equal(b.module.default.kind, 'gneh.fragment');
+    assert.deepEqual(Object.keys(b.module.default), ['Start', 'End']);
   } finally {
     await b.dispose();
   }
@@ -82,19 +82,24 @@ test('optional chaining stops only its own chain, not a parenthesized outer acce
 });
 
 test('compiled null results are not evaluated twice', async () => {
-  const source = '@import { calls, counted } from "./helpers.mjs"\n@export { calls }\n{{ counted() }}';
+  const source = `---
+imports:
+  ./helpers.mjs: [counted, calls]
+---
+:: Start [start]
+{{ counted() }}{{ calls() }}`;
   const b = await emittedStory(
     source,
     {},
     {
-      'helpers.mjs': 'export let calls = 0; export function counted() { calls++; return null; }',
+      'helpers.mjs':
+        'let count = 0; export function counted() { count++; return null; } export function calls() { return count; }',
     },
   );
   try {
-    assert.equal(text(b.story.view), '');
     assert.equal(
-      b.module.calls,
-      2,
+      text(b.story.view),
+      '2',
       'Two intentional mount-settling renders; never a second interpreter fallback per expression.',
     );
   } finally {
@@ -104,8 +109,8 @@ test('compiled null results are not evaluated twice', async () => {
 
 test('metadata creates concrete required props in declaration output', () => {
   const source =
-    "---\nid: Card\nparams: [enemy, compact]\noptionalParams: [compact]\nparamTypes:\n  enemy: '{hp: number; name: string}'\n  compact: boolean\n---\n{{ enemy.hp }}";
-  const output = generateModule(compiled(source).passages, source, 'card.inkdown');
+    ':: Card [start] {"params":["enemy","compact"],"optionalParams":["compact"],"paramTypes":{"enemy":"{hp: number; name: string}","compact":"boolean"}}\n{{ enemy.hp }}';
+  const output = generateModule(compiled(source), source, 'card.inkdown');
   assert.match(output.declarations, /"enemy": \{hp: number; name: string\}/);
   assert.match(output.declarations, /"compact"\?: boolean/);
   assert.equal(output.map.version, 3);
@@ -115,8 +120,9 @@ test('metadata creates concrete required props in declaration output', () => {
 
 test('generated runtime IR omits only compiler-owned source and full spans', () => {
   const source = `:: Start {"source":"author","span":{"label":"wide"},"asset":{"type":"image","source":"cover.png","span":{"label":"metadata"}}}\n${'A long authored paragraph that must not be duplicated in runtime IR. '.repeat(200)} {{ $name }}`;
-  const passages = compiled(source, 'inkdown', { state: { name: 'Ada' } }).passages;
-  const output = generateModule(passages, source, 'story.inkdown');
+  const result = compiled(source, 'inkdown', { state: { name: 'Ada' } });
+  const passages = result.passages;
+  const output = generateModule(result, source, 'story.inkdown');
   assert.match(output.code, /"source":"author"/);
   assert.match(output.code, /"span":\{"label":"wide"\}/);
   assert.match(output.code, /"asset":\{"type":"image","source":"cover\.png","span":\{"label":"metadata"\}\}/);
@@ -129,9 +135,9 @@ test('generated runtime IR omits only compiler-owned source and full spans', () 
 test('typed ESM namespaces expose all in-file passages', async () => {
   const output = await emittedStory(':: Alpha\nA\n:: Beta\nB');
   try {
-    assert.deepEqual(Object.keys(output.module.fragments), ['Alpha', 'Beta']);
-    assert.equal(output.module.default.id, 'Alpha');
-    assert.equal(output.module.metadata.Beta.id, 'Beta');
+    assert.deepEqual(Object.keys(output.module.default), ['Alpha', 'Beta']);
+    assert.equal(output.module.default.Alpha.id, 'Alpha');
+    assert.equal(output.module.default.Beta.id, 'Beta');
   } finally {
     await output.dispose();
   }
@@ -154,7 +160,7 @@ test('render expressions reject mutation and statement-shaped JavaScript', () =>
 test('local passages have lexical module scope and survive fresh save/load', async () => {
   const source =
     ':: Start\n@Card({label: "local"})\n[[Next]]\n:: Card {"params":["label"]}\nCard: {{ label }}\n:: Next\nNext scene';
-  const output = generateModule(compiled(source).passages, source, 'chapter.inkdown', {
+  const output = generateModule(compiled(source), source, 'chapter.inkdown', {
     namespace: 'chapters/one.inkdown',
   });
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-local-'));
@@ -167,12 +173,12 @@ test('local passages have lexical module scope and survive fresh save/load', asy
         .replaceAll('"@gneh/core"', JSON.stringify(core)),
     );
     const module = await import(pathToFileURL(file).href);
-    const first = new Story([module.default]).start();
+    const first = new Story(module.default, { entry: 'chapters/one.inkdown#Start' }).start();
     assert.equal(first.current, 'chapters/one.inkdown#Start');
     assert.match(text(first.view), /Card: local/);
     click(first, 'Next');
     assert.equal(first.current, 'chapters/one.inkdown#Next');
-    const second = new Story([module.default]).start();
+    const second = new Story(module.default, { entry: 'chapters/one.inkdown#Start' }).start();
     second.load(first.save());
     assert.equal(text(second.view), text(first.view));
   } finally {
@@ -186,7 +192,7 @@ test('different modules may each define a private passage named Card', async () 
     const modules = [];
     for (const id of ['alpha', 'beta']) {
       const source = `:: Start\n@Card()\n:: Card\n${id}`;
-      const output = generateModule(compiled(source).passages, source, id + '.inkdown', {
+      const output = generateModule(compiled(source), source, id + '.inkdown', {
         namespace: id,
       });
       const file = path.join(dir, id + '.mjs');
@@ -198,10 +204,26 @@ test('different modules may each define a private passage named Card', async () 
       );
       modules.push(await import(pathToFileURL(file).href));
     }
-    const instance = new Story(modules.map((m) => m.default)).start();
+    const instance = new Story(definePassages(...modules.map((m) => m.default)), { entry: 'alpha#Start' }).start();
     assert.equal(text(instance.view), 'alpha');
-    instance.navigate(modules[1].default);
+    instance.navigate('beta#Start');
     assert.equal(text(instance.view), 'beta');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('explicit namespace rewriting preserves a preceding lexical callable with the same name', async () => {
+  const source = ':: Start\n@view Card() { lexical }\n@Card()\n:: Card\npassage';
+  const output = generateModule(compiled(source), source, 'chapter.inkdown', { namespace: 'chapter' });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-namespace-scope-'));
+  try {
+    const file = path.join(dir, 'chapter.mjs');
+    await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    const module = await import(pathToFileURL(file).href);
+    const instance = new Story(module.default, { entry: 'chapter#Start' }).start();
+    assert.match(text(instance.view), /lexical/);
+    assert.doesNotMatch(text(instance.view), /passage/);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -209,19 +231,20 @@ test('different modules may each define a private passage named Card', async () 
 
 test('private module helpers and live module bindings remain available to templates', async () => {
   const b = await emittedStory(
-    '@import { value, local, change } from "./helpers.mjs"\n@export { change }\n{{ local() }} / {{ value }}',
-    {},
-    {
-      'helpers.mjs':
-        'export let value = "first"; export function local() { return value; } export function change() { value = "second"; }',
-    },
+    `---
+exports: [value, change]
+---
+@let value = "first"
+@action change() { @do value = "second"; }
+:: Start [start]
+{{ value }} [[Change => change()]]`,
   );
   try {
-    assert.equal(text(b.story.view), 'first / first');
-    b.module.change();
-    b.story.refresh();
-    assert.equal(text(b.story.view), 'second / second');
-    assert.match(b.output.declarations, /const change/);
+    assert.match(text(b.story.view), /first/);
+    assert.equal(b.module.value, 'first');
+    click(b.story, 'Change');
+    assert.equal(b.module.value, 'second');
+    assert.match(b.output.declarations, /declare let change/);
   } finally {
     await b.dispose();
   }
@@ -229,14 +252,43 @@ test('private module helpers and live module bindings remain available to templa
 
 test('declarative imports support default ESM exports without an embedded module body', async () => {
   const output = await emittedStory(
-    '@import { default as greet } from "./greet.mjs"\n@export { greet }\n{{ greet("Ada") }}',
+    `---
+imports:
+  ./greet.mjs: greet
+---
+:: Start [start]
+{{ greet("Ada") }}`,
     {},
     { 'greet.mjs': 'export default name => `Hello ${name}`;' },
   );
   try {
     assert.equal(text(output.story.view), 'Hello Ada');
-    assert.equal(output.module.greet('Lin'), 'Hello Lin');
   } finally {
     await output.dispose();
+  }
+});
+
+test('primary-only modules initialize once and default-export an empty PassageSet', async () => {
+  const source = `---
+imports:
+  ./counter.mjs: [next]
+exports: [count]
+---
+@let count = next()`;
+  const result = compileSource(source, 'utility.inkdown', { dialect: 'inkdown' });
+  assert.deepEqual(result.diagnostics, []);
+  const output = generateModule(result, source, 'utility.inkdown');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-primary-'));
+  try {
+    await fs.writeFile(path.join(dir, 'counter.mjs'), 'let value = 0; export const next = () => ++value;');
+    const file = path.join(dir, 'utility.mjs');
+    await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    const first = await import(pathToFileURL(file).href);
+    const second = await import(pathToFileURL(file).href);
+    assert.equal(first, second);
+    assert.equal(first.count, 1);
+    assert.deepEqual(Object.keys(first.default), []);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
   }
 });

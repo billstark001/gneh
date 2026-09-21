@@ -92,7 +92,7 @@ test('CLI extracts and imports Twine HTML with fidelity and compatibility report
       JSON.parse(await fs.readFile(path.join(imported, '.gneh/import/twine-story.json'))).story.attributes.name,
       'Imported & Story',
     );
-    assert.match(await fs.readFile(path.join(imported, 'story.karlowe'), 'utf8'), /start: "Start"/);
+    assert.match(await fs.readFile(path.join(imported, 'story.karlowe'), 'utf8'), /:: Start \[start\]/);
     assert.equal(run('check', imported).status, 0);
     const lean = path.join(parent, 'lean-import');
     assert.equal(run('import-twine', html, '-o', lean).status, 0);

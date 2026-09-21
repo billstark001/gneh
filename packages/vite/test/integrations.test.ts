@@ -25,7 +25,7 @@ test('Vite hooks generate scoped ESM with typed in-file passages', hooks, async 
   };
   const result = await gneh.transform.call(ctx, ':: Start\n@Card()\n:: Card\nHello', '/project/story/main.inkdown');
   assert.match(result.code, /"Start"/);
-  assert.match(result.code, /"Card":__f1/);
+  assert.match(result.code, /"Card":__p1/);
   assert.equal(result.map.version, 3);
   assert.equal(
     gneh.handleHotUpdate,

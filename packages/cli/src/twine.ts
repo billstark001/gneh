@@ -55,9 +55,14 @@ function compatibility(
   summary: { portable: number; unsupported: number; warnings: number };
 } {
   const passages = story.passages.map((passage) => {
-    const parsed = parseSource(passage.source, `twine-import/${passage.name}.${dialect}`, dialect, {
-      dialects: compatibilityDialects,
-    });
+    const parsed = parseSource(
+      `:: ${passage.name} [start]\n${passage.source}`,
+      `twine-import/${passage.name}.${dialect}`,
+      dialect,
+      {
+        dialects: compatibilityDialects,
+      },
+    );
     const unsupported = parsed.diagnostics.some((diagnostic) => diagnostic.severity === 'error');
     return {
       name: passage.name,
@@ -162,7 +167,9 @@ export function importTwineFile(input: string, options: ImportTwineOptions = {})
   const directory = outputDirectory(file, options.output, '-gneh');
   const sourceName = `story.${dialect}`;
   const title = typeof story.attributes.name === 'string' ? story.attributes.name : undefined;
-  const source = `---\nstart: ${JSON.stringify(twineEntry(story) ?? 'Start')}\n${title ? `title: ${JSON.stringify(title)}\n` : ''}---\n${emitTwineTwee(story)}`;
+  const source = title
+    ? `---\nmetadata:\n  title: ${JSON.stringify(title)}\n---\n${emitTwineTwee(story)}`
+    : emitTwineTwee(story);
   const checked = compatibility(story, dialect);
   const containerDiagnostics = collisions(story);
   const entry = twineEntry(story) ?? 'Start';

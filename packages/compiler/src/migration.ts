@@ -244,11 +244,9 @@ export function toInkdown(passages: PassageIR[]): string {
       const metadata = { ...p.metadata };
       delete metadata.name;
       delete metadata.dialect;
-      return `:: ${p.name} ${JSON.stringify(metadata)}\n${p.imports.map((value) => `@import { ${value.imported}${value.imported === value.local ? '' : ` as ${value.local}`} } from ${JSON.stringify(value.source)}\n`).join('')}${p.exports.length ? `@export { ${p.exports.join(', ')} }\n` : ''}${Object.entries(
-        p.constants,
-      )
+      return `:: ${p.name} ${JSON.stringify(metadata)}\n${Object.entries(p.constants)
         .map(([name, value]) => `@const ${name} = ${printExpression(value.ast)}\n`)
-        .join('')}${p.enter.length ? '@enter {\n' + printEffects(p.enter) + '\n}\n' : ''}\n${render(p.body).trim()}\n`;
+        .join('')}\n${render(p.body).trim()}\n`;
     })
     .join('\n');
 }

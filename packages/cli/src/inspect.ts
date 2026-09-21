@@ -8,7 +8,7 @@ import type { Project } from './project.js';
 export type InspectionLevel = 'container' | 'syntax' | 'ir';
 
 function selected<T extends { id?: string; name?: string }>(items: T[], passage?: string): T[] {
-  return passage ? items.filter((item) => item.id === passage || item.name === passage) : items;
+  return passage ? items.filter((item) => item.id === passage) : items;
 }
 
 function requirePassage(found: number, passage?: string): void {

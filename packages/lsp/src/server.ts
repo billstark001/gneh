@@ -11,7 +11,7 @@ export interface Transport {
   notify(method: string, params: unknown): void;
 }
 
-const extensions = /\.(?:md|inkdown|karlowe|sugarcast|sugar|tw|twee)$/i;
+const extensions = /\.(?:inkdown|karlowe|sugarcast)$/i;
 
 const ignored = new Set(['node_modules', '.git', 'dist', 'standalone', 'site', '.gneh']);
 

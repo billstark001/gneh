@@ -8,6 +8,7 @@ import {
   type Diagnostic,
   type Dialect,
   type EffectNode,
+  type ImportIR,
   type Metadata,
   type ParseResult,
   type PassageIR,
@@ -16,7 +17,8 @@ import {
   type StoryNode,
   type ValueCallableBodyIR,
 } from '@gneh/core';
-import { mergeMetadata, splitPassages } from '@gneh/source';
+import { mergeMetadata } from '@gneh/source';
+import { validateModuleLinkage } from './module-linkage.js';
 
 export interface SourceInput {
   path: string;
@@ -43,8 +45,14 @@ export interface CompileOptions {
   runtimeExtensionIds?: readonly string[];
 }
 
-export function detectDialect(file: string, fallback: Dialect = 'inkdown'): Dialect {
-  return /\.karlowe$/i.test(file) ? 'karlowe' : /\.(?:sugarcast|sugar)$/i.test(file) ? 'sugarcast' : fallback;
+export function detectDialect(file: string): Dialect | undefined {
+  return /\.inkdown$/i.test(file)
+    ? 'inkdown'
+    : /\.karlowe$/i.test(file)
+      ? 'karlowe'
+      : /\.sugarcast$/i.test(file)
+        ? 'sugarcast'
+        : undefined;
 }
 
 export function parseSource(
@@ -53,13 +61,12 @@ export function parseSource(
   dialect?: Dialect,
   options: { dialects?: readonly DialectFrontend[] } = {},
 ): ParseResult {
-  const header = splitPassages(source, file);
-  const configured = header.metadata.dialect;
-  const selected =
-    dialect ??
-    (configured === 'inkdown' || configured === 'karlowe' || configured === 'sugarcast'
-      ? configured
-      : detectDialect(file));
+  const selected = dialect ?? detectDialect(file);
+  if (!selected)
+    throw new GnehError(
+      'SOURCE_EXTENSION',
+      `No native GNEH dialect owns ${JSON.stringify(file)}; select a dialect explicitly or use a native extension.`,
+    );
   const frontend = options.dialects?.find((candidate) => candidate.dialect === selected);
   if (!frontend)
     throw new GnehError(
@@ -67,18 +74,7 @@ export function parseSource(
       `Dialect ${JSON.stringify(selected)} is not configured. Install and register its frontend explicitly.`,
     );
   const parsed = frontend.parse(source, file);
-  const fileBindings = parsed.passages.flatMap((passage) => passage.imports);
-  for (const passage of parsed.passages) {
-    passage.imports = fileBindings.filter(
-      (value, index, all) =>
-        all.findIndex(
-          (candidate) =>
-            candidate.source === value.source &&
-            candidate.imported === value.imported &&
-            candidate.local === value.local,
-        ) === index,
-    );
-  }
+  validateModuleLinkage(parsed, source, file);
   return parsed;
 }
 
@@ -102,11 +98,25 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
   const passages: PassageIR[] = [],
     diagnostics: Diagnostic[] = [];
   let metadata = options.metadata ?? {};
+  const setup: string[] = [];
+  const moduleImports = new Map<string, ImportIR[]>();
+  let sourceModule: ParseResult['module'];
   for (const input of sources) {
     const parsed = parseSource(input.source, input.path, input.dialect, {
       dialects: options.dialects,
     });
     diagnostics.push(...parsed.diagnostics);
+    if (sources.length === 1) sourceModule = parsed.module;
+    metadata = mergeMetadata(metadata, parsed.module?.metadata ?? {});
+    setup.push(...(parsed.module?.setup ?? []));
+    moduleImports.set(input.path, parsed.module?.imports ?? []);
+    if (options.mode === 'vendor' && parsed.module?.imports.length)
+      diagnostics.push({
+        code: 'VENDOR_MODULE',
+        severity: 'error',
+        message: `YAML imports in ${input.path} require an ESM/Vite build. Data mode cannot load JavaScript modules.`,
+        span: parsed.module.primary?.span ?? { file: input.path, start: 0, end: Math.min(input.source.length, 3) },
+      });
     for (const p of parsed.passages) {
       if (p.name === 'StoryTitle') {
         metadata = mergeMetadata(metadata, { title: p.source.trim() });
@@ -132,51 +142,15 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
       passages.push(p);
     }
   }
-  const ids = new Map<string, PassageIR>(),
-    aliases = new Map<string, string>();
+  const ids = new Map<string, PassageIR>();
   const error = (code: string, message: string, span: Span, hint?: string) =>
     diagnostics.push({ code, severity: 'error', message, span, hint });
   for (const p of passages) {
     if (ids.has(p.id)) error('DUPLICATE_ID', `Duplicate passage id: ${p.id}`, p.span);
     ids.set(p.id, p);
-    if (aliases.has(p.name) && aliases.get(p.name) !== p.id) aliases.set(p.name, '');
-    else aliases.set(p.name, p.id);
-  }
-  const fileBindings = new Map<string, PassageIR['imports']>();
-  for (const p of passages) {
-    const values = fileBindings.get(p.span.file) ?? [];
-    values.push(...p.imports);
-    fileBindings.set(p.span.file, values);
-  }
-  for (const [file, bindings] of fileBindings) {
-    const owner = passages.find((passage) => passage.span.file === file);
-    const reported = new Set<string>();
-    for (const binding of bindings) {
-      const conflict = bindings.find(
-        (candidate) =>
-          candidate.local === binding.local &&
-          (candidate.source !== binding.source || candidate.imported !== binding.imported),
-      );
-      if (conflict && owner && !reported.has(binding.local)) {
-        reported.add(binding.local);
-        error(
-          'IMPORT_CONFLICT',
-          `Import name ${binding.local} refers to both ${binding.source}:${binding.imported} and ${conflict.source}:${conflict.imported}.`,
-          owner.span,
-        );
-      }
-    }
   }
   for (const p of passages) {
-    p.imports = (fileBindings.get(p.span.file) ?? []).filter(
-      (value, index, all) => all.findIndex((candidate) => candidate.local === value.local) === index,
-    );
-    if (options.mode === 'vendor' && p.imports.length)
-      error(
-        'VENDOR_MODULE',
-        `@import in ${p.id} requires an ESM/Vite build. Data mode cannot load JavaScript modules.`,
-        p.span,
-      );
+    const imports = moduleImports.get(p.span.file) ?? [];
     if (options.live === false && p.capabilities.includes('live'))
       error(
         'CAPABILITY_LIVE',
@@ -185,8 +159,8 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
       );
     const validateNode = (n: StoryNode) => {
       if (n.type === 'choice' || n.type === 'include') {
-        const dest = ids.get(n.target) ?? ids.get(aliases.get(n.target) ?? '');
-        if (!dest && !p.imports.some((binding) => binding.local === n.target))
+        const dest = ids.get(n.target);
+        if (!dest && !imports.some((binding) => binding.local === n.target))
           error(
             'PASSAGE_MISSING',
             `Unknown or ambiguous fragment ${JSON.stringify(n.target)} referenced by ${p.id}.`,
@@ -218,7 +192,7 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
       }
       if (n.type === 'call' && n.call.callee.type === 'binding') {
         const name = n.call.callee.name;
-        const dest = ids.get(name) ?? ids.get(aliases.get(name) ?? '');
+        const dest = ids.get(name);
         if (dest) n.call.callee.name = dest.id;
         const params = dest?.metadata.params;
         const props = n.call.args[0]?.ast;
@@ -270,9 +244,15 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
               error('CALLABLE_PHASE', 'An effect position requires an effect callable.', span);
             validateCallable(effect.call.callee.callable, span, names);
           }
-          if (effect.call.callee.type === 'binding' && names.get(effect.call.callee.name) !== 'effect')
-            error('ACTION_MISSING', `Unknown effect callable: ${effect.call.callee.name}`, span);
+          if (
+            effect.call.callee.type === 'binding' &&
+            names.has(effect.call.callee.name) &&
+            names.get(effect.call.callee.name) !== 'effect'
+          )
+            error('CALLABLE_PHASE', `Expected an effect callable: ${effect.call.callee.name}`, span);
         } else if (effect.type === 'assign-callable') {
+          validateCallable(effect.callable, span, names);
+        } else if (effect.type === 'publish-callable') {
           validateCallable(effect.callable, span, names);
         } else if (effect.type === 'if') {
           validateEffects(effect.yes, span, names);
@@ -282,29 +262,28 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
     }
     function validateBlock(nodes: StoryNode[], inherited = new Map<string, string>(), inView = false): void {
       const names = new Map(inherited);
-      for (const node of nodes)
+      for (const node of nodes) {
+        validateNode(node);
         if (node.type === 'callable' && node.callable.name) {
           if (names.has(node.callable.name) && !inherited.has(node.callable.name))
             error('DUPLICATE_CALLABLE', `Duplicate callable: ${node.callable.name}`, node.span);
           names.set(node.callable.name, node.callable.phase);
         }
-      for (const node of nodes) {
-        validateNode(node);
         if (node.type === 'children' && !inView)
           error('CHILDREN_POSITION', '@children is only valid inside a view callable.', node.span);
         if (
           (node.type === 'button' || node.type === 'control') &&
           node.action.callee.type === 'binding' &&
+          names.has(node.action.callee.name) &&
           names.get(node.action.callee.name) !== 'effect'
         )
-          error('ACTION_MISSING', `Unknown effect callable: ${node.action.callee.name}`, node.span);
+          error('CALLABLE_PHASE', `Expected an effect callable: ${node.action.callee.name}`, node.span);
         if (node.type === 'call' && node.call.callee.type === 'binding') {
           const name = node.call.callee.name;
           const phase = names.get(name);
           if (phase && phase !== 'view')
             error('CALLABLE_PHASE', `Cannot call a ${phase} callable as a view.`, node.span);
-          else if (!phase && !ids.has(name) && !p.imports.some((binding) => binding.local === name))
-            error('VIEW_MISSING', `Unknown view callable or fragment: ${name}`, node.span);
+          else if (!phase && ids.has(name)) node.call.callee.name = name;
         }
         if (node.type === 'effect') validateEffects(node.effects, node.span, names);
         if (node.type === 'if') {
@@ -314,29 +293,48 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
         else if ('children' in node) validateBlock(node.children, names, inView);
       }
     }
-    const rootNames = new Map<string, string>();
-    for (const node of p.body)
-      if (node.type === 'callable' && node.callable.name) rootNames.set(node.callable.name, node.callable.phase);
-    validateEffects(p.enter, p.span, rootNames);
     validateBlock(p.body);
   }
-  const sourceEntry = passages.map((p) => p.metadata.start).find((value): value is string => typeof value === 'string');
-  let entry =
-    options.entry ??
-    sourceEntry ??
-    (typeof metadata.start === 'string' ? metadata.start : undefined) ??
-    passages.find((p) => Array.isArray(p.metadata.tags) && p.metadata.tags.includes('start'))?.id ??
-    (ids.has('Start') ? 'Start' : (passages[0]?.id ?? ''));
-  entry = ids.has(entry) ? entry : (aliases.get(entry) ?? entry);
-  if (!ids.has(entry) && passages.length)
+  const starts = passages.filter((p) => Array.isArray(p.metadata.tags) && p.metadata.tags.includes('start'));
+  const entry = options.entry ?? (starts.length === 1 ? starts[0].id : '');
+  if (passages.length && !entry)
+    error(
+      'ENTRY_REQUIRED',
+      starts.length > 1
+        ? 'Multiple passages have the start tag; select an explicit entry.'
+        : 'Select an explicit entry or mark exactly one passage with the start tag.',
+      passages[0].span,
+    );
+  else if (!ids.has(entry) && passages.length)
     error('ENTRY_MISSING', `Entry passage does not exist: ${entry}`, passages[0].span);
+  const seenSetup = new Set<string>();
+  for (const id of setup) {
+    if (!ids.has(id))
+      error(
+        'SETUP_MISSING',
+        `Setup passage does not exist: ${id}`,
+        passages[0]?.span ?? { file: '<project>', start: 0, end: 0 },
+      );
+    if (seenSetup.has(id))
+      error(
+        'DUPLICATE_SETUP',
+        `Duplicate setup passage: ${id}`,
+        ids.get(id)?.span ?? passages[0]?.span ?? { file: '<project>', start: 0, end: 0 },
+      );
+    seenSetup.add(id);
+  }
   let state = options.state ?? {};
   if (!options.state) {
     const declared = passages.find((p) => p.metadata.state)?.metadata.state;
     if (declared && typeof declared === 'object' && !Array.isArray(declared)) state = declared as State;
   }
   assertJson(state);
-  return { passages, diagnostics, story: { abi: ABI_VERSION, entry, state, metadata, passages } };
+  return {
+    passages,
+    diagnostics,
+    module: sourceModule,
+    story: { abi: ABI_VERSION, entry, state, metadata, passages, setup },
+  };
 }
 
 export function compileSource(
