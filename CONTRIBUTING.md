@@ -11,6 +11,8 @@ pnpm test:browser
 
 Commit the lockfile produced by pnpm when dependencies change. Do not report a command as passing unless it was actually run. Local logs, screenshots, and ad-hoc reports belong in `verification/`, which is intentionally ignored by Git.
 
+End-to-end language behavior belongs in `packages/conformance/cases/*.md`; parser, CST, diagnostic, emitter, and runtime-kernel tests remain with their owning packages. The local Oxlint rule `gneh/multiline-test-string` warns when a test fixture hides two or more line breaks behind JavaScript string escapes and safely fixes eligible fixtures to multiline template literals. Prefer named module-level fixture constants when one source is reused or substantial.
+
 ## Boundary rules
 
 - `core` must not import a parser, DOM implementation, Vite, or an application shell.

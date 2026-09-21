@@ -2,6 +2,8 @@
 
 This document describes the implemented portable profile. It is not the official Harlowe or SugarCube specification and does not claim full CommonMark or YAML 1.2.
 
+Executable cross-language examples live in [`packages/conformance/cases`](../packages/conformance/cases), whose [README](../packages/conformance/README.md) defines the Markdown case format and renderer projections.
+
 ## Shared source container
 
 Every dialect uses the same `@gneh/source` passage splitter:

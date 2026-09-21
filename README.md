@@ -132,6 +132,8 @@ A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScr
 | `@gneh/compiler` | Dialect-neutral project validation, graphing, ESM/declarations/maps, and migration output |
 | `@gneh/runtime` | Fragment instances, transactions, navigation, history, regions, and saves |
 | `@gneh/renderer-dom` | Keyed DOM reconciliation and an optional minimal Story-to-DOM adapter |
+| `@gneh/renderer-xml` | Deterministic XML and plain-text projections for host-neutral verification |
+| `@gneh/conformance` | Markdown-authored end-to-end behavior shared by all three language frontends |
 | `@gneh/vendor` | Source/IR browser loading and optional dynamic wikification |
 | `@gneh/vite` | ESM compilation, project aggregation, and local passage exports |
 | `@gneh/create` | Standard npm initializer and editable Vite application template |
@@ -152,6 +154,7 @@ The package count follows optional dependency and runtime boundaries. Stable `sr
 - [LSP setup](docs/LSP.md)
 - [Limitations and security boundaries](docs/LIMITATIONS.md)
 - [Generated artifacts](docs/GENERATED_ARTIFACTS.md)
+- [Language conformance format](packages/conformance/README.md)
 - [Third-party provenance](THIRD_PARTY_NOTICES.md)
 
 New gneh code is MIT licensed. Adapted parser code retains its original notices. No legacy interpreter is bundled, and compatibility frontends do not claim the full behavior of their source engines.

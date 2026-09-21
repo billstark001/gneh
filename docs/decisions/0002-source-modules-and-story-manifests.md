@@ -555,6 +555,8 @@ The harness can:
 - observe persistent state, scoped temporary state, route navigation, and Story-global registrations; and
 - exercise module initialization and save/load boundaries.
 
+The repository conformance harness stores these executable cases as Markdown in `packages/conformance/cases`. A JSON options fence supplies initial state and an ordered operation sequence; optional final assertions expose Story state, current route, and Story-global registration names alongside exact XML or text renderer output. Static generated-ESM linkage remains in compiler-owned tests, while the conformance package owns the language/runtime boundary.
+
 The conformance matrix covers passage identity, view and action parameters, dialect-specific scope ownership, lexical capture, bounded and unbounded declarations, automatic Inkdown publication, setup-plan ordering and rollback, conditional registration, collision behavior, failure rollback, navigation arguments, and save/load reconstruction.
 
 Equivalent shared-IR programs must produce the same canonical structure and observable state transitions where this decision defines shared behavior. Dialect-specific capture chains remain explicitly different and receive their own conformance cases.

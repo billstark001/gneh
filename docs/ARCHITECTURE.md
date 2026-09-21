@@ -157,6 +157,8 @@ interface Renderer<Host, Handle> {
 
 The repository implements a DOM backend plus deterministic XML and plain-text conformance projections. `DOMRenderer` supports typed extension renderers with explicit mount/update/dispose ownership. `XMLRenderer` emits canonical structure and stable callback handles without a host DOM. `mountStory` is a minimal optional bridge: it subscribes one Story to one host and installs no styles, globals, router, or document-level listeners.
 
+`@gneh/conformance` is the end-to-end language boundary. Its Markdown specifications compile complete Inkdown, Karlowe, or Sugarcast documents, execute an explicit sequence of activation, navigation, undo, and redo operations, assert observable Story state, route, and registrations when requested, and compare exact XML or text projections. Package-local suites retain lower-level parser, IR, compiler, and runtime ownership tests.
+
 Navigation chrome, history controls, persistence and Wiki/story-flow/visual-novel layouts belong to the editable initializer template. Moving that code out of a runtime package makes the customization boundary honest and lets React, Vue or an existing application use `Story` directly. Extensions and imported JavaScript are trusted host code.
 
 [DOM behavior and host integration](DOM_BEHAVIORS.md) gives concrete patterns for root-scoped event delegation, browser capabilities, post-render behavior, portals, and lifecycle-aware custom widgets.
