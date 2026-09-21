@@ -21,6 +21,8 @@ export function metadataFailure(message: string): never {
   throw new GnehError('META_SYNTAX', message);
 }
 
+const maxMetadataDepth = 128;
+
 function splitFlow(source: string, separator = ','): string[] {
   const parts: string[] = [];
   let start = 0,
@@ -70,19 +72,27 @@ function mappingPair(source: string): [string, string] {
     if (c === ']' || c === '}') depth--;
     if (c === ':' && depth === 0) {
       const raw = source.slice(0, i).trim();
-      const key = raw.startsWith('"')
-        ? JSON.parse(raw)
-        : raw.startsWith("'")
-          ? raw.slice(1, -1).replaceAll("''", "'")
-          : raw;
+      let key: unknown;
+      if (raw.startsWith('"')) {
+        try {
+          key = JSON.parse(raw);
+        } catch {
+          metadataFailure(`Invalid quoted metadata key: ${raw}`);
+        }
+      } else if (raw.startsWith("'")) {
+        if (!/^'(?:[^']|'')*'$/.test(raw)) metadataFailure(`Invalid quoted metadata key: ${raw}`);
+        key = raw.slice(1, -1).replaceAll("''", "'");
+      } else key = raw;
       return [safeKey(key), source.slice(i + 1).trim()];
     }
   }
   return metadataFailure(`Expected a metadata key/value pair: ${source}`);
 }
 
-function scalar(source: string): Json {
+function scalar(source: string, depth = 0): Json {
   const s = source.trim();
+  if (depth >= maxMetadataDepth && (s.startsWith('[') || s.startsWith('{')))
+    metadataFailure('Metadata exceeds the nesting depth limit.');
   if (!s) return null;
   if (s.startsWith('"')) {
     try {
@@ -97,7 +107,7 @@ function scalar(source: string): Json {
   }
   if (s.startsWith('[')) {
     if (!s.endsWith(']')) metadataFailure('Unclosed array.');
-    return s === '[]' ? [] : splitFlow(s.slice(1, -1)).map(scalar);
+    return s === '[]' ? [] : splitFlow(s.slice(1, -1)).map((item) => scalar(item, depth + 1));
   }
   if (s.startsWith('{')) {
     if (!s.endsWith('}')) metadataFailure('Unclosed object.');
@@ -106,7 +116,7 @@ function scalar(source: string): Json {
       for (const item of splitFlow(s.slice(1, -1))) {
         const [k, v] = mappingPair(item);
         if (Object.hasOwn(o, k)) metadataFailure(`Duplicate key: ${k}`);
-        o[k] = scalar(v);
+        o[k] = scalar(v, depth + 1);
       }
     return o;
   }
@@ -138,7 +148,8 @@ export function parseMetadata(source: string): Metadata {
   const skip = () => {
     while (i < ls.length && (!ls[i].text.trim() || ls[i].text.trimStart().startsWith('#'))) i++;
   };
-  function block(level: number): Json {
+  function block(level: number, depth = 0): Json {
+    if (depth >= maxMetadataDepth) metadataFailure('Metadata exceeds the nesting depth limit.');
     skip();
     const sequence = ls[i]?.text.trimStart().startsWith('- ');
     const out: Json[] | Metadata = sequence ? [] : {};
@@ -151,7 +162,7 @@ export function parseMetadata(source: string): Metadata {
       if (sequence) {
         if (!text.startsWith('- ')) metadataFailure('Cannot mix mapping and sequence entries.');
         const value = text.slice(2).trim();
-        (out as Json[]).push(value ? scalar(value) : block(level + 2));
+        (out as Json[]).push(value ? scalar(value, depth + 1) : block(level + 2, depth + 1));
         continue;
       }
       const [key, value] = mappingPair(text);
@@ -163,10 +174,10 @@ export function parseMetadata(source: string): Metadata {
           chunks.push(ls[i++].text.slice(level + 2));
         }
         result = chunks.join(value === '>' ? ' ' : '\n') + (value === '|-' ? '' : '\n');
-      } else if (value) result = scalar(value);
+      } else if (value) result = scalar(value, depth + 1);
       else {
         skip();
-        result = i < ls.length && indent(ls[i]) > level ? block(indent(ls[i])) : null;
+        result = i < ls.length && indent(ls[i]) > level ? block(indent(ls[i]), depth + 1) : null;
       }
       (out as Metadata)[key] = result;
     }
@@ -181,6 +192,7 @@ export function parseMetadata(source: string): Metadata {
   return value as Metadata;
 }
 
+/** Deep-merge metadata objects; arrays replace earlier arrays except for stable-union `tags`. */
 export function mergeMetadata(...values: Metadata[]): Metadata {
   const result: Metadata = {};
   for (const object of values)

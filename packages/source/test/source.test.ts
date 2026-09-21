@@ -123,7 +123,16 @@ test('metadata merges replace arrays except stable-union tags', () => {
 test('unsafe metadata constructs and duplicate YAML keys are diagnosed', () => {
   for (const source of ['x: 1\nx: 2', '__proto__: x', 'x: &a foo', 'x: .inf'])
     assert.throws(() => parseMetadata(source));
+  assert.throws(() => parseMetadata('"broken" suffix: value'), /Invalid quoted metadata key/);
+  assert.throws(() => parseMetadata("'broken' suffix: value"), /Invalid quoted metadata key/);
   assert.throws(() => parseHeader(':: A {bad}'));
+});
+
+test('metadata nesting is bounded before host recursion limits', () => {
+  assert.doesNotThrow(() => parseMetadata(`x: ${'['.repeat(127)}0${']'.repeat(127)}`));
+  assert.throws(() => parseMetadata(`x: ${'['.repeat(5_000)}0${']'.repeat(5_000)}`), /nesting depth limit/);
+  const block = Array.from({ length: 500 }, (_, index) => `${'  '.repeat(index)}x${index}:`).join('\n');
+  assert.throws(() => parseMetadata(`${block}\n${'  '.repeat(500)}leaf: true`), /nesting depth limit/);
 });
 
 test('unclosed YAML, duplicate ids and invalid params are errors, never ignored', () => {
