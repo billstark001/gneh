@@ -99,7 +99,7 @@ function inline(source: string, index: number, base: number, parser: MarkupParse
   }
   const next = source[label.end];
   if (next === '(') {
-    const destination = balanced(source, label.end);
+    const destination = balanced(source, label.end, 'markup');
     const url = destination.content.trim().replace(/^<|>$/g, '');
     return {
       nodes: [

@@ -1,9 +1,17 @@
 import { describe, expect, test } from 'vitest';
 import { createInkdownLowerings, parseInkdown } from '../dist/index.js';
 
+const markdownHardBreak = '  ';
+
 describe('@gneh/inkdown', () => {
   test('parses native directives into structural IR', () => {
-    const result = parseInkdown(':: Start [start]\n@if ($ready) {\nHello {{ $name }}\n}', 'story.inkdown');
+    const result = parseInkdown(
+      `:: Start [start]
+@if ($ready) {
+Hello {{ $name }}
+}`,
+      'story.inkdown',
+    );
     expect(result.diagnostics).toEqual([]);
     expect(result.passages[0]?.body.some((node) => node.type === 'if')).toBe(true);
   });
@@ -17,7 +25,13 @@ describe('@gneh/inkdown', () => {
   });
 
   test('honors Markdown escapes, hard breaks, code spans and intraword underscores', () => {
-    const result = parseInkdown(':: Start [start]\nsnake_case \\*literal\\* ` code `  \nnext\\\nline', 'story.inkdown');
+    const result = parseInkdown(
+      `:: Start [start]
+snake_case \\*literal\\* \` code \`${markdownHardBreak}
+next\\
+line`,
+      'story.inkdown',
+    );
     expect(result.diagnostics).toEqual([]);
     const body = result.passages[0].body;
     const flatten = (nodes: typeof body): typeof body =>
@@ -30,8 +44,25 @@ describe('@gneh/inkdown', () => {
     expect(nodes.some((node) => node.type === 'content' && node.kind === 'emphasis')).toBe(false);
   });
 
+  test('parses URL schemes in Markdown links as markup rather than JavaScript comments', () => {
+    const result = parseInkdown(':: Start [start]\n[site](https://example.com)', 'story.inkdown');
+    expect(result.diagnostics).toEqual([]);
+    expect(result.passages[0].body[0]).toMatchObject({
+      type: 'content',
+      kind: 'paragraph',
+      children: [expect.objectContaining({ type: 'content', kind: 'link', attrs: { href: 'https://example.com' } })],
+    });
+  });
+
   test('keeps nested lists and literal trailing heading hashes structural', () => {
-    const result = parseInkdown(':: Start [start]\n- parent\n  - child\n# heading#\n# closed #', 'story.inkdown');
+    const result = parseInkdown(
+      `:: Start [start]
+- parent
+  - child
+# heading#
+# closed #`,
+      'story.inkdown',
+    );
     expect(result.diagnostics).toEqual([]);
     const body = result.passages[0].body;
     const topList = body[0];
