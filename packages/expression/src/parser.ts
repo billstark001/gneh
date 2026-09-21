@@ -14,6 +14,9 @@ import {
   type IterationClause,
   type JSLexerRule,
   type JSParserOptions,
+  type JSIncompleteBehavior,
+  type JSScanBoundary,
+  type JSScanProfile,
 } from 'pure-expr/expr';
 
 export interface GnehExpressionOptions {
@@ -112,9 +115,21 @@ export function scanExpression(
   source: string,
   start = 0,
   span: Span = { file: '<expression>', start, end: source.length },
-  options: GnehExpressionOptions = {},
+  options: GnehExpressionOptions & {
+    profile?: JSScanProfile;
+    incomplete?: JSIncompleteBehavior;
+    boundary?: JSScanBoundary;
+  } = {},
 ): ExpressionScanResult {
-  return wrap(span, 'EXPR_SYNTAX', () => scanPureExpression(source, { ...parserOptions(options), start }));
+  return wrap(span, 'EXPR_SYNTAX', () =>
+    scanPureExpression(source, {
+      ...parserOptions(options),
+      start,
+      profile: options.profile,
+      incomplete: options.incomplete,
+      boundary: options.boundary,
+    }),
+  );
 }
 
 export function parseIterationClause(source: string, span?: Span): IterationClause {

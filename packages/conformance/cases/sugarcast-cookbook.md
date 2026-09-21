@@ -114,6 +114,19 @@ HP: 1 HitNext
 
 ## Markup
 
+### Sigil expressions scan through complex postfix syntax
+
+```sugarcast
+:: Start [start]
+<<set _local = {items: [{label: "first"}, {label: "second"}]}>><<set $players = [{profile: {name: "Ada"}}]>>Player=$players[0]?.profile.name; local=_local.items[1].label.
+```
+
+```text
+Player=Ada; local=second.
+```
+
+--------
+
 The markup sample is adapted from the Cookbook's [SugarCube markup](https://twinery.org/cookbook/markup/sugarcube/sugarcube_markup.html).
 
 ### Formatting, comments, lists, and continuation

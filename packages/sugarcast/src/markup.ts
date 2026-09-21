@@ -1,5 +1,4 @@
 import {
-  balanced,
   literalNodes,
   readList,
   type LineEnd,
@@ -7,27 +6,22 @@ import {
   type MarkupParser,
   type ReadResult,
 } from '@gneh/syntax';
+import { scanExpression } from '@gneh/expression';
 
 function nakedVariableEnd(source: string, index: number): number | undefined {
   if (!['$', '_'].includes(source[index]) || !/^[A-Za-z_]/.test(source[index + 1] ?? '')) return;
   if (source.startsWith('__', index) || (source[index] === '_' && /[\w$]/.test(source[index - 1] ?? ''))) return;
-  let end = index + /^[$_][A-Za-z_]\w*/.exec(source.slice(index))![0].length;
-  while (end < source.length) {
-    const property = source[end] === '.' ? /^[A-Za-z_]\w*/.exec(source.slice(end + 1)) : undefined;
-    if (property) {
-      end += 1 + property[0].length;
-      continue;
-    }
-    if (source[end] !== '[') break;
-    try {
-      const group = balanced(source, end);
-      if (!/^(?:\d+|[$_][A-Za-z_]\w*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$/.test(group.content.trim())) break;
-      end = group.end;
-    } catch {
-      break;
-    }
-  }
-  return end;
+  const closingBacktick = source[index - 1] === '`' ? source.indexOf('`', index) : -1;
+  const scanSource = closingBacktick < 0 ? source : source.slice(0, closingBacktick);
+  return scanExpression(scanSource, index, undefined, {
+    profile: 'interpolation',
+    incomplete: 'rollback',
+    boundary: ({ token, depth }) =>
+      depth === 0 &&
+      (source.startsWith('<<', token.start) ||
+        ['=', '+=', '-=', '*=', '/=', '%=', '**=', '&&=', '||=', '??=', '++', '--'].includes(token.value) ||
+        (token.kind === 'op' && /\s/.test(source[token.start - 1] ?? ''))),
+  }).end;
 }
 
 function inline(source: string, index: number, base: number, parser: MarkupParser): ReadResult | undefined {

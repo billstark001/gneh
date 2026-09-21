@@ -1,16 +1,6 @@
 import type { Metadata, StoryNode } from '@gneh/core';
 import { balanced, readList, type LineEnd, type MarkupDialect, type MarkupParser, type ReadResult } from '@gneh/syntax';
-
-function hardBreak(index: number, width: number, base: number, parser: MarkupParser): ReadResult {
-  const node: StoryNode = {
-    type: 'content',
-    kind: 'break',
-    attrs: {},
-    children: [],
-    span: parser.span(base + index, base + index + width),
-  };
-  return { nodes: [node], end: index + width };
-}
+import { hardBreak, inlineExpression } from './interpolation.js';
 
 function inline(source: string, index: number, base: number, parser: MarkupParser): ReadResult | undefined {
   if (source[index] === '\\' && (source[index + 1] === '\n' || source[index + 1] === '\r')) {
@@ -88,6 +78,8 @@ function inline(source: string, index: number, base: number, parser: MarkupParse
       end: group.end,
     };
   }
+  const expression = inlineExpression(source, index, base, parser);
+  if (expression) return expression;
   if (source[index] !== '[' && !(source[index] === '!' && source[index + 1] === '[')) return;
   const image = source[index] === '!';
   const bracket = index + (image ? 1 : 0);

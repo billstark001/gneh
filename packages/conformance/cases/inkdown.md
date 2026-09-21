@@ -57,6 +57,24 @@ after.labelinside
 
 ## Values and control flow
 
+### Sigil expressions scan through complex postfix syntax
+
+```inkdown
+:: Start [start]
+@const _local = {items: [{label: "first"}, {label: "second"}]}
+Player=$players[0]?.profile.name; local=_local.items[1].label.
+```
+
+```json
+{ "state": { "players": [{ "profile": { "name": "Ada" } }] } }
+```
+
+```text
+Player=Ada; local=second.
+```
+
+--------
+
 ### Expressions, bindings, conditions, and loops
 
 ```inkdown
