@@ -3,12 +3,8 @@
   "categories": {
     "correctness": "error"
   },
-  "jsPlugins": ["@stylistic/eslint-plugin"],
-  "ignorePatterns": [
-    "**/dist/**",
-    "standalone/**",
-    "examples/playground/site/**"
-  ],
+  "jsPlugins": ["@stylistic/eslint-plugin", "./scripts/oxlint-plugin-gneh.mjs"],
+  "ignorePatterns": ["**/dist/**", "standalone/**", "examples/playground/site/**"],
   "rules": {
     "@stylistic/max-len": [
       "error",
@@ -51,11 +47,11 @@
   },
   "overrides": [
     {
-      "files": [
-        "packages/karlowe/src/parser.ts",
-        "packages/sugarcast/src/parser.ts",
-        "packages/syntax/src/parser.ts"
-      ],
+      "files": ["packages/*/test/**/*.ts", "packages/*/test/**/*.tsx"],
+      "rules": { "gneh/multiline-test-string": "warn" }
+    },
+    {
+      "files": ["packages/karlowe/src/parser.ts", "packages/sugarcast/src/parser.ts", "packages/syntax/src/parser.ts"],
       "rules": { "max-lines": ["error", { "max": 750 }] }
     },
     {

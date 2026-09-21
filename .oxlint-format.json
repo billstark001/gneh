@@ -4,11 +4,7 @@
   "categories": {
     "correctness": "off"
   },
-  "ignorePatterns": [
-    "**/dist/**",
-    "standalone/**",
-    "examples/playground/site/**"
-  ],
+  "ignorePatterns": ["**/dist/**", "standalone/**", "examples/playground/site/**"],
   "rules": {
     "@stylistic/max-len": "off",
     "max-lines": "off",

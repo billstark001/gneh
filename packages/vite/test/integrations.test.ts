@@ -23,7 +23,14 @@ test('Vite hooks generate scoped ESM with typed in-file passages', hooks, async 
       throw new Error(message);
     },
   };
-  const result = await gneh.transform.call(ctx, ':: Start\n@Card()\n:: Card\nHello', '/project/story/main.inkdown');
+  const result = await gneh.transform.call(
+    ctx,
+    `:: Start
+@Card()
+:: Card
+Hello`,
+    '/project/story/main.inkdown',
+  );
   assert.match(result.code, /"Start"/);
   assert.match(result.code, /"Card":__p1/);
   assert.equal(result.map.version, 3);
@@ -44,7 +51,9 @@ test('Vite hooks enforce snapshot capability without mutating sources', hooks, a
             throw new Error(message);
           },
         },
-        ':: Start\n@action hit { @do $hp -= 1; }\n[[Hit => hit]]',
+        `:: Start
+@action hit { @do $hp -= 1; }
+[[Hit => hit]]`,
         '/project/a.inkdown',
       ),
     /live/,
@@ -81,7 +90,17 @@ test(
       const file = path.join(dir, 'test.mts');
       await fs.writeFile(
         file,
-        `import type { Fragment, FragmentContext } from ${JSON.stringify(core)};\ninterface Props { label: string }\ndeclare const card: Fragment<Props>;\ndeclare const ctx: FragmentContext;\nctx.include(card, {label: 'OK'});\nctx.navigate(card, {label: 'OK'});\n// @ts-expect-error required props\nctx.include(card);\n// @ts-expect-error wrong prop type\nctx.navigate(card, {label: 123});\n`,
+        `import type { Fragment, FragmentContext } from ${JSON.stringify(core)};
+interface Props { label: string }
+declare const card: Fragment<Props>;
+declare const ctx: FragmentContext;
+ctx.include(card, {label: 'OK'});
+ctx.navigate(card, {label: 'OK'});
+// @ts-expect-error required props
+ctx.include(card);
+// @ts-expect-error wrong prop type
+ctx.navigate(card, {label: 123});
+`,
       );
       const program = ts.createProgram([file], {
         module: ts.ModuleKind.NodeNext,

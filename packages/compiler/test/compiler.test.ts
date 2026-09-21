@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { assert, compiled, compileSource, story, text, click } from './helpers.js';
+import { assert, compiled, story, text, click } from './helpers.js';
 import { generateModule } from '../dist/index.js';
 import { Story, definePassages } from '../../runtime/dist/index.js';
 
@@ -30,8 +30,17 @@ async function emittedStory(source, state = {}, modules = {}) {
 }
 
 test('generated ESM and IR interpretation agree on mutations, conditions and navigation', async () => {
-  const source =
-    ':: Start\n@action hit { @do $hp -= 1; }\n@if ($hp > 0) {\nHP: {{ $hp + 1 }}\n[[Hit => hit]]\n} @else {\nDone\n}\n[[End]]\n:: End\nEND';
+  const source = `:: Start
+@action hit { @do $hp -= 1; }
+@if ($hp > 0) {
+HP: {{ $hp + 1 }}
+[[Hit => hit]]
+} @else {
+Done
+}
+[[End]]
+:: End
+END`;
   const a = story(source, 'inkdown', { state: { hp: 2 } }),
     b = await emittedStory(source, { hp: 2 });
   try {
@@ -133,7 +142,10 @@ test('generated runtime IR omits only compiler-owned source and full spans', () 
 });
 
 test('typed ESM namespaces expose all in-file passages', async () => {
-  const output = await emittedStory(':: Alpha\nA\n:: Beta\nB');
+  const output = await emittedStory(`:: Alpha
+A
+:: Beta
+B`);
   try {
     assert.deepEqual(Object.keys(output.module.default), ['Alpha', 'Beta']);
     assert.equal(output.module.default.Alpha.id, 'Alpha');
@@ -158,8 +170,13 @@ test('render expressions reject mutation and statement-shaped JavaScript', () =>
 });
 
 test('local passages have lexical module scope and survive fresh save/load', async () => {
-  const source =
-    ':: Start\n@Card({label: "local"})\n[[Next]]\n:: Card {"params":["label"]}\nCard: {{ label }}\n:: Next\nNext scene';
+  const source = `:: Start
+@Card({label: "local"})
+[[Next]]
+:: Card {"params":["label"]}
+Card: {{ label }}
+:: Next
+Next scene`;
   const output = generateModule(compiled(source), source, 'chapter.inkdown', {
     namespace: 'chapters/one.inkdown',
   });
@@ -191,7 +208,10 @@ test('different modules may each define a private passage named Card', async () 
   try {
     const modules = [];
     for (const id of ['alpha', 'beta']) {
-      const source = `:: Start\n@Card()\n:: Card\n${id}`;
+      const source = `:: Start
+@Card()
+:: Card
+${id}`;
       const output = generateModule(compiled(source), source, id + '.inkdown', {
         namespace: id,
       });
@@ -214,7 +234,11 @@ test('different modules may each define a private passage named Card', async () 
 });
 
 test('explicit namespace rewriting preserves a preceding lexical callable with the same name', async () => {
-  const source = ':: Start\n@view Card() { lexical }\n@Card()\n:: Card\npassage';
+  const source = `:: Start
+@view Card() { lexical }
+@Card()
+:: Card
+passage`;
   const output = generateModule(compiled(source), source, 'chapter.inkdown', { namespace: 'chapter' });
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-namespace-scope-'));
   try {
@@ -247,48 +271,5 @@ exports: [value, change]
     assert.match(b.output.declarations, /declare let change/);
   } finally {
     await b.dispose();
-  }
-});
-
-test('declarative imports support default ESM exports without an embedded module body', async () => {
-  const output = await emittedStory(
-    `---
-imports:
-  ./greet.mjs: greet
----
-:: Start [start]
-{{ greet("Ada") }}`,
-    {},
-    { 'greet.mjs': 'export default name => `Hello ${name}`;' },
-  );
-  try {
-    assert.equal(text(output.story.view), 'Hello Ada');
-  } finally {
-    await output.dispose();
-  }
-});
-
-test('primary-only modules initialize once and default-export an empty PassageSet', async () => {
-  const source = `---
-imports:
-  ./counter.mjs: [next]
-exports: [count]
----
-@let count = next()`;
-  const result = compileSource(source, 'utility.inkdown', { dialect: 'inkdown' });
-  assert.deepEqual(result.diagnostics, []);
-  const output = generateModule(result, source, 'utility.inkdown');
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-primary-'));
-  try {
-    await fs.writeFile(path.join(dir, 'counter.mjs'), 'let value = 0; export const next = () => ++value;');
-    const file = path.join(dir, 'utility.mjs');
-    await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
-    const first = await import(pathToFileURL(file).href);
-    const second = await import(pathToFileURL(file).href);
-    assert.equal(first, second);
-    assert.equal(first.count, 1);
-    assert.deepEqual(Object.keys(first.default), []);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
   }
 });

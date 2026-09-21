@@ -1,0 +1,66 @@
+import { test } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { assert, compiled, compileSource, text } from './helpers.js';
+import { generateModule } from '../dist/index.js';
+import { Story } from '../../runtime/dist/index.js';
+
+const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
+
+async function emittedStory(source: string, modules: Record<string, string>) {
+  const result = compiled(source);
+  const output = generateModule(result, source, 'test.inkdown');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-esm-linkage-'));
+  for (const [name, contents] of Object.entries(modules)) await fs.writeFile(path.join(directory, name), contents);
+  const file = path.join(directory, 'story.mjs');
+  await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+  const module = await import(pathToFileURL(file).href);
+  return {
+    story: new Story(module.default, { entry: result.story.entry }).start(),
+    dispose: () => fs.rm(directory, { recursive: true, force: true }),
+  };
+}
+
+test('declarative imports support default ESM exports without an embedded module body', async () => {
+  const output = await emittedStory(
+    `---
+imports:
+  ./greet.mjs: greet
+---
+:: Start [start]
+{{ greet("Ada") }}`,
+    { 'greet.mjs': 'export default name => `Hello ${name}`;' },
+  );
+  try {
+    assert.equal(text(output.story.view), 'Hello Ada');
+  } finally {
+    await output.dispose();
+  }
+});
+
+test('primary-only modules initialize once and default-export an empty PassageSet', async () => {
+  const source = `---
+imports:
+  ./counter.mjs: [next]
+exports: [count]
+---
+@let count = next()`;
+  const result = compileSource(source, 'utility.inkdown', { dialect: 'inkdown' });
+  assert.deepEqual(result.diagnostics, []);
+  const output = generateModule(result, source, 'utility.inkdown');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-primary-'));
+  try {
+    await fs.writeFile(path.join(directory, 'counter.mjs'), 'let value = 0; export const next = () => ++value;');
+    const file = path.join(directory, 'utility.mjs');
+    await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    const first = await import(pathToFileURL(file).href);
+    const second = await import(pathToFileURL(file).href);
+    assert.equal(first, second);
+    assert.equal(first.count, 1);
+    assert.deepEqual(Object.keys(first.default), []);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

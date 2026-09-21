@@ -30,7 +30,9 @@ test('TypeScript diagnostics flow back to all three source dialects', options, (
 test('state completion and hover use concrete project types', options, () => {
   const service = new Service({ state: { hp: 3, player: { name: 'Ada', level: 1 } } });
   try {
-    const source = ':: Start\n$hp\n{{ $player.name }}';
+    const source = `:: Start
+$hp
+{{ $player.name }}`;
     service.setDocument('/test/source.inkdown', source);
     assert.match(service.hover('/test/source.inkdown', source.indexOf('$hp') + 1).contents, /number/);
     service.setDocument('/test/edit.inkdown', ':: Edit\n{{ $player.');
@@ -46,7 +48,12 @@ test('prop types and loop locals participate in semantic diagnostics', options, 
   try {
     service.setDocument(
       '/test/source.inkdown',
-      ':: Start\n@each (item of $items; key item.name) {\n{{ item.missing }}\n}\n:: Card {"params":["enemy"],"paramTypes":{"enemy":"{hp: number}"}}\n{{ enemy.hpp }}',
+      `:: Start
+@each (item of $items; key item.name) {
+{{ item.missing }}
+}
+:: Card {"params":["enemy"],"paramTypes":{"enemy":"{hp: number}"}}
+{{ enemy.hpp }}`,
     );
     const d = service.diagnostics().filter((d) => d.code.startsWith('TS'));
     assert.equal(d.length, 2);
@@ -60,7 +67,10 @@ test('prop types and loop locals participate in semantic diagnostics', options, 
 test('cross-file definition, references and conservative rename are AST-based', options, () => {
   const service = new Service();
   try {
-    const a = ':: Start\n[[Go -> End]]\n\nThe prose mentions End.';
+    const a = `:: Start
+[[Go -> End]]
+
+The prose mentions End.`;
     const b = ':: End\nFinish';
     service.setDocument('/test/a.inkdown', a);
     service.setDocument('/test/b.karlowe', b);
@@ -93,7 +103,12 @@ test('document symbols include actions and reusable views', options, () => {
   const service = new Service();
   try {
     const file = '/test/symbols.inkdown';
-    service.setDocument(file, ':: Start\n@action save { @do $saved = true; }\n@view Badge(label) { {{ label }} }');
+    service.setDocument(
+      file,
+      `:: Start
+@action save { @do $saved = true; }
+@view Badge(label) { {{ label }} }`,
+    );
     assert.deepEqual(
       service.symbols(file).map(({ name, kind }) => ({ name, kind })),
       [

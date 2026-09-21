@@ -79,7 +79,11 @@ for (const transport of ['builtin', 'ecosystem'])
         send({ method: 'initialized', params: {} });
         const file = path.join(directory, 'story.inkdown'),
           uri = pathToFileURL(file).href,
-          text = ':: Start\nHP: $hpx\n[[Go->End]]\n:: End\nDone';
+          text = `:: Start
+HP: $hpx
+[[Go->End]]
+:: End
+Done`;
         send({
           method: 'textDocument/didOpen',
           params: { textDocument: { uri, languageId: 'inkdown', version: 1, text } },
