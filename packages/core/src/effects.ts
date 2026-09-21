@@ -115,8 +115,15 @@ export function bindParameters(
 ): void {
   for (let index = 0; index < patterns.length; index++) {
     const pattern = patterns[index];
-    for (const name of declaredNames(pattern))
+    for (const name of declaredNames(pattern)) {
       invariant(!Object.hasOwn(scope, safeKey(name)), 'DUPLICATE_BINDING', `Duplicate parameter: ${name}`);
+      Object.defineProperty(scope, safeKey(name), {
+        value: undefined,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    }
     if (pattern.type === 'RestElement') {
       bindPattern(pattern, values.slice(index), ctx, scope);
       break;
