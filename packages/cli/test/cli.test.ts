@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 
 const cli = path.join(root, 'standalone/gneh.mjs');
+const linkedCli = path.join(root, 'examples/playground/node_modules/@gneh/cli/dist/index.js');
 
 function run(...args) {
   return spawnSync(process.execPath, [cli, ...args], {
@@ -18,14 +19,24 @@ function run(...args) {
   });
 }
 
+test('workspace bin entry resolves symlinked package paths', () => {
+  const result = spawnSync(process.execPath, [linkedCli, 'check', '.'], {
+    cwd: path.join(root, 'examples/playground'),
+    encoding: 'utf8',
+    timeout: 15000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Checked 3 files \/ 5 passages; no errors\./);
+});
+
 test('CLI help, check, metadata and graph are usable without node_modules', () => {
   assert.match(run('help').stdout, /Usage: gneh/);
   assert.equal(run('check', 'examples/playground').status, 0);
   const metadata = JSON.parse(run('metadata', 'examples/playground').stdout);
-  assert.deepEqual(metadata.EnemyCard.params, ['enemy']);
+  assert.equal(metadata.Status.nav, false);
   assert.equal(metadata.Start.layout.accent, 'brass');
   const graph = JSON.parse(run('graph', 'examples/playground', '--json').stdout);
-  assert.ok(graph.some((edge) => edge.from === 'Vault' && edge.to === 'EnemyCard' && edge.kind === 'include'));
+  assert.ok(graph.some((edge) => edge.from === 'Start' && edge.to === 'Vault' && edge.kind === 'choice'));
 });
 
 test('CLI compile emits executable modules, declarations, maps and manifest', async () => {
@@ -111,7 +122,7 @@ test('CLI extracts and imports Twine HTML with fidelity and compatibility report
 
 test('CLI inspect exposes versioned container, syntax and resolved IR records', () => {
   for (const level of ['container', 'syntax', 'ir']) {
-    const result = run('inspect', 'examples/playground', '--level', level, '--passage', 'EnemyCard');
+    const result = run('inspect', 'examples/playground', '--level', level, '--passage', 'Status');
     assert.equal(result.status, 0, result.stderr);
     const record = JSON.parse(result.stdout);
     assert.equal(record.schema, 'gneh.inspect/v1');
@@ -119,7 +130,7 @@ test('CLI inspect exposes versioned container, syntax and resolved IR records', 
     const passages = level === 'ir' ? record.story.passages : record.sources.flatMap((source) => source.passages);
     assert.deepEqual(
       passages.map((passage) => passage.id),
-      ['EnemyCard'],
+      ['Status'],
     );
   }
 });
