@@ -14,6 +14,8 @@ export interface Transport {
 const extensions = /\.(?:inkdown|karlowe|sugarcast)$/i;
 
 const ignored = new Set(['node_modules', '.git', 'dist', 'standalone', 'site', '.gneh']);
+const maxIndexDepth = 20;
+const maxDocumentSize = 2_000_000;
 
 function filename(uri: string): string {
   return uri.startsWith('file:') ? fileURLToPath(uri) : uri;
@@ -68,7 +70,7 @@ export class LanguageServer {
     }
   }
   private index(directory: string, depth = 0): void {
-    if (depth > 20) return;
+    if (depth > maxIndexDepth) return;
     try {
       if (fs.statSync(directory).isFile()) {
         if (extensions.test(directory) && !this.open.has(directory))
@@ -91,7 +93,7 @@ export class LanguageServer {
       else if (extensions.test(entry.name) && !this.open.has(file)) {
         try {
           const source = fs.readFileSync(file, 'utf8');
-          if (source.length < 2000000) this.service.setDocument(file, source);
+          if (source.length < maxDocumentSize) this.service.setDocument(file, source);
         } catch {
           /* deleted during scan */
         }
