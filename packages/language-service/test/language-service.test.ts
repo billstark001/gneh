@@ -43,7 +43,7 @@ $hp
   }
 });
 
-test('prop types and loop locals participate in semantic diagnostics', options, () => {
+test('loop locals participate in semantic diagnostics without passage-metadata parameter injection', options, () => {
   const service = new Service({ state: { items: [{ name: 'Ada' }] } });
   try {
     service.setDocument(
@@ -52,13 +52,12 @@ test('prop types and loop locals participate in semantic diagnostics', options, 
 @each (item of $items; key item.name) {
 {{ item.missing }}
 }
-:: Card {"params":["enemy"],"paramTypes":{"enemy":"{hp: number}"}}
-{{ enemy.hpp }}`,
+:: Card
+plain route`,
     );
     const d = service.diagnostics().filter((d) => d.code.startsWith('TS'));
-    assert.equal(d.length, 2);
+    assert.equal(d.length, 1);
     assert.ok(d.some((d) => d.message.includes('missing')));
-    assert.ok(d.some((d) => d.message.includes('hpp')));
   } finally {
     service.dispose();
   }

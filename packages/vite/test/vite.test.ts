@@ -88,7 +88,7 @@ test('Vite shares caller-owned CST-to-IR lowerings with frontend transforms', as
 test('Vite transforms never write adjacent declaration files', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-vite-types-'));
   const file = path.join(directory, 'cards.karlowe');
-  const source = ':: Card {"params":["enemy"],"paramTypes":{"enemy":"{name:string}"}}\n(print: $enemy.name)';
+  const source = ':: Card\n(print: props.enemy.name)';
   try {
     const plugin = gneh({ dialects: [inkdown()] });
     const transform = plugin.transform.handler ?? plugin.transform;

@@ -146,7 +146,6 @@ test('keyed includes preserve local lifetime on reordering', () => {
     disposals = 0;
   const card = definePassage({
     id: 'Card',
-    metadata: { params: ['item'] },
     enter(ctx) {
       mounts++;
       ctx.onDispose(() => disposals++);
@@ -157,12 +156,11 @@ test('keyed includes preserve local lifetime on reordering', () => {
   });
   const data = compiled(
     `:: Start
-@each (item of $items; key item.id) {
-@Card({item})
-}
-:: Card {"params":["item"]}
+<<for item of $items>>
+<<include "Card" {item}>><</for>>
+:: Card
 placeholder`,
-    'inkdown',
+    'sugarcast',
     {
       state: {
         items: [
@@ -172,6 +170,7 @@ placeholder`,
       },
     },
   ).story;
+  data.passages[0].evaluation = 'reactive';
   data.passages = data.passages.filter((p) => p.id !== 'Card');
   const passages = definePassages(...data.passages.map(defineIRFragment), card);
   const s = new Story(passages, { entry: data.entry, state: data.state });

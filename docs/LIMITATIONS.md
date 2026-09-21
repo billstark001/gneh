@@ -11,7 +11,7 @@ gneh 0.1 is a working reference implementation, not an audited game engine or an
 | JavaScript | The restricted ESTree subset parsed and evaluated by pure-expr; ordinary JavaScript only in trusted ESM |
 | Generated code | ESM embeds Story IR plus declarations and maps; the shared runtime evaluates its ESTree expressions |
 | Reactivity | Transaction-level full-view recomputation with keyed identities; not fine-grained signals |
-| Types | Typed Fragment props and state/props projection; external module bindings remain conservative |
+| Types | Handwritten `Fragment<P>` props, typed state and explicit view locals; authored route props and external module bindings remain conservative |
 | LSP | Protocol diagnostics, completion, hover, definitions, references, and conservative rename; no editor extension |
 | Presentation | One DOM renderer, an editable three-mode vanilla starter, and framework-native story-flow starters; no Three.js or terminal renderer is included |
 | Visual novel | Text beats, dialogue, and choices; no asset timeline, audio, skip, or read-history engine |

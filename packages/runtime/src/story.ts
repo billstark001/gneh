@@ -157,13 +157,6 @@ export class Story {
   }
   private frame(target: AnyFragment, props: FragmentProps, key: string): Frame {
     // Structural mount keys let repeated Fragment includes keep regions and cleanups isolated.
-    for (const name of Array.isArray(target.metadata.params) ? target.metadata.params : []) {
-      if (
-        typeof name === 'string' &&
-        !(Array.isArray(target.metadata.optionalParams) && target.metadata.optionalParams.includes(name))
-      )
-        invariant(Object.hasOwn(props, name), 'E_PROPS', `${target.id} requires prop ${name}.`);
-    }
     let frame = this.frames.get(key);
     if (frame && frame.fragment !== target) {
       storySupport.disposeFrame(frame);

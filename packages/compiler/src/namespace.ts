@@ -42,8 +42,6 @@ export function namespacePassage(
     const names = new Set(inherited);
     for (const node of nodes) {
       if (node.type === 'include' || node.type === 'choice') node.target = passageIds.get(node.target) ?? node.target;
-      if (node.type === 'call' && node.call.callee.type === 'binding' && !names.has(node.call.callee.name))
-        node.call.callee.name = passageIds.get(node.call.callee.name) ?? node.call.callee.name;
       rewriteExpression(node);
       if (node.type === 'callable') {
         if (node.callable.name) names.add(node.callable.name);

@@ -147,11 +147,6 @@ export function splitPassages(source: string, file = 'story.inkdown'): SourceFil
       passageMetadata.id = id;
       passageMetadata.name = name;
       if (!Array.isArray(passageMetadata.tags)) metadataFailure('Metadata tags must be an array.');
-      if (
-        passageMetadata.params !== undefined &&
-        (!Array.isArray(passageMetadata.params) || passageMetadata.params.some((x) => typeof x !== 'string'))
-      )
-        metadataFailure('params must be an array of names.');
       passages.push({
         id,
         name,

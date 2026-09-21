@@ -27,8 +27,8 @@ exports: [formatTitle]
   **{{ title }}**
 }
 
-:: Card [component] {"id":"EnemyCard","position":"1,2","params":["enemy"],"layout":{"tone":"quiet","density":"compact"}}
-{{ enemy.name }}
+:: Card [component] {"id":"EnemyCard","position":"1,2","layout":{"tone":"quiet","density":"compact"}}
+{{ props.enemy.name }}
 ```
 
 The example keeps the display name `Card` while using the canonical runtime ID `EnemyCard`. Routes, saves, `PassageSet` keys, and references use only that canonical ID; `Card` is not an alias.
@@ -40,7 +40,7 @@ Code fences do not open new Twee passages. CRLF and Unicode source offsets are p
 ## Shared semantics
 
 - `$hp` in prose and `{{ $hp }}` produce the same value node.
-- Complex access is explicit: `{{ $player.hp }}`. Bare `$player.hp` interpolates only `$player` and leaves `.hp` as prose.
+- Bare `$` and `_` expressions use pure-expr's interpolation scanner, so `$player.hp`, `$items[0]?.name`, and `_format($value)` remain one value expression. Braces remain useful when an expression does not begin with a sigil.
 - Inline code and `\$hp` remain literal. `$1.50` is currency, not a state reference.
 - `$name` reads persistent story state; `state.name` exposes the same state object. `_name` is a scoped, non-serialized lexical temporary. Plain names resolve props, loop locals, authored lexical bindings, Story registrations, or module bindings, and `props.enemy` remains available explicitly.
 - Render expressions cannot mutate. Writes occur during enter or action effects.

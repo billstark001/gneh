@@ -7,8 +7,6 @@ A faceless warden blocks the way. Its armor is made from unfinished sentences.
 
 <<meter $enemy.hp $enemy.maxHp>>
 
-<<include "EnemyCard" {enemy: $enemy}>>
-
 <<if not $hasKey>>
 You have no key. The warden will not answer.
 <<else>>

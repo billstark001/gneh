@@ -7,7 +7,7 @@ export const description = 'A normal ESM named export.';
 /** @type {import('@gneh/runtime').Passage<Props>} */
 export default definePassage({
   id: 'Panel',
-  metadata: { title: 'Native JavaScript', optionalParams: ['label'] },
+  metadata: { title: 'Native JavaScript' },
   capabilities: ['live'],
   bindings: {
     get Start() {

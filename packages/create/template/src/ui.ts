@@ -81,8 +81,7 @@ export function createApp(host: HTMLElement, passages: PassageSet, options: AppO
   select.value = environment;
 
   for (const fragment of story.passages.values()) {
-    if (fragment.metadata.nav === false || (Array.isArray(fragment.metadata.params) && fragment.metadata.params.length))
-      continue;
+    if (fragment.metadata.nav === false) continue;
     const button = document.createElement('button');
     button.textContent = String(fragment.metadata.title ?? fragment.id);
     button.onclick = () => story.navigate(fragment.id);

@@ -17,9 +17,9 @@ Standard output is reserved for JSON-RPC. Errors go to standard error. The prefe
 - open/change/save/close and incremental text updates;
 - diagnostics, completion, hover, definitions, references, and conservative rename;
 - document and workspace symbols, watched files, and shutdown;
-- parser/compiler diagnostics for unsupported constructs, references, props, and capabilities;
+- parser/compiler diagnostics for unsupported constructs, references, passage/view separation, and capabilities;
 - virtual TypeScript projection for expression/action diagnostics and state member completion;
-- prop types from `params`/`paramTypes` and loop-local projection;
+- explicit view parameters, route `props`, and loop-local projection;
 - AST-span-based passage operations that do not replace matching prose;
 - `gneh/virtualDocument` for inspecting generated TypeScript.
 

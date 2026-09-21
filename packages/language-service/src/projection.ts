@@ -247,25 +247,7 @@ export function createVirtualFile(
         .map((callable, viewIndex) => [callable.name!, `__view_${viewIndex}`]),
     );
     emit(`function __passage${index}(){\n`);
-    const params = Array.isArray(passage.metadata.params)
-      ? passage.metadata.params.filter((value): value is string => typeof value === 'string')
-      : [];
-    const types =
-      passage.metadata.paramTypes &&
-      typeof passage.metadata.paramTypes === 'object' &&
-      !Array.isArray(passage.metadata.paramTypes)
-        ? passage.metadata.paramTypes
-        : {};
-    const optional = Array.isArray(passage.metadata.optionalParams) ? passage.metadata.optionalParams : [];
-    emit(
-      `let props = {} as {${params
-        .map(
-          (name) =>
-            `${JSON.stringify(name)}${optional.includes(name) ? '?' : ''}:${typeof types[name] === 'string' ? types[name] : 'unknown'}`,
-        )
-        .join(';')}};\n`,
-    );
-    for (const name of params) if (/^[a-zA-Z_][\w]*$/.test(name)) emit(`let ${name}=props[${JSON.stringify(name)}];\n`);
+    emit('let props = {} as Record<string,unknown>;\n');
     for (const [name, expression] of Object.entries(passage.constants)) {
       emit(`const ${name}=`);
       emitExpression(expression);

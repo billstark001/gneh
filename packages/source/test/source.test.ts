@@ -11,7 +11,7 @@ imports:
 exports: [CardView]
 setup: [EnemyCard]
 ---
-:: Card [component] {"id":"EnemyCard","position":"1,2","params":["enemy"],"layout":{"tone":"quiet"}}
+:: Card [component] {"id":"EnemyCard","position":"1,2","audience":"adult","layout":{"tone":"quiet"}}
 Hello`;
   const result = splitPassages(source, 'card.inkdown');
   assert.deepEqual(result.diagnostics, []);
@@ -31,7 +31,7 @@ Hello`;
 test('all dialects use exactly the same container parser', () => {
   for (const ext of ['inkdown', 'karlowe', 'sugarcast']) {
     const parsed = splitPassages(
-      `:: One [tag] {"x":1,"params":["enemy"]}
+      `:: One [tag] {"x":1,"audience":["reader"]}
 body
 :: Two
 second`,
@@ -41,7 +41,7 @@ second`,
       parsed.passages.map((p) => p.id),
       ['One', 'Two'],
     );
-    assert.deepEqual(parsed.passages[0].metadata.params, ['enemy']);
+    assert.deepEqual(parsed.passages[0].metadata.audience, ['reader']);
   }
 });
 
@@ -92,7 +92,7 @@ test('metadata profile supports typed scalars, flow collections and block string
   assert.deepEqual(
     parseMetadata(
       `id: X
-params: [enemy, compact]
+audience: [reader, editor]
 flag: true
 count: 2
 none: null
@@ -103,7 +103,7 @@ text: |-
     ),
     {
       id: 'X',
-      params: ['enemy', 'compact'],
+      audience: ['reader', 'editor'],
       flag: true,
       count: 2,
       none: null,
@@ -135,7 +135,7 @@ test('metadata nesting is bounded before host recursion limits', () => {
   assert.throws(() => parseMetadata(`${block}\n${'  '.repeat(500)}leaf: true`), /nesting depth limit/);
 });
 
-test('unclosed YAML, duplicate ids and invalid params are errors, never ignored', () => {
+test('unclosed YAML and duplicate ids are errors, never ignored', () => {
   assert.equal(splitPassages('---\nid: bad').diagnostics[0].severity, 'error');
   assert.equal(
     splitPassages(`:: A
@@ -144,7 +144,6 @@ x
 y`).diagnostics[0].code,
     'DUPLICATE_ID',
   );
-  assert.equal(splitPassages(':: A {"params":"nope"}\nx').diagnostics[0].severity, 'error');
 });
 
 test('duplicate file YAML and passage front matter are rejected explicitly', () => {
@@ -159,7 +158,7 @@ body`);
   assert.ok(duplicate.diagnostics.some((diagnostic) => diagnostic.code === 'FILE_METADATA_DUPLICATE'));
   const passage = splitPassages(`:: Start
 ---
-params: [value]
+audience: [reader]
 ---
 body`);
   assert.ok(passage.diagnostics.some((diagnostic) => diagnostic.code === 'PASSAGE_FRONT_MATTER'));

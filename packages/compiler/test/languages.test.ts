@@ -33,8 +33,8 @@ test('dialect frontends do not expose aliases or interpret Inkdown directives', 
   }
 });
 
-test('bare sigils and explicit interpolation have the same semantic AST', () => {
-  const p = compiled('$hp {{ $hp }}').passages[0];
+test('bare complex sigil expressions and explicit interpolation have the same semantic AST', () => {
+  const p = compiled('$players[0]?.name {{ $players[0]?.name }}').passages[0];
   const nodes = p.body[0].children.filter((n) => n.type === 'value');
   assert.deepEqual(nodes[0].expression.ast, nodes[1].expression.ast);
   assert.notDeepEqual(nodes[0].expression.span, nodes[1].expression.span);
@@ -69,25 +69,33 @@ test('inline strings with brackets do not terminate JS directives early', () => 
   assert.equal(text(s.view), 'a}b');
 });
 
-test('reusable passage parameters are checked and passed', () => {
+test('reusable Inkdown render behavior requires an explicit view', () => {
   const source = `:: Start
+@view Card({enemy}) {
+**{{ enemy.name }}**
+}
 @Card({enemy: $enemy})
-:: Card {"params":["enemy"]}
-**{{ enemy.name }}**`;
+`;
   const s = story(source, 'inkdown', { state: { enemy: { name: 'Ink' } } });
   assert.equal(text(s.view), 'Ink');
-  assert.ok(compileSource(source.replace('{enemy: $enemy}', '{}')).diagnostics.some((d) => d.code === 'PROPS_MISSING'));
+  const passageCall = compileSource(`:: Start [start]
+@Card()
+:: Card
+body`);
+  assert.ok(passageCall.diagnostics.some((d) => d.code === 'PASSAGE_AS_VIEW'));
 });
 
-test('passage calls use canonical ids and do not create display-name aliases', () => {
+test('passage routes use canonical ids and do not create display-name aliases', () => {
   const source = `:: Start
-@RealCard()
+[[Open -> RealCard]]
 :: Card {"id":"RealCard"}
 resolved`;
-  assert.equal(text(story(source).view), 'resolved');
-  const call = compileSource(source).passages[0].body[0].children[0];
-  assert.equal(call.type === 'call' && call.call.callee.type === 'binding' ? call.call.callee.name : '', 'RealCard');
-  assert.throws(() => story(source.replace('@RealCard()', '@Card()')), /Unknown passage: Card/);
+  const s = story(source);
+  click(s, 'Open');
+  assert.equal(text(s.view), 'resolved');
+  assert.ok(
+    compileSource(source.replace('-> RealCard', '-> Card')).diagnostics.some((d) => d.code === 'PASSAGE_MISSING'),
+  );
 });
 
 test('unknown fragment references fail at compile time', () => {

@@ -10,8 +10,8 @@ Story-global registry described by ADR 0002.
 ```inkdown
 :: Start [start]
 start
-:: Display name {"id":"RealCard","params":["label"]}
-{{ label }}
+:: Display name {"id":"RealCard"}
+{{ props.label }}
 ```
 
 ```json
@@ -32,8 +32,8 @@ from props
 ```inkdown
 :: Start [start]
 start
-:: Card {"params":["label"]}
-{{ label }}
+:: Card
+{{ props.label }}
 :: End
 end
 ```

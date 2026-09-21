@@ -60,11 +60,7 @@ export function App({ story }: { story: Story }) {
           <p>PASSAGES</p>
           <nav>
             {[...story.passages.values()]
-              .filter(
-                (fragment) =>
-                  fragment.metadata.nav !== false &&
-                  !(Array.isArray(fragment.metadata.params) && fragment.metadata.params.length),
-              )
+              .filter((fragment) => fragment.metadata.nav !== false)
               .map((fragment) => (
                 <button
                   key={fragment.id}

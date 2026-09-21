@@ -3,7 +3,6 @@ import {
   GnehError,
   type CallableIR,
   type EffectNode,
-  type Metadata,
   type ParseResult,
   type PassageIR,
   type Span,
@@ -11,16 +10,6 @@ import {
 } from '@gneh/core';
 import { offsetToPosition } from '@gneh/source';
 import { effectBindings, namespacePassage } from './namespace.js';
-
-function typeFor(p: PassageIR): string {
-  const params = Array.isArray(p.metadata.params) ? p.metadata.params : [];
-  const types =
-    p.metadata.paramTypes && typeof p.metadata.paramTypes === 'object' && !Array.isArray(p.metadata.paramTypes)
-      ? (p.metadata.paramTypes as Metadata)
-      : {};
-  const optional = Array.isArray(p.metadata.optionalParams) ? p.metadata.optionalParams : [];
-  return `{ ${params.map((name) => `${JSON.stringify(String(name))}${optional.includes(name) ? '?' : ''}: ${typeof types[String(name)] === 'string' ? types[String(name)] : 'unknown'}`).join('; ')} }`;
-}
 
 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -238,7 +227,7 @@ export function generateModule(
             `export { ${exported.map((item) => (item.local === item.exported ? item.local : `${item.local} as ${item.exported}`)).join(', ')} };`,
           ]
         : []),
-      `declare const passages: PassageSet & {${passages.map((p) => `readonly ${JSON.stringify(options.namespace ? options.namespace + '#' + p.id : p.id)}: Passage<${typeFor(p)}>`).join(';')}};`,
+      `declare const passages: PassageSet & {${passages.map((p) => `readonly ${JSON.stringify(options.namespace ? options.namespace + '#' + p.id : p.id)}: Passage`).join(';')}};`,
       'export default passages;',
     ].join('\n') + '\n';
   return {

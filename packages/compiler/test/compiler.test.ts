@@ -116,12 +116,11 @@ imports:
   }
 });
 
-test('metadata creates concrete required props in declaration output', () => {
-  const source =
-    ':: Card [start] {"params":["enemy","compact"],"optionalParams":["compact"],"paramTypes":{"enemy":"{hp: number; name: string}","compact":"boolean"}}\n{{ enemy.hp }}';
+test('authored passage declarations use the generic route-props ABI', () => {
+  const source = ':: Card [start]\n{{ props.enemy }}';
   const output = generateModule(compiled(source), source, 'card.inkdown');
-  assert.match(output.declarations, /"enemy": \{hp: number; name: string\}/);
-  assert.match(output.declarations, /"compact"\?: boolean/);
+  assert.match(output.declarations, /readonly "Card": Passage/);
+  assert.equal(output.declarations.includes('Passage<{'), false);
   assert.equal(output.map.version, 3);
   assert.equal(output.map.sourcesContent[0], source);
   assert.ok(String(output.map.mappings).replaceAll(';', '').length > 0);
@@ -171,10 +170,11 @@ test('render expressions reject mutation and statement-shaped JavaScript', () =>
 
 test('local passages have lexical module scope and survive fresh save/load', async () => {
   const source = `:: Start
+@view Card({label}) {
+Card: {{ label }}
+}
 @Card({label: "local"})
 [[Next]]
-:: Card {"params":["label"]}
-Card: {{ label }}
 :: Next
 Next scene`;
   const output = generateModule(compiled(source), source, 'chapter.inkdown', {
@@ -209,7 +209,7 @@ test('different modules may each define a private passage named Card', async () 
     const modules = [];
     for (const id of ['alpha', 'beta']) {
       const source = `:: Start
-@Card()
+[[Card]]
 :: Card
 ${id}`;
       const output = generateModule(compiled(source), source, id + '.inkdown', {
@@ -225,8 +225,9 @@ ${id}`;
       modules.push(await import(pathToFileURL(file).href));
     }
     const instance = new Story(definePassages(...modules.map((m) => m.default)), { entry: 'alpha#Start' }).start();
+    instance.navigate('alpha#Card');
     assert.equal(text(instance.view), 'alpha');
-    instance.navigate('beta#Start');
+    instance.navigate('beta#Card');
     assert.equal(text(instance.view), 'beta');
   } finally {
     await fs.rm(dir, { recursive: true, force: true });

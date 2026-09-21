@@ -41,6 +41,25 @@ PRIMARY_STATE: Primary declarations cannot bind Story state.
 
 ## Lexical declarations
 
+### A passage is not an implicit view callable
+
+```inkdown
+:: Start [start]
+@Card()
+:: Card
+passage body
+```
+
+```json
+{ "expect": { "error": true } }
+```
+
+```text
+PASSAGE_AS_VIEW: Card is a passage, not a view callable. Declare an explicit view with @view.
+```
+
+--------
+
 ### Const cannot declare Story state
 
 ```inkdown

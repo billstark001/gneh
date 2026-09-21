@@ -173,7 +173,7 @@ Native `.inkdown`, `.karlowe`, and `.sugarcast` files retain the Twee 3 passage 
 
 The header declares a stable passage and route. The body is the passage's render/effect program; it is not wrapped in or exported as an authored view. Reusable components still require an explicit dialect view declaration.
 
-The header JSON remains fully Twee-compatible and is the only passage-specific metadata surface. GNEH-specific fields such as `id`, `params`, and `paramTypes` may coexist with imported Twine metadata. Header JSON must remain a JSON object, not YAML.
+The header JSON remains fully Twee-compatible and is the only passage-specific metadata surface. The GNEH-specific `id` field may coexist with imported Twine metadata. Header JSON must remain a JSON object, not YAML. Passage parameters are not declared in metadata: route arguments are available through `props`, while reusable typed parameters belong to explicit authored views.
 
 The display/source name comes from the header. A string `id` in header JSON, when present, supplies the canonical runtime ID. Navigation, PassageSet keys, history, and save identity use the canonical ID. Otherwise the header name is the ID.
 

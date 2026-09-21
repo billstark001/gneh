@@ -4,6 +4,18 @@ metadata:
   layout:
     atmosphere: nocturne
 ---
+@view EnemyCard({ enemy }) {
+  ::: status {.enemy-card}
+  **{{ enemy.name }}**
+
+  HP: {{ enemy.hp }} / {{ enemy.maxHp }}
+
+  @if (enemy.hp <= 0) {
+    *It has remembered its name.*
+  }
+  :::
+}
+
 :: Start [start] {"title":"01 / The Nocturne Archive","layout":{"column":"reading","accent":"brass"}}
 @action takeKey {
   @do $hasKey = true;
@@ -40,6 +52,8 @@ but the things people forgot they once knew.
   without manipulating the DOM.*
 }
 
+@EnemyCard({ enemy: $enemy })
+
 :: FieldNotes {"title":"04 / Traveler's notes"}
 # Traveler's notes
 
@@ -51,14 +65,3 @@ but the things people forgot they once knew.
 
 :: Status {"nav":false}
 Known things: **$insight**. Key: {{ $hasKey ? "held" : "not yet found" }}.
-
-:: EnemyCard [reusable] {"nav":false,"params":["enemy"],"paramTypes":{"enemy":"{name: string; hp: number; maxHp: number}"},"presentation":{"tone":"muted","density":"compact"}}
-::: status {.enemy-card}
-**{{ enemy.name }}**
-
-HP: {{ enemy.hp }} / {{ enemy.maxHp }}
-
-@if (enemy.hp <= 0) {
-  *It has remembered its name.*
-}
-:::

@@ -100,6 +100,7 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
   let metadata = options.metadata ?? {};
   const setup: string[] = [];
   const moduleImports = new Map<string, ImportIR[]>();
+  const moduleBindings = new Map<string, Map<string, string>>();
   let sourceModule: ParseResult['module'];
   for (const input of sources) {
     const parsed = parseSource(input.source, input.path, input.dialect, {
@@ -110,6 +111,10 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
     metadata = mergeMetadata(metadata, parsed.module?.metadata ?? {});
     setup.push(...(parsed.module?.setup ?? []));
     moduleImports.set(input.path, parsed.module?.imports ?? []);
+    const bindings = new Map((parsed.module?.imports ?? []).map((item) => [item.local, 'unknown']));
+    for (const node of parsed.module?.primary?.body ?? [])
+      if (node.type === 'callable' && node.callable.name) bindings.set(node.callable.name, node.callable.phase);
+    moduleBindings.set(input.path, bindings);
     if (options.mode === 'vendor' && parsed.module?.imports.length)
       diagnostics.push({
         code: 'VENDOR_MODULE',
@@ -179,50 +184,6 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
           );
         if (dest) {
           n.target = dest.id;
-          const params = dest.metadata.params;
-          if (Array.isArray(params) && params.length && (!n.props || n.props.ast.type === 'ObjectExpression')) {
-            const provided =
-              n.props?.ast.type === 'ObjectExpression'
-                ? n.props.ast.properties.flatMap((property) =>
-                    property.type === 'Property' && !property.computed
-                      ? property.key.type === 'Identifier'
-                        ? [property.key.name]
-                        : property.key.type === 'Literal'
-                          ? [String(property.key.value)]
-                          : []
-                      : [],
-                  )
-                : [];
-            const optional = Array.isArray(dest.metadata.optionalParams) ? dest.metadata.optionalParams : [];
-            for (const param of params)
-              if (typeof param === 'string' && !provided.includes(param) && !optional.includes(param))
-                error('PROPS_MISSING', `${n.target} requires prop ${param}.`, n.span);
-          }
-        }
-      }
-      if (n.type === 'call' && n.call.callee.type === 'binding') {
-        const name = n.call.callee.name;
-        const dest = ids.get(name);
-        if (dest) n.call.callee.name = dest.id;
-        const params = dest?.metadata.params;
-        const props = n.call.args[0]?.ast;
-        if (dest && Array.isArray(params) && params.length && (!props || props.type === 'ObjectExpression')) {
-          const provided =
-            props?.type === 'ObjectExpression'
-              ? props.properties.flatMap((property) =>
-                  property.type === 'Property' && !property.computed
-                    ? property.key.type === 'Identifier'
-                      ? [property.key.name]
-                      : property.key.type === 'Literal'
-                        ? [String(property.key.value)]
-                        : []
-                    : [],
-                )
-              : [];
-          const optional = Array.isArray(dest.metadata.optionalParams) ? dest.metadata.optionalParams : [];
-          for (const param of params)
-            if (typeof param === 'string' && !provided.includes(param) && !optional.includes(param))
-              error('PROPS_MISSING', `${name} requires prop ${param}.`, n.span);
         }
       }
       if (n.type === 'invoke' && !(options.runtimeExtensionIds ?? []).includes(n.id))
@@ -291,9 +252,14 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
         if (node.type === 'call' && node.call.callee.type === 'binding') {
           const name = node.call.callee.name;
           const phase = names.get(name);
-          if (phase && phase !== 'view')
+          if (phase && phase !== 'view' && phase !== 'unknown')
             error('CALLABLE_PHASE', `Cannot call a ${phase} callable as a view.`, node.span);
-          else if (!phase && ids.has(name)) node.call.callee.name = name;
+          else if (!phase && ids.has(name))
+            error(
+              'PASSAGE_AS_VIEW',
+              `${name} is a passage, not a view callable. Declare an explicit view with @view.`,
+              node.span,
+            );
         }
         if (node.type === 'effect') validateEffects(node.effects, node.span, names);
         if (node.type === 'if') {
@@ -303,7 +269,7 @@ export function compileProject(sources: SourceInput[], options: CompileOptions =
         else if ('children' in node) validateBlock(node.children, names, inView);
       }
     }
-    validateBlock(p.body);
+    validateBlock(p.body, new Map(moduleBindings.get(p.span.file)));
   }
   const starts = passages.filter((p) => Array.isArray(p.metadata.tags) && p.metadata.tags.includes('start'));
   const entry = options.entry ?? (starts.length === 1 ? starts[0].id : '');

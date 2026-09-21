@@ -26,7 +26,7 @@ test('Vite hooks generate scoped ESM with typed in-file passages', hooks, async 
   const result = await gneh.transform.call(
     ctx,
     `:: Start
-@Card()
+[[Card]]
 :: Card
 Hello`,
     '/project/story/main.inkdown',
@@ -61,11 +61,7 @@ test('Vite hooks enforce snapshot capability without mutating sources', hooks, a
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-vite-types-'));
   try {
     const typed = plugin({ dialects: [inkdown()] });
-    await typed.transform.call(
-      {},
-      ':: Card {"params":["label"],"paramTypes":{"label":"string"}}\n{{ label }}',
-      path.join(dir, 'card.inkdown'),
-    );
+    await typed.transform.call({}, ':: Card\n{{ props.label }}', path.join(dir, 'card.inkdown'));
     await assert.rejects(() => fs.readFile(path.join(dir, 'card.d.inkdown.ts')), /ENOENT/);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
