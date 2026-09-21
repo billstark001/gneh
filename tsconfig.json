@@ -32,6 +32,9 @@
       "path": "./packages/renderer-dom"
     },
     {
+      "path": "./packages/renderer-xml"
+    },
+    {
       "path": "./packages/vendor"
     },
     {

@@ -17,6 +17,7 @@ import {
   type ValueCallableBodyIR,
 } from '@gneh/core';
 import { deepReadonly } from './readonly.js';
+import { isAuthoredCallable, type AuthoredCallable } from './definition.js';
 
 interface RuntimeCallable {
   readonly kind: 'gneh.callable';
@@ -47,7 +48,6 @@ export class CallableRuntime implements EffectCallableRuntime {
 
   constructor(ir: PassageIR) {
     this.collectNodes(ir.body);
-    this.collectEffects(ir.enter);
   }
 
   private collectCallable(callable: CallableIR): void {
@@ -59,7 +59,8 @@ export class CallableRuntime implements EffectCallableRuntime {
 
   private collectEffects(effects: EffectNode[]): void {
     for (const effect of effects) {
-      if (effect.type === 'assign-callable') this.collectCallable(effect.callable);
+      if (effect.type === 'assign-callable' || effect.type === 'publish-callable')
+        this.collectCallable(effect.callable);
       else if (effect.type === 'call' && effect.call.callee.type === 'inline')
         this.collectCallable(effect.call.callee.callable);
       else if (effect.type === 'if') {
@@ -94,7 +95,8 @@ export class CallableRuntime implements EffectCallableRuntime {
       : this.instantiate(declaration, environment);
   }
 
-  resolve(value: unknown): RuntimeCallable | undefined {
+  resolve(value: unknown): RuntimeCallable | AuthoredCallable | undefined {
+    if (isAuthoredCallable(value)) return value;
     if (isCallable(value)) return value;
     if (!isSerializedCallable(value)) return;
     const declaration = this.declarations.get(value.declaration);
@@ -150,6 +152,10 @@ export class CallableRuntime implements EffectCallableRuntime {
     const target = this.resolve(this.callee(call, ctx, caller));
     invariant(target, 'E_CALLABLE', 'An effect call requires an authored callable.');
     invariant(target.phase === 'effect', 'E_CALLABLE_PHASE', `Cannot call a ${target.phase} callable as an effect.`);
+    if (isAuthoredCallable(target)) {
+      target.invoke(...(values ?? call.args.map((argument) => this.evaluate(argument, ctx, caller))), ctx);
+      return;
+    }
     const child = lexicalScope(target.environment, { __temporary: Object.create(null) as Scope });
     bindParameters(
       target.declaration.params,
@@ -164,6 +170,7 @@ export class CallableRuntime implements EffectCallableRuntime {
     const target = this.resolve(value);
     invariant(target, 'E_CALLABLE', 'A value call requires an authored callable.');
     invariant(target.phase === 'value', 'E_CALLABLE_PHASE', `Cannot call a ${target.phase} callable as a value.`);
+    if (isAuthoredCallable(target)) return target.invoke(...args, ctx);
     const child = lexicalScope(target.environment, { __temporary: Object.create(null) as Scope });
     bindParameters(target.declaration.params, args, ctx, child);
     const body = target.declaration.body as ValueCallableBodyIR;

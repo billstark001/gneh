@@ -5,6 +5,7 @@ export type { Fragment, FragmentContext, FragmentProps, View, ViewInput, Rendere
 
 export * from './fragment.js';
 export * from './definition.js';
+export * from './module.js';
 export * from './binding.js';
 
 export { deepReadonly } from './readonly.js';

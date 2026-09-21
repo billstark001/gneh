@@ -232,6 +232,12 @@ importers:
         specifier: workspace:*
         version: link:../runtime
 
+  packages/renderer-xml:
+    dependencies:
+      '@gneh/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/runtime:
     dependencies:
       '@gneh/core':

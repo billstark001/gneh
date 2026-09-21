@@ -8,7 +8,9 @@ import { Story } from '../dist/index.js';
 export { assert };
 
 export function compiled(source: string, dialect = 'inkdown', options: Record<string, unknown> = {}) {
-  const result = compileSource(source, `test.${dialect}`, {
+  const normalized = /^\s*(?:---[\s\S]*?---\s*)?::/m.test(source) ? source : `:: Start [start]\n${source}`;
+  const result = compileSource(normalized, `test.${dialect}`, {
+    entry: 'Start',
     ...options,
     dialect,
     dialects: [inkdown(), karlowe(), sugarcast()],

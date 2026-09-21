@@ -1,10 +1,10 @@
 import { test } from 'vitest';
 import { assert, story, text, click, compiled } from './helpers.js';
-import { Story, defineFragment, v } from '../dist/index.js';
+import { Story, defineIRFragment, definePassage, definePassages, v } from '../dist/index.js';
 import { assertJson } from '../../core/dist/index.js';
 
 const source =
-  ':: Start\n@enter { @do $visits += 1; }\n@action hit { @do $hp -= 1; }\nHP: $hp / visit $visits\n[[Hit => hit]]\n@region notice { Empty }\n[[Next->End]]\n:: End\nDone';
+  ':: Start [start]\n@do $visits += 1\n@action hit { @do $hp -= 1; }\nHP: $hp / visit $visits\n[[Hit => hit]]\n@region notice { Empty }\n[[Next->End]]\n:: End\nDone';
 
 test('entry effects run once per mount, not once per reactive render', () => {
   const s = story(source, 'inkdown', { state: { hp: 3, visits: 0 } });
@@ -65,6 +65,15 @@ Total: {{ $total }}
   assert.match(text(s.view), /Total: 10/);
 });
 
+test('@let may write Story state while @const remains lexical', () => {
+  const instance = story('@let $value = 2\n@const _fixed = 3\n{{ $value + _fixed }}', 'inkdown', {
+    state: { value: 0 },
+  });
+  assert.equal(instance.state.value, 2);
+  assert.equal(text(instance.view), '5');
+  assert.throws(() => compiled('@const $value = 2'), /error|const|state/i);
+});
+
 test('Inkdown views use the same binding-pattern call convention as actions', () => {
   const s = story('@view Badge({label = "untitled"}) { **{{ label }}** @children }\n@Badge({label: "Ready"}) { now }');
   assert.equal(text(s.view).replaceAll(/\s/g, ''), 'Readynow');
@@ -114,14 +123,14 @@ test('state exposed to callers and rendering is deeply read-only', () => {
   assert.throws(() => {
     s.state.player.hp = 0;
   });
-  const bad = defineFragment({
+  const bad = definePassage({
     id: 'Bad',
     render(ctx) {
       ctx.state.x = 1;
       return 'bad';
     },
   });
-  assert.throws(() => new Story([bad]).view);
+  assert.throws(() => new Story(definePassages(bad), { entry: 'Bad' }).view);
 });
 
 test('regions support set, append, clear and reset without touching story state', () => {
@@ -174,7 +183,7 @@ test('invalid save identity, props and prototype-bearing state are rejected', ()
 test('keyed includes preserve local lifetime on reordering', () => {
   let mounts = 0,
     disposals = 0;
-  const card = defineFragment({
+  const card = definePassage({
     id: 'Card',
     metadata: { params: ['item'] },
     enter(ctx) {
@@ -198,10 +207,14 @@ test('keyed includes preserve local lifetime on reordering', () => {
     },
   ).story;
   data.passages = data.passages.filter((p) => p.id !== 'Card');
-  const s = new Story(data, { fragments: [card] });
+  const passages = definePassages(...data.passages.map(defineIRFragment), card);
+  const s = new Story(passages, { entry: data.entry, state: data.state });
   assert.equal(text(s.view), 'AB');
+  s.mutate((state) => (state.items = state.items.map((item) => ({ ...item, name: item.name + '2' }))));
+  assert.equal(text(s.view), 'A2B2');
+  assert.equal(mounts, 2);
   s.mutate((state) => state.items.reverse());
-  assert.equal(text(s.view), 'BA');
+  assert.equal(text(s.view), 'B2A2');
   assert.equal(mounts, 2);
   s.mutate((state) => state.items.pop());
   assert.equal(disposals, 1);
@@ -210,13 +223,13 @@ test('keyed includes preserve local lifetime on reordering', () => {
 });
 
 test('recursive fragments fail with a bounded, meaningful diagnostic', () => {
-  const f = defineFragment({
+  const f = definePassage({
     id: 'Recursion',
     render(ctx) {
       return ctx.include('Recursion');
     },
   });
-  assert.throws(() => new Story([f]).view, /recursion/i);
+  assert.throws(() => new Story(definePassages(f), { entry: 'Recursion' }).view, /recursion/i);
 });
 
 test('duplicate structural keys roll back the action', () => {
@@ -228,7 +241,7 @@ test('duplicate structural keys roll back the action', () => {
 });
 
 test('native .mjs fragment ABI composes with parsed documents', () => {
-  const native = defineFragment({
+  const native = definePassage({
     id: 'Native',
     capabilities: ['live'],
     render(ctx) {
@@ -244,14 +257,15 @@ test('native .mjs fragment ABI composes with parsed documents', () => {
   });
   const result = compiled(':: Start\n[[Go->Native]]\n:: Native\nPlaceholder');
   result.story.passages = result.story.passages.filter((p) => p.id !== 'Native');
-  const s = new Story(result.story, { state: { count: 0 }, fragments: [native] });
+  const passages = definePassages(...result.story.passages.map(defineIRFragment), native);
+  const s = new Story(passages, { entry: result.story.entry, state: { count: 0 } });
   click(s, 'Go');
   click(s, 'Add');
   assert.equal(text(s.view), 'Counter: 1Add');
 });
 
 test('random is deterministic, snapshotted, and forbidden during render', () => {
-  const src = '@enter { @do $roll = random(1, 1000); }\n$roll';
+  const src = '@do $roll = random(1, 1000)\n$roll';
   const a = story(src, 'inkdown', { state: { roll: 0 }, seed: 3 }),
     b = story(src, 'inkdown', { state: { roll: 0 }, seed: 3 });
   assert.equal(a.state.roll, b.state.roll);

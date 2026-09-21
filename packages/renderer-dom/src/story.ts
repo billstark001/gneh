@@ -1,5 +1,5 @@
-import type { AnyFragment, StoryIR } from '@gneh/core';
-import { Story, type StoryOptions } from '@gneh/runtime';
+import type { StoryIR } from '@gneh/core';
+import { Story, type PassageSet, type StoryOptions } from '@gneh/runtime';
 import { DOMRenderer } from './renderer.js';
 import type { DOMMount, DOMOptions } from './types.js';
 
@@ -22,7 +22,7 @@ export interface DOMStoryMount {
  */
 export function mountStory(
   host: HTMLElement,
-  input: Story | StoryIR | AnyFragment[],
+  input: Story | StoryIR | PassageSet,
   options: DOMStoryOptions = {},
 ): DOMStoryMount {
   const owned = !(input instanceof Story);

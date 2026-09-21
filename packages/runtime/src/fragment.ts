@@ -1,10 +1,16 @@
+/* oxlint-disable max-lines -- keep the exhaustive StoryNode interpreter in one type-checked switch. */
 import {
   display,
+  bindPattern,
   bindParameters,
+  bindingOwner,
   executeEffects,
+  evaluateExpression,
   invariant,
   lexicalScope,
+  normalizeView,
   type Expression,
+  type EffectNode,
   type Fragment,
   type FragmentContext,
   type FragmentProps,
@@ -14,17 +20,22 @@ import {
   type View,
 } from '@gneh/core';
 import { CallableRuntime, type ChildrenInvocation } from './callables.js';
+import { definePassage, isAuthoredCallable } from './definition.js';
 
 export function defineIRFragment(
   ir: PassageIR,
   options: {
     bindings?: Record<string, unknown>;
+    rootScope?: Scope;
   } = {},
 ): Fragment {
   const runtime = new CallableRuntime(ir);
   const evaluateValue = (expression: Expression, ctx: FragmentContext, scope: Scope) =>
     runtime.evaluate(expression, ctx, scope);
-  const blockScope = (body: StoryNode[], parent: Scope) => runtime.block(body, parent);
+  const declarations = new WeakMap<Scope, Map<string, string>>();
+  const inheritedNames = new WeakMap<Scope, ReadonlySet<string>>();
+  const blockScope = (_body: StoryNode[], parent: Scope, ctx?: FragmentContext, key?: string) =>
+    ctx && key ? ctx.local(`scope:${key}`, () => lexicalScope(parent)) : lexicalScope(parent);
   const withConstants = (ctx: FragmentContext, scope: Scope): Scope => {
     const result = lexicalScope(scope);
     for (const [name, expression] of Object.entries(ir.constants))
@@ -35,8 +46,29 @@ export function defineIRFragment(
     ir.evaluation === 'materialized'
       ? ctx.local(`value:${key}`, (initial) => evaluateValue(e, initial, scope))
       : evaluateValue(e, ctx, scope);
+  const replayPublications = (effects: EffectNode[], ctx: FragmentContext, scope: Scope): void => {
+    for (const effect of effects) {
+      if (effect.type === 'publish-callable') ctx.publish(effect.name, runtime.callableValue(effect.callable, scope));
+      else if (effect.type === 'if')
+        replayPublications(
+          evaluateExpression(effect.test, runtime.context(ctx), scope) ? effect.yes : effect.no,
+          ctx,
+          lexicalScope(scope),
+        );
+      else if (effect.type === 'each') {
+        const items = evaluateExpression(effect.items, runtime.context(ctx), scope);
+        invariant(Array.isArray(items), 'E_ITERABLE', 'Loop requires an array.');
+        for (const item of items) {
+          const child = lexicalScope(scope);
+          bindPattern(effect.binding, item, ctx, child);
+          replayPublications(effect.body, ctx, child);
+        }
+      }
+    }
+  };
   function nodes(body: StoryNode[], ctx: FragmentContext, parent: Scope, path: string, existing = false): View[] {
-    const scope = existing ? parent : blockScope(body, parent);
+    const scope = existing ? parent : blockScope(body, parent, ctx, path);
+    if (!inheritedNames.has(scope)) inheritedNames.set(scope, new Set(Object.keys(scope)));
     return body.flatMap((node, index): View[] => {
       ctx.step();
       const key = `${path}/${node.span.start}:${index}`;
@@ -53,7 +85,8 @@ export function defineIRFragment(
             },
           ];
         case 'effect':
-          ctx.effect(key, (initial) => executeEffects(node.effects, initial, lexicalScope(scope), runtime));
+          ctx.effect(key, (initial) => executeEffects(node.effects, initial, scope, runtime));
+          if (ctx.restoring) replayPublications(node.effects, ctx, scope);
           return [];
         case 'value':
           return [{ kind: 'text', key, text: display(valueAt(node.expression, ctx, scope, key)) }];
@@ -64,9 +97,9 @@ export function defineIRFragment(
           invariant(Array.isArray(items), 'E_ITERABLE', 'A structural loop requires an array.');
           const seen = new Set<string>();
           return items.flatMap((item, i) => {
-            const childScope = lexicalScope(scope, { [node.name]: item, _index: i, index: i });
+            const keyScope = lexicalScope(scope, { [node.name]: item, _index: i, index: i });
             const identity = node.key
-              ? valueAt(node.key, ctx, childScope, key + `/key:${i}`)
+              ? valueAt(node.key, ctx, keyScope, key + `/key:${i}`)
               : item && typeof item === 'object' && Object.hasOwn(item, 'id')
                 ? item.id
                 : i;
@@ -74,7 +107,11 @@ export function defineIRFragment(
             const stable = JSON.stringify(identity);
             invariant(!seen.has(stable), 'DUPLICATE_KEY', `Duplicate loop key: ${stable}`);
             seen.add(stable);
-            return nodes(node.children, ctx, childScope, key + '/' + stable);
+            const childScope = ctx.local(`scope:${key}/${stable}`, () => lexicalScope(scope));
+            childScope[node.name] = item;
+            childScope._index = i;
+            childScope.index = i;
+            return nodes(node.children, ctx, childScope, key + '/' + stable, true);
           });
         }
         case 'include': {
@@ -193,11 +230,14 @@ export function defineIRFragment(
           const args = node.call.args.map((argument, index) =>
             valueAt(argument, ctx, scope, `${key}/argument:${index}`),
           );
+          if (isAuthoredCallable(target)) {
+            invariant(target.phase === 'view', 'E_CALLABLE_PHASE', `Cannot call a ${target.phase} callable as a view.`);
+            return normalizeAuthored(target.invoke(...args, ctx));
+          }
           if (target.phase === 'value')
             return [{ kind: 'text', key, text: display(runtime.invokeValue(target, args, ctx)) }];
           invariant(target.phase === 'view', 'E_CALLABLE_PHASE', `Cannot call a ${target.phase} callable as a view.`);
           const child = lexicalScope(target.environment, {
-            __temporary: Object.create(null) as Scope,
             __children: {
               body: node.children,
               environment: scope,
@@ -205,10 +245,46 @@ export function defineIRFragment(
             } satisfies ChildrenInvocation,
           });
           bindParameters(target.declaration.params, args, ctx, child);
-          return nodes(target.declaration.body as StoryNode[], ctx, child, `${key}/callable`, false);
+          return nodes(target.declaration.body as StoryNode[], ctx, child, `${key}/callable`, true);
         }
         case 'callable':
+          if (node.callable.name) {
+            let declared = declarations.get(scope);
+            if (!declared) declarations.set(scope, (declared = new Map()));
+            const previous = declared.get(node.callable.name);
+            invariant(
+              !previous || previous === node.callable.id,
+              'DUPLICATE_CALLABLE',
+              `Duplicate callable: ${node.callable.name}`,
+            );
+            if (!previous) {
+              invariant(
+                !Object.hasOwn(scope, node.callable.name),
+                'DUPLICATE_CALLABLE',
+                `Duplicate callable: ${node.callable.name}`,
+              );
+              scope[node.callable.name] = runtime.callableValue(node.callable, scope);
+              declared.set(node.callable.name, node.callable.id);
+            }
+            const value = scope[node.callable.name];
+            if (node.callable.escape === 'publish') ctx.publish(node.callable.name, value);
+          }
           return [];
+        case 'publish': {
+          const names =
+            node.names === '*'
+              ? Object.keys(scope).filter(
+                  (name) => !inheritedNames.get(scope)?.has(name) && runtime.resolve(scope[name]),
+                )
+              : node.names;
+          for (const name of names) {
+            if (!Object.hasOwn(scope, name) && node.names === '*') continue;
+            const value = bindingOwner(scope, name)?.[name];
+            invariant(runtime.resolve(value), 'E_PUBLISH', `Only authored callables can be published: ${name}`);
+            ctx.publish(name, value);
+          }
+          return [];
+        }
         case 'children': {
           const renderChildren = scope.__children;
           invariant(
@@ -254,42 +330,29 @@ export function defineIRFragment(
       }
     });
   }
-  return Object.freeze({
-    kind: 'gneh.fragment' as const,
+  const normalizeAuthored = (value: unknown): View[] => normalizeView(value as import('@gneh/core').ViewInput);
+  return definePassage({
     id: ir.id,
+    name: ir.name,
     metadata: ir.metadata,
     capabilities: ir.capabilities,
     ir,
     bindings: options.bindings,
-    enter: (ctx: FragmentContext, props: FragmentProps) =>
-      executeEffects(
-        ir.enter,
-        ctx,
-        blockScope(
-          ir.body,
-          withConstants(
-            ctx,
-            lexicalScope(undefined, {
-              ...props,
-              props,
-              __temporary: ctx.local('temporary-scope', () => Object.create(null) as Scope),
-            }),
-          ),
-        ),
-        runtime,
-      ),
     render: (ctx: FragmentContext, props: FragmentProps) => {
-      const root = blockScope(
-        ir.body,
-        withConstants(
-          ctx,
-          lexicalScope(undefined, {
-            ...props,
-            props,
-            __temporary: ctx.local('temporary-scope', () => Object.create(null) as Scope),
-          }),
-        ),
-      );
+      const root = options.rootScope
+        ? options.rootScope
+        : ctx.local('scope:root', () =>
+            blockScope(
+              ir.body,
+              withConstants(
+                ctx,
+                lexicalScope(undefined, {
+                  ...props,
+                  props,
+                }),
+              ),
+            ),
+          );
       return nodes(ir.body, ctx, root, ctx.instanceId, true);
     },
   });

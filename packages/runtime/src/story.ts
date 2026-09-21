@@ -8,88 +8,37 @@ import {
   normalizeView,
   safeKey,
   type AnyFragment,
-  type Dialect,
-  type Fragment,
   type FragmentContext,
   type FragmentProps,
   type Json,
   type RegionHandle,
-  type RuntimeExtension,
   type State,
   type StoryIR,
   type View,
   type ViewInput,
 } from '@gneh/core';
-import { defineIRFragment } from './fragment.js';
 import { deepReadonly } from './readonly.js';
+import { type Passage, type PassageSet, isPassage } from './definition.js';
+import { createFrame, disposeFrame, initializeStoryInput, readSave, validateSnapshot } from './story-support.js';
+import type { Frame, SaveData, Snapshot, StoryOptions, TraceEvent } from './story-types.js';
 
-export interface Snapshot {
-  current: string;
-  props: Record<string, Json>;
-  state: State;
-  seed: number;
-}
-
-export interface SaveData {
-  abi: typeof ABI_VERSION;
-  story: string;
-  present: Snapshot;
-  past: Snapshot[];
-  future: Snapshot[];
-}
-
-export interface TraceEvent {
-  type: 'enter' | 'render' | 'action' | 'navigate' | 'restore';
-  fragment: string;
-  state?: State;
-}
-
-export interface StoryOptions {
-  entry?: string;
-  state?: State;
-  fragments?: AnyFragment[];
-  live?: boolean;
-  historyLimit?: number;
-  maxSteps?: number;
-  bindings?: Record<string, unknown>;
-  runtimeExtensions?: Readonly<Record<string, RuntimeExtension>>;
-  seed?: number;
-  onTrace?: (event: TraceEvent) => void;
-  wikify?: (source: string, dialect?: Dialect) => Fragment;
-  /** Renderer/application-owned effects. The story kernel never reaches for DOM or browser globals. */
-  host?: (operation: string, args: readonly unknown[], story: Story) => unknown;
-}
-
-interface RegionOverride {
-  replace: boolean;
-  before: (ViewInput | AnyFragment)[];
-  after: (ViewInput | AnyFragment)[];
-}
-
-/** Runtime identity and transient UI state for one mounted Fragment invocation. */
-interface Frame {
-  id: string;
-  fragment: AnyFragment;
-  props: FragmentProps;
-  alive: boolean;
-  entered: boolean;
-  cleanups: Set<() => void>;
-  regions: Map<string, RegionOverride>;
-  declaredRegions: Set<string>;
-  locals: Map<string, unknown>;
-}
+export type { SaveData, Snapshot, StoryOptions, TraceEvent } from './story-types.js';
 
 /** Renderer-neutral story kernel. Re-evaluation is batched per transaction (not signal-level). */
 export class Story {
   readonly live: boolean;
-  readonly fragments = new Map<string, AnyFragment>();
-  private aliases = new Map<string, string>();
+  private readonly passageRegistry = new Map<string, AnyFragment>();
+  private readonly setup: readonly Passage[];
+  private readonly initialState: State;
+  private readonly initialRoute: string;
   private values: State;
   private seed: number;
   private readonly options: StoryOptions;
   private route: string;
   private props: Record<string, Json> = {};
   private frames = new Map<string, Frame>();
+  private setupFrames = new Map<string, Frame>();
+  private registry = new Map<string, unknown>();
   private visited = new Set<string>();
   private listeners = new Set<(view: View[]) => void>();
   private currentView: View[] = [];
@@ -110,23 +59,19 @@ export class Story {
     | undefined;
   private readonly identity: string;
   private renderDepth = 0;
-  constructor(input: StoryIR | AnyFragment[], options: StoryOptions = {}) {
+  private settingUp = false;
+  constructor(input: StoryIR | PassageSet, options: StoryOptions = {}) {
     this.options = options;
     this.live = options.live ?? true;
-    if (Array.isArray(input)) {
-      for (const f of input) this.register(f);
-      this.route = options.entry ?? input[0]?.id ?? '';
-      this.values = cloneState(options.state ?? {});
-    } else {
-      invariant(input.abi === ABI_VERSION, 'ABI_VERSION', `Unsupported story ABI: ${input.abi}`);
-      for (const p of input.passages) this.register(defineIRFragment(p));
-      this.route = options.entry ?? input.entry;
-      this.values = cloneState({ ...input.state, ...options.state });
-    }
-    for (const f of options.fragments ?? []) this.register(f);
-    this.identity = [...this.fragments.keys()].sort().join('|');
+    const initialized = initializeStoryInput(input, options, (passage) => this.register(passage));
+    this.route = initialized.route;
+    this.values = initialized.values;
+    this.setup = initialized.setup;
+    this.identity = [...this.passageRegistry.keys()].sort().join('|');
     this.seed = (options.seed ?? 123456789) >>> 0;
     this.resolve(this.route);
+    this.initialState = cloneState(this.values);
+    this.initialRoute = this.route;
   }
   get state(): Readonly<State> {
     return deepReadonly(this.values);
@@ -144,36 +89,28 @@ export class Story {
     if (!this.started) this.start();
     return this.currentView;
   }
+  get passages(): ReadonlyMap<string, AnyFragment> {
+    return new Map(this.passageRegistry);
+  }
   register(fragment: AnyFragment): void {
-    invariant(
-      fragment.kind === 'gneh.fragment',
-      'FRAGMENT_ABI',
-      'Expected a gneh Fragment, not raw HTML or a module namespace.',
-    );
-    const existing = this.fragments.get(fragment.id);
+    invariant(isPassage(fragment), 'FRAGMENT_ABI', 'Expected a branded gneh Passage.');
+    const existing = this.passageRegistry.get(fragment.id);
     if (existing === fragment) return;
-    invariant(!existing, 'DUPLICATE_ID', `Duplicate fragment id: ${fragment.id}`);
+    invariant(!existing, 'DUPLICATE_ID', `Duplicate passage id: ${fragment.id}`);
     invariant(
       this.live || !fragment.capabilities.includes('live'),
       'CAPABILITY_LIVE',
       `${fragment.id} requires the live context.`,
     );
-    this.fragments.set(fragment.id, fragment);
-    const name = typeof fragment.metadata.name === 'string' ? fragment.metadata.name : fragment.id;
-    if (this.aliases.has(name) && this.aliases.get(name) !== fragment.id) this.aliases.set(name, '');
-    else this.aliases.set(name, fragment.id);
-    // Module-scoped imports/locals form the reachable fragment graph for navigation and save/load.
-    for (const value of Object.values(fragment.bindings ?? {}))
-      if (value && typeof value === 'object' && (value as AnyFragment).kind === 'gneh.fragment')
-        this.register(value as AnyFragment);
+    this.passageRegistry.set(fragment.id, fragment);
   }
   private resolve(target: string | AnyFragment, frame?: Frame): AnyFragment {
     if (typeof target !== 'string') return target;
     const binding = frame?.fragment.bindings?.[target] ?? this.options.bindings?.[target];
     if (binding && typeof binding === 'object' && (binding as AnyFragment).kind === 'gneh.fragment')
       return binding as AnyFragment;
-    const fragment = this.fragments.get(target) ?? this.fragments.get(this.aliases.get(target) ?? '');
-    invariant(fragment, 'PASSAGE_MISSING', `Unknown or ambiguous fragment: ${target}`);
+    const fragment = this.passageRegistry.get(target);
+    invariant(fragment, 'PASSAGE_MISSING', `Unknown passage: ${target}`);
     return fragment;
   }
   start(): this {
@@ -181,6 +118,8 @@ export class Story {
       const before = this.snapshot();
       this.started = true;
       try {
+        this.registry.clear();
+        this.runSetup();
         this.refresh();
       } catch (error) {
         this.resetFrames();
@@ -191,6 +130,8 @@ export class Story {
         this.pendingRoute = undefined;
         this.renderDepth = 0;
         this.started = false;
+        this.registry.clear();
+        this.resetSetupFrames();
         throw error;
       }
     }
@@ -224,7 +165,7 @@ export class Story {
     }
     let frame = this.frames.get(key);
     if (frame && frame.fragment !== target) {
-      this.disposeFrame(frame);
+      disposeFrame(frame);
       this.frames.delete(key);
       frame = undefined;
     }
@@ -234,17 +175,7 @@ export class Story {
         'CAPABILITY_LIVE',
         `${target.id} requires live rendering.`,
       );
-      frame = {
-        id: `i${this.frameSerial++}:${key}`,
-        fragment: target,
-        props,
-        alive: true,
-        entered: false,
-        cleanups: new Set(),
-        regions: new Map(),
-        declaredRegions: new Set(),
-        locals: new Map(),
-      };
+      frame = createFrame(`i${this.frameSerial++}:${key}`, target, props);
       this.frames.set(key, frame);
       this.newFrames = true;
     }
@@ -283,15 +214,27 @@ export class Story {
         return phase === 'render' ? deepReadonly(story.values) : story.values;
       },
       get bindings() {
+        const linked: Record<string, unknown> = {};
+        const chain: Readonly<Record<string, unknown>>[] = [];
+        for (
+          let current = frame.fragment.bindings;
+          current && current !== Object.prototype;
+          current = Object.getPrototypeOf(current) as Readonly<Record<string, unknown>> | undefined
+        )
+          chain.push(current);
+        for (let index = chain.length - 1; index >= 0; index--)
+          for (const key of Object.keys(chain[index])) linked[key] = chain[index][key];
         return {
+          ...linked,
           ...story.options.bindings,
-          ...frame.fragment.bindings,
+          ...Object.fromEntries(story.registry),
           navigate: (id: string, props?: FragmentProps) => context.navigate(id, props),
           host: (operation: string, ...args: unknown[]) => context.host(operation, args),
         };
       },
       live: this.live,
       instanceId: frame.id,
+      restoring: story.skipEnter,
       phase,
       step() {
         if (++story.steps > (story.options.maxSteps ?? 100000))
@@ -309,9 +252,10 @@ export class Story {
       },
       navigate(target: string | AnyFragment, props: object = {}) {
         alive();
+        invariant(!story.settingUp, 'SETUP_NAVIGATION', 'Setup passages cannot navigate.');
         const fragment = story.resolve(target, frame);
         if (story.rendering && phase === 'enter') {
-          if (!story.fragments.has(fragment.id)) story.register(fragment);
+          if (!story.passageRegistry.has(fragment.id)) story.register(fragment);
           story.pendingRoute = {
             id: fragment.id,
             props: cloneState(props as Record<string, Json>),
@@ -409,6 +353,11 @@ export class Story {
         invariant(phase === 'enter', 'LIFECYCLE_PHASE', 'Register disposal during enter(), not during render().');
         frame.cleanups.add(cleanup);
       },
+      publish(name, value) {
+        alive();
+        safeKey(name);
+        story.registry.set(name, value);
+      },
     };
     if (this.options.wikify) context.wikify = this.options.wikify;
     return context;
@@ -459,10 +408,10 @@ export class Story {
   }
   navigate(target: string | AnyFragment, props: FragmentProps = {}): void {
     const fragment = this.resolve(target);
-    if (!this.fragments.has(fragment.id)) this.register(fragment);
+    if (!this.passageRegistry.has(fragment.id)) this.register(fragment);
     else
       invariant(
-        this.fragments.get(fragment.id) === fragment,
+        this.passageRegistry.get(fragment.id) === fragment,
         'DUPLICATE_ID',
         `Navigation target id collides: ${fragment.id}`,
       );
@@ -482,6 +431,7 @@ export class Story {
     const before = this.snapshot();
     const oldPast = [...this.past],
       oldFuture = [...this.future];
+    const oldRegistry = new Map(this.registry);
     this.values = cloneState(this.values);
     this.steps = 0;
     this.transactionDepth++;
@@ -506,12 +456,14 @@ export class Story {
       this.pendingRoute = undefined;
       this.past = oldPast;
       this.future = oldFuture;
+      this.registry = oldRegistry;
       this.restoreSnapshot(before);
       throw error;
     }
   }
   private refresh(): void {
     if (this.rendering) return;
+    const oldRegistry = new Map(this.registry);
     this.rendering = true;
     this.steps = 0;
     try {
@@ -535,38 +487,54 @@ export class Story {
       } while (this.newFrames);
       for (const [key, frame] of this.frames)
         if (!this.visited.has(key)) {
-          this.disposeFrame(frame);
+          disposeFrame(frame);
           this.frames.delete(key);
         }
       assertJson(this.values);
       this.trace('render');
+    } catch (error) {
+      this.registry = oldRegistry;
+      throw error;
     } finally {
       this.rendering = false;
       this.skipEnter = false;
     }
     for (const listener of this.listeners) listener(this.currentView);
   }
-  private disposeFrame(frame: Frame): void {
-    frame.alive = false;
-    for (const fn of frame.cleanups) {
-      try {
-        fn();
-      } catch (error) {
-        console.error('gneh cleanup:', error);
-      }
-    }
-    frame.cleanups.clear();
-    frame.locals.clear();
-    frame.regions.clear();
-    frame.declaredRegions.clear();
-    frame.props = {};
-  }
   private resetFrames(): void {
-    for (const frame of this.frames.values()) this.disposeFrame(frame);
+    for (const frame of this.frames.values()) disposeFrame(frame);
     this.frames.clear();
   }
+  private resetSetupFrames(): void {
+    for (const frame of this.setupFrames.values()) disposeFrame(frame);
+    this.setupFrames.clear();
+  }
+  private runSetup(): void {
+    if (!this.setup.length) return;
+    const beforeState = cloneState(this.values);
+    const beforeRegistry = new Map(this.registry);
+    this.values = cloneState(this.values);
+    this.resetSetupFrames();
+    this.settingUp = true;
+    try {
+      for (const passage of this.setup) {
+        const frame = createFrame(`setup:${passage.id}`, passage, {}, true);
+        this.setupFrames.set(passage.id, frame);
+        passage.enter?.(this.context(frame, 'enter'), {});
+        passage.render(this.context(frame, 'enter'), {});
+      }
+      assertJson(this.values);
+    } catch (error) {
+      this.values = beforeState;
+      this.registry = beforeRegistry;
+      this.resetSetupFrames();
+      throw error;
+    } finally {
+      this.settingUp = false;
+    }
+  }
   private restoreSnapshot(snapshot: Snapshot): void {
-    this.validateSnapshot(snapshot);
+    validateSnapshot(snapshot, (id) => this.resolve(id));
     this.route = snapshot.current;
     this.props = cloneState(snapshot.props);
     this.values = cloneState(snapshot.state);
@@ -602,45 +570,79 @@ export class Story {
     };
     return JSON.stringify(data);
   }
-  private validateSnapshot(value: Snapshot): void {
-    invariant(value && typeof value === 'object', 'SAVE_SHAPE', 'Invalid save snapshot.');
-    this.resolve(value.current);
-    assertJson(value.state);
-    assertJson(value.props);
-    invariant(
-      !Array.isArray(value.state) && typeof value.state === 'object' && value.state !== null,
-      'SAVE_STATE',
-      'Invalid saved state.',
-    );
-    invariant(
-      value.props !== null && typeof value.props === 'object' && !Array.isArray(value.props),
-      'SAVE_PROPS',
-      'Saved props must be an object.',
-    );
-    invariant(
-      Number.isInteger(value.seed) && value.seed >= 0 && value.seed <= 4294967295,
-      'SAVE_SEED',
-      'Invalid saved random state.',
-    );
-  }
   load(source: string): void {
-    const data = JSON.parse(source) as SaveData;
-    invariant(
-      data.abi === ABI_VERSION && data.story === this.identity,
-      'SAVE_STORY',
-      'Save ABI or story identity does not match.',
-    );
-    invariant(Array.isArray(data.past) && Array.isArray(data.future), 'SAVE_HISTORY', 'Invalid save history.');
-    for (const snapshot of [...data.past, ...data.future, data.present]) this.validateSnapshot(snapshot);
-    this.past = data.past.slice(-(this.options.historyLimit ?? 100));
-    this.future = data.future.slice(-(this.options.historyLimit ?? 100));
-    this.restoreSnapshot(data.present);
+    const data = readSave(source, this.identity, (id) => this.resolve(id));
+    const before = this.snapshot();
+    const beforePast = this.past;
+    const beforeFuture = this.future;
+    const beforeRegistry = new Map(this.registry);
+    try {
+      this.past = data.past.slice(-(this.options.historyLimit ?? 100));
+      this.future = data.future.slice(-(this.options.historyLimit ?? 100));
+      this.route = data.present.current;
+      this.props = cloneState(data.present.props);
+      this.values = cloneState(data.present.state);
+      this.seed = data.present.seed;
+      this.resetFrames();
+      this.registry.clear();
+      this.runSetup();
+      this.skipEnter = true;
+      this.refresh();
+      this.trace('restore');
+    } catch (error) {
+      this.resetFrames();
+      this.route = before.current;
+      this.props = cloneState(before.props);
+      this.values = cloneState(before.state);
+      this.seed = before.seed;
+      this.past = beforePast;
+      this.future = beforeFuture;
+      this.registry = beforeRegistry;
+      this.skipEnter = true;
+      this.refresh();
+      throw error;
+    }
+  }
+  reset(): void {
+    const before = this.snapshot();
+    const beforePast = this.past;
+    const beforeFuture = this.future;
+    const beforeRegistry = new Map(this.registry);
+    try {
+      this.route = this.initialRoute;
+      this.props = {};
+      this.values = cloneState(this.initialState);
+      this.seed = (this.options.seed ?? 123456789) >>> 0;
+      this.past = [];
+      this.future = [];
+      this.registry.clear();
+      this.resetFrames();
+      this.runSetup();
+      this.refresh();
+    } catch (error) {
+      this.resetFrames();
+      this.route = before.current;
+      this.props = cloneState(before.props);
+      this.values = cloneState(before.state);
+      this.seed = before.seed;
+      this.past = beforePast;
+      this.future = beforeFuture;
+      this.registry = beforeRegistry;
+      this.skipEnter = true;
+      this.refresh();
+      throw error;
+    }
+  }
+  get registrations(): ReadonlyMap<string, unknown> {
+    return new Map(this.registry);
   }
   dispose(): void {
     this.resetFrames();
+    this.resetSetupFrames();
+    this.registry.clear();
     this.listeners.clear();
     this.currentView = [];
   }
 }
 
-export const createStory = (input: StoryIR | AnyFragment[], options?: StoryOptions): Story => new Story(input, options);
+export const createStory = (input: StoryIR | PassageSet, options?: StoryOptions): Story => new Story(input, options);

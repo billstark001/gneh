@@ -1,0 +1,26 @@
+{
+  "name": "@gneh/renderer-xml",
+  "version": "0.1.0",
+  "description": "Canonical XML and plain-text renderer for gneh",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run test/renderer-xml.test.ts"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*"
+  }
+}
