@@ -1,28 +1,48 @@
-:: Vault [sugarcast] {"title":"03 / Vault"}
-<<widget "meter">>HP: <<print _args[0]>> / <<print _args[1]>><</widget>>
+:: Vault [sugarcast] {"title":"03 / The Guest Beneath the Stairs"}
+<<widget "comfortMeter">>
+''<<print _args[0]>>'' · <<print _args[1]>> / <<print _args[2]>>
+<</widget>>
 
-# Vault
+! The guest beneath the stairs
 
-A faceless warden blocks the way. Its armor is made from unfinished sentences.
+CELLAR / SUGARCAST PASSAGE
 
-<<meter $enemy.hp $enemy.maxHp>>
+The brass key opens a door disguised as wallpaper. Below it, the cellar is warm
+with furnace breath. Jars of summer peaches glow on the shelves like captured
+sunsets.
+
+At the foot of the stairs crouches a shape in Mara's oldest quilt. It has no face,
+only a hollow filled with slow-turning stars. Three black thorns pin its shadow to
+the floor.
+
+<<comfortMeter "THORNS REMAINING" $enemy.hp $enemy.maxHp>>
 
 <<if not $hasKey>>
-You have no key. The warden will not answer.
-<<else>>
-<<if $enemy.hp > 0>>
-<<button "Speak a forgotten name">>
-  <<set $enemy.hp -= 1>>
-  <<set $insight += 1>>
-  <<set $log.push({id: $log.length, text: "The Page Warden recovered a memory."})>>
-<</button>>
-<<else>>
-::: dialogue {speaker="Warden" mood="relieved"}
-“Thank you. I was not here to stop you. I was waiting for you.”
-:::
+The hidden latch will not open. The scent of tea drifts from the entrance hall.
 
-[[Read the traveler's notes->FieldNotes]]
-<</if>>
+[[Return to the entrance for the key->Start]]
+<<else>>
+  <<if $enemy.hp > 0>>
+The thing flinches when you move closer. This is not a guard. This is a guest who
+has forgotten how to knock.
+
+<<button "Offer one ordinary kindness">>
+  <<set $enemy.hp -= 1>>
+  <<set $warmth += 1>>
+  <<set $log.push({id: $log.length, text: "A black thorn loosened when you spoke gently to the cellar guest."})>>
+<</button>>
+  <<else>>
+> ''THE CELLAR GUEST''
+> “Above the roof, my older self is dreaming. Please wake it softly. It frightens
+> easily, and it is larger than your moon.”
+
+The empty face fills, for an instant, with the reflection of a child asleep beside
+a stove. It points toward the observatory.
+
+[[Climb to the listening room->Observatory]]
+
+[[Read the field notes->FieldNotes]]
+  <</if>>
 <</if>>
 
 [[Return to the entrance->Start]]

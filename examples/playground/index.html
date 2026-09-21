@@ -3,10 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>The Nocturne Archive</title>
+    <meta name="description" content="A cozy cosmic-horror story and three-dialect playground for gneh." />
+    <title>The House at the End of Night</title>
   </head>
   <body>
-    <main id="story"></main>
+    <div class="sky" aria-hidden="true"><span></span><span></span><span></span></div>
+    <header class="masthead">
+      <a class="brand" href="#Start" aria-label="Return to the beginning">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span><b>GNEH PLAYGROUND</b><small>an interactive field note</small></span>
+      </a>
+      <div class="route-indicator"><span>NOW READING</span><strong id="route">Start</strong></div>
+    </header>
+
+    <main class="page-shell">
+      <aside class="margin-note margin-note-left" aria-hidden="true">
+        <span>47° beyond north</span>
+        <i></i>
+        <span>the stars are listening</span>
+      </aside>
+      <article id="story" aria-live="polite"></article>
+      <aside class="margin-note margin-note-right" aria-hidden="true">
+        <span>tea temperature</span>
+        <i></i>
+        <span>comfortably impossible</span>
+      </aside>
+    </main>
+
+    <footer class="story-tools" aria-label="Story controls">
+      <div class="tool-group">
+        <button id="undo" type="button" title="Undo the last story transaction">↶ <span>Undo</span></button>
+        <button id="redo" type="button" title="Redo the next story transaction">↷ <span>Redo</span></button>
+      </div>
+      <p id="app-status" role="status">The house is awake. The kettle is nearly boiling.</p>
+      <div class="tool-group">
+        <button id="save" type="button"><span>Save night</span></button>
+        <button id="load" type="button"><span>Load night</span></button>
+        <button id="reset" type="button"><span>Restart</span></button>
+      </div>
+    </footer>
+
     <script type="module" src="/src/main.mjs"></script>
   </body>
 </html>

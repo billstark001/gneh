@@ -1,67 +1,186 @@
 ---
 metadata:
-  tags: [archive]
+  tags: [cozy-horror, showcase]
   layout:
     atmosphere: nocturne
 ---
-@view EnemyCard({ enemy }) {
-  ::: status {.enemy-card}
-  **{{ enemy.name }}**
-
-  HP: {{ enemy.hp }} / {{ enemy.maxHp }}
-
-  @if (enemy.hp <= 0) {
-    *It has remembered its name.*
-  }
+@view ChapterMark(number, eyebrow) {
+  ::: chapter-mark {.chapter-mark}
+  **{{ number }}** — {{ eyebrow }}
   :::
 }
 
-:: Start [start] {"title":"01 / The Nocturne Archive","layout":{"column":"reading","accent":"brass"}}
-@action takeKey {
-  @do $hasKey = true;
-  @do $insight += 1;
-  @do $log.push({id: $log.length, text: "You accepted the brass key from the archivist."});
+@view HouseStatus() {
+  ::: status {.house-status}
+  INSIGHT **{{ $insight }}** · WARMTH **{{ $warmth }}** · SIGNAL **{{ $signal }}**
+  :::
 }
 
-# The Nocturne Archive
+:: Start [start] {"title":"01 / The House at the End of Night","layout":{"column":"reading","accent":"amber"}}
+@action prepareTea() {
+  @do $hasTea = true;
+  @do $hasKey = true;
+  @do $warmth += 1;
+  @do $log.push({id: $log.length, text: "Mara poured two cups of tea, though only one chair was occupied."});
+}
 
-THE NOCTURNE ARCHIVE / CHAPTER 01
+# The House at the End of Night
 
-The clock stopped at midnight. **{{ $player.name }}**, this archive keeps not books,
-but the things people forgot they once knew.
+@ChapterMark("I", "A light where no light should be")
 
-::: dialogue {speaker="Irene" mood="calm"}
-“The name is not important. What matters is whether you will read it again.”
+At the northernmost edge of the map, where the road thins into a pencil line and
+then politely gives up, there is a house with one square window lit gold.
+
+You arrive after midnight carrying rain on your coat and a letter addressed only to
+**{{ $player.name }}**. The handwriting is yours. You do not remember writing it.
+
+::: dialogue {.dialogue speaker="Mara Bell" mood="kind"}
+“Come in. Wipe your feet. Whatever followed you through the constellations can wait
+on the porch until we have tea.”
 :::
 
-@if (!$hasKey) {
-  A [brass key]{.warning} rests on the desk. Its back bears a nearly forgotten word:
-  *gneh3-*.
+Mara, the house's keeper, sets a blue kettle on the stove. Above it hangs a row of
+keys. One is warm brass; its teeth resemble a tiny skyline.
 
-  [[Take the key => takeKey]]
+@if (!$hasTea) {
+  The kettle begins to whistle in a language that sounds almost like your childhood
+  name.
+
+  [[Steep the midnight tea => prepareTea]]
 } @else {
-  You close your hand around the key. The archive's northern door can now open.
+  ::: discovery {.discovery}
+  The tea tastes of smoke, honey, and the safe part of being lost. Mara slips the
+  **brass key** under your saucer. “For the door that pretends to be a wall.”
+  :::
 }
+
+## Choose where the house takes you
+
+@HouseStatus()
 
 [[Enter the reading room - Karlowe -> ReadingRoom]]
 
 [[Enter the vault - Sugarcast -> Vault]]
 
-@region notes {
-  *This notes region belongs to one Fragment instance. JavaScript can replace it
-  without manipulating the DOM.*
+[[Read the field notes -> FieldNotes]]
+
+:: Observatory {"title":"04 / The Listening Room"}
+@action tuneSignal() {
+  @do $signal += 1;
+  @do $insight += 1;
+  @do $log.push({id: $log.length, text: "You tuned the radio one breath closer to the voice between stars."});
 }
 
-@EnemyCard({ enemy: $enemy })
+@action makePromise() {
+  @do $promise = true;
+  @do $warmth += 1;
+  @do $log.push({id: $log.length, text: "You promised that no guest of the house would be left outside."});
+}
 
-:: FieldNotes {"title":"04 / Traveler's notes"}
-# Traveler's notes
+# A sky too close to the glass
+
+@ChapterMark("IV", "The listening room")
+
+The observatory is smaller than it looked from below. A red blanket covers the
+chair. A plate waits with three sugared biscuits. Beyond the round window, the
+universe leans near enough to fog the pane.
+
+In the radio's green eye, something vast and lonely turns in its sleep.
+
+::: meter {.night-meter}
+SIGNAL: **{{ $signal }} / 3**
+:::
+
+@if ($signal < 3) {
+  Each careful adjustment separates one voice from the static: a low, frightened
+  humming from outside the shape of the world.
+
+  [[Turn the silver dial => tuneSignal]]
+} @else {
+  ::: dialogue {.dialogue speaker="The Far Guest" mood="small"}
+  “I saw your window. I thought it was a star. May I sit beside it until morning?”
+  :::
+}
+
+@if ($signal >= 3 && !$promise) {
+  [[Promise it a place by the stove => makePromise]]
+}
+
+@if ($promise) {
+  The house settles around your promise. Somewhere downstairs, Mara puts another
+  cup on the table.
+
+  [[Open the little door in the telescope -> WelcomeEnding]]
+} @else {
+  [[Close the shutters and keep the old watch -> VigilEnding]]
+}
+
+[[Read the field notes before deciding -> FieldNotes]]
+
+:: FieldNotes {"title":"Field notes / Persistent state and loops"}
+# Field notes
+
+@ChapterMark("✦", "Things the night remembers")
+
+These entries live in story state. The list below is rendered with an Inkdown
+`@each` block and survives navigation, save/load, and browser refresh after loading.
 
 @each (event of $log; key event.id) {
   - {{ event.text }}
 }
 
+@HouseStatus()
+
 [[Return to the entrance -> Start]]
 
-:: Status {"nav":false}
-Known things: **$insight**. Key: {{ $hasKey ? "held" : "not yet found" }}.
+@if ($enemy.hp <= 0) {
+  [[Climb to the observatory -> Observatory]]
+}
+
+:: WelcomeEnding {"title":"05 / A Place at the Table"}
+@do $ending = "welcome";
+# Morning, eventually
+
+@ChapterMark("V", "A place at the table")
+
+You turn the telescope's small key. The door opens inward onto a darkness full of
+slow eyes. For one long moment, the whole sky considers the size of the room.
+
+Then it makes itself smaller.
+
+By dawn, something with too many elbows is folded politely into Mara's best chair,
+warming its hands around a blue cup. The stars return to their proper distance.
+They seem less hungry now.
+
+::: ending-card {.ending-card}
+**THE HOUSE KEEPS ONE MORE LIGHT**
+
+You chose hospitality over certainty. The night will remember.
+:::
+
+[[Read what the night recorded -> FieldNotes]]
+
+[[Begin another night -> Start]]
+
+:: VigilEnding {"title":"05 / The Kindly Watch"}
+@do $ending = "vigil";
+# Some doors are blankets
+
+@ChapterMark("V", "The kindly watch")
+
+You close the shutters, but you do not switch off the lamp. Through the wood comes
+a slow scratching, then a softer sound—the Far Guest settling against the outside
+wall where the bricks are warm.
+
+You and Mara keep watch until a pale imitation of morning. Neither of you speaks.
+Neither of you is alone.
+
+::: ending-card {.ending-card}
+**THE LIGHT REMAINS IN THE WINDOW**
+
+You chose a careful kindness. The night will return when you are ready.
+:::
+
+[[Read what the night recorded -> FieldNotes]]
+
+[[Begin another night -> Start]]

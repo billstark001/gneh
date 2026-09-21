@@ -1,12 +1,17 @@
 {
-  "title": "The Nocturne Archive",
+  "title": "The House at the End of Night",
   "entry": "Start",
   "sources": ["story"],
   "state": {
-    "player": { "name": "Traveler" },
+    "player": { "name": "Night Guest" },
     "hasKey": false,
+    "hasTea": false,
     "insight": 0,
-    "enemy": { "name": "Page Warden", "hp": 3, "maxHp": 3 },
-    "log": [{ "id": 0, "text": "You woke after the archive closed." }]
+    "warmth": 0,
+    "signal": 0,
+    "promise": false,
+    "ending": "",
+    "enemy": { "name": "The Guest Beneath the Stairs", "hp": 3, "maxHp": 3 },
+    "log": [{ "id": 0, "text": "You arrived while the final star was setting." }]
   }
 }

@@ -1,21 +1,45 @@
-:: ReadingRoom [karlowe] {"title":"02 / Reading room"}
-# Reading room
+:: ReadingRoom [karlowe] {"title":"02 / The Room That Reads You"}
+# The room that reads you
 
-A silver bookmark crosses the light. This room is written in **Karlowe**; the runtime
-does not need to know that.
+READING ROOM / KARLOWE PASSAGE
+
+Shelves rise into a ceiling painted with constellations that do not exist yet. A
+small fire murmurs behind its grate. Every book has your name on its spine, but in a
+different hand.
+
+(if: $hasTea)[
+  Your cup is still warm. Its steam bends toward a thin volume bound in grey wool.
+](else:)[
+  The room is cold without tea. Even the commas seem to shiver.
+]
+
+(if: $hasKey)[
+  The brass key turns by itself on your palm. A book titled //Guests of the Last
+  House// opens to a page that has been waiting for you.
+](else:)[
+  The final shelf has no handle—only a keyhole and the faint scent of honey.
+]
+
+|star-map>[
+  The page shows a charcoal star-map. One mark is not a star, but a tiny square
+  window sketched at the edge of everything.
+]
+
+(if: $insight < 2)[
+  (link-repeat: "Read one line aloud")[(set: $insight to $insight + 1)
+  The ink lifts like moths. Somewhere below, something taps once beneath the stairs.]
+](else:)[
+  **You understand:** the thing outside did not follow you here. The house called it,
+  as it once called you.
+]
 
 (display: "Status")
 
 (if: $hasKey)[
-  The archivist pushes the final book toward you.
-
-  (link-goto: "Take the key to the vault", "Vault")
-](else:)[
-  (print: "The northern door is locked. Retrieve the key at the entrance first.")
-]
-
-(link-repeat: "Read an unfamiliar passage")[
-  (set: $insight to $insight + 1)
+  (link-goto: "Take the warm key to the cellar", "Vault")
 ]
 
 [[Return to the entrance->Start]]
+
+:: Status {"nav":false}
+INSIGHT: **$insight** · WARMTH: **$warmth** · SIGNAL: **$signal**

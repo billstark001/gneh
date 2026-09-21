@@ -153,19 +153,29 @@ test('independently built Vite applications conform in a real browser', { timeou
     page = await pageAt('/playground/');
     await page.waitForFunction(() => window.gnehApp?.story);
     check(
-      (await page.$eval('#story h1', (node) => node.textContent)) === 'The Nocturne Archive',
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'The House at the End of Night',
       'playground: production HTML boots the Inkdown entry passage',
     );
-    await page.locator(aria('link', 'Enter the reading room - Karlowe')).click();
+    await page.locator(aria('button', 'Steep the midnight tea')).click();
     check(
-      (await page.$eval('#story h1', (node) => node.textContent)) === 'Reading room',
+      await page.evaluate(() => window.gnehApp.story.state.hasTea === true && window.gnehApp.story.state.warmth === 1),
+      'playground: Inkdown actions update the shared story state',
+    );
+    await page.locator(aria('link', 'Enter the reading room - Karlowe →')).click();
+    check(
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'The room that reads you',
       'playground: production HTML navigates into Karlowe',
     );
-    await page.locator(aria('link', 'Return to the entrance')).click();
-    await page.locator(aria('link', 'Enter the vault - Sugarcast')).click();
+    await page.locator(aria('link', 'Return to the entrance →')).click();
+    await page.locator(aria('link', 'Enter the vault - Sugarcast →')).click();
     check(
-      (await page.$eval('#story', (node) => node.textContent)).includes('A faceless warden blocks the way'),
+      (await page.$eval('#story', (node) => node.textContent)).includes('The guest beneath the stairs'),
       'playground: production HTML navigates into Sugarcast',
+    );
+    await page.setViewport({ width: 390, height: 844 });
+    check(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      'playground: story chrome has no horizontal overflow on a narrow screen',
     );
     await page.close();
 
