@@ -26,6 +26,8 @@ const passages = definePassages(wikiPassages, ModelLab);
 const app = mountStory(host, passages, {
   entry: 'Primer',
   state: { completed: [], confidence: 0.25 },
+  // Wiki projection evaluates and displays every declarative step at once.
+  flow: { projection: 'all' },
   renderer: { plugins: [latexDOM()] },
 });
 

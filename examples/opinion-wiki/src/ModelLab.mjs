@@ -28,33 +28,50 @@ export default definePassage({
           ? 'Several local groups may communicate while distant opinions remain separated.'
           : 'A broad interaction neighbourhood makes large-scale agreement more plausible.';
 
-    return [
-      v.heading(1, props.label ?? 'Concept lab'),
-      v.p(
-        'This native JavaScript passage shares the same state, history, navigation, and semantic renderer as the compiled Wiki.',
+    return v.flow(
+      v.step(
+        () => [
+          v.heading(1, props.label ?? 'Concept lab'),
+          v.p(
+            'This native JavaScript passage shares the same state, history, navigation, and semantic renderer as the compiled Wiki.',
+          ),
+        ],
+        'introduction',
       ),
-      v.heading(2, 'Confidence radius'),
-      v.p('Current illustrative value: ', v.strong(confidence.toFixed(2))),
-      v.button('Narrow −0.05', () =>
-        ctx.dispatch((action) => {
-          action.state.confidence = Math.max(0.05, Number(action.state.confidence) - 0.05);
-        }),
+      v.step(
+        () => [
+          v.heading(2, 'Confidence radius'),
+          v.p('Current illustrative value: ', v.strong(confidence.toFixed(2))),
+          v.button('Narrow −0.05', () =>
+            ctx.dispatch((action) => {
+              action.state.confidence = Math.max(0.05, Number(action.state.confidence) - 0.05);
+            }),
+          ),
+          v.button('Widen +0.05', () =>
+            ctx.dispatch((action) => {
+              action.state.confidence = Math.min(0.95, Number(action.state.confidence) + 0.05);
+            }),
+          ),
+        ],
+        'controls',
       ),
-      v.button('Widen +0.05', () =>
-        ctx.dispatch((action) => {
-          action.state.confidence = Math.min(0.95, Number(action.state.confidence) + 0.05);
-        }),
+      v.step(
+        () => [
+          ctx.regionView('interpretation', () => [v.p(interpretation)]),
+          v.button('Replace the local region', () => {
+            ctx
+              .region('interpretation')
+              .set(
+                v.p(
+                  'This replacement belongs to this mounted passage instance; it is not a DOM query or global mutation.',
+                ),
+              );
+          }),
+          v.button('Restore computed interpretation', () => ctx.region('interpretation').reset()),
+          v.choice('Back to the primer', passages.Primer.id, () => ctx.navigate(passages.Primer)),
+        ],
+        'interpretation',
       ),
-      ctx.regionView('interpretation', () => [v.p(interpretation)]),
-      v.button('Replace the local region', () => {
-        ctx
-          .region('interpretation')
-          .set(
-            v.p('This replacement belongs to this mounted passage instance; it is not a DOM query or global mutation.'),
-          );
-      }),
-      v.button('Restore computed interpretation', () => ctx.region('interpretation').reset()),
-      v.choice('Back to the primer', passages.Primer.id, () => ctx.navigate(passages.Primer)),
-    ];
+    );
   },
 });
