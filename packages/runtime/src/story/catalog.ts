@@ -1,7 +1,7 @@
 import { ABI_VERSION, cloneState, invariant, type AnyFragment, type State, type StoryIR } from '@gneh/core';
-import { passageSetSetup } from '../brands.js';
 import { defineIRFragment } from '../compiler/interpreter.js';
 import { isPassage } from '../definitions/fragment.js';
+import { getPassageSetSetup } from '../definitions/passage-set.js';
 import type { Passage, PassageSet, StoryOptions } from '../api-types.js';
 
 export interface StoryInitialization {
@@ -69,6 +69,6 @@ export function initializeStoryInput(
   return {
     route: options.entry ?? starts[0].id,
     values: cloneState(options.state ?? {}),
-    setup: (passageSet as PassageSet & { readonly [passageSetSetup]: readonly Passage[] })[passageSetSetup],
+    setup: getPassageSetSetup(passageSet),
   };
 }

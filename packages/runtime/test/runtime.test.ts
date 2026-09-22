@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import { assert, story, text, click, compiled } from './helpers.js';
-import { Story, defineIRFragment, definePassage, definePassages } from '../dist/index.js';
+import { Story, definePassage, definePassages } from '../dist/index.js';
+import { defineIRFragment } from '../dist/compiler/index.js';
 import { assertJson, v } from '../../core/dist/index.js';
 
 const source = `:: Start [start]

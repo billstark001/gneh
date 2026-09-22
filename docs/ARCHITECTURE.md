@@ -96,7 +96,7 @@ interface Fragment<P extends object = Record<string, unknown>> {
 }
 ```
 
-`definePassage()` creates a branded handwritten passage, while `defineIRFragment()` adapts passage IR to the same brand. `defineFragment()` remains the lower-level API for non-navigable nested fragments. Generated ESM embeds IR, constructs passages, and default-exports a branded immutable `PassageSet`.
+`definePassage()` creates a branded handwritten passage, while `defineIRFragment()` from `@gneh/runtime/compiler` adapts passage IR to the same brand. `defineFragment()` remains the lower-level API for non-navigable nested fragments. Generated ESM embeds IR, constructs passages, and default-exports a branded immutable `PassageSet`.
 
 The statement that `.inkdown` and `.mjs` are equivalent means that they meet at this ABI. It does not imply byte-identical output, reversible JavaScript, or identical source maps. Generated modules are normal ESM and do not use string evaluation.
 

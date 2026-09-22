@@ -3,8 +3,6 @@ export { bindFragment } from './binding.js';
 export { defineAction, defineValue, defineView } from './definitions/callable.js';
 export { defineFragment, definePassage } from './definitions/fragment.js';
 export { definePassageSet, definePassages } from './definitions/passage-set.js';
-export { defineIRFragment } from './compiler/interpreter.js';
-export { initializeModule } from './compiler/module-initializer.js';
 export { Story } from './story/story.js';
 
 export type {
@@ -12,7 +10,6 @@ export type {
   AuthoredCallable,
   ContinuationSnapshot,
   FragmentDefinition,
-  ModuleBindingCell,
   Passage,
   PassageDefinition,
   PassageInput,

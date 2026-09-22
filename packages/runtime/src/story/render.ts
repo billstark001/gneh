@@ -5,7 +5,9 @@ import {
   normalizeView,
   type Flow,
   type FlowEach,
+  type FlowLazy,
   type FlowNode,
+  type FlowSuspend,
   type FragmentContext,
   type Json,
   type RenderEvaluation,
@@ -59,14 +61,14 @@ export function evaluateRenderInput(
       return;
     }
     if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.lazy') {
-      const lazy = value as import('@gneh/core').FlowLazy;
+      const lazy = value as FlowLazy;
       visit(lazy.render(context), `${currentPath}/${lazy.id ?? 'lazy'}`);
       return;
     }
     if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.suspend') {
-      const suspension = value as import('@gneh/core').FlowSuspend;
+      const suspension = value as FlowSuspend;
       const key = `${currentPath}/${suspension.id ?? 'suspend'}`;
-      const stopped = context.suspend(
+      context.suspend(
         key,
         suspension.resume,
         suspension.bind
@@ -76,7 +78,6 @@ export function evaluateRenderInput(
           : undefined,
       );
       segments.push([]);
-      if (stopped) return;
       return;
     }
     if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.each') {

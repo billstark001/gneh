@@ -47,7 +47,7 @@ const isSerializedCallable = (value: unknown): value is SerializedCallable =>
   !!value && typeof value === 'object' && (value as SerializedCallable).kind === 'gneh.callable-ref';
 
 /** Index callable declarations once, independently from invocation state. */
-export function indexCallables(ir: PassageIR): Map<string, CallableIR> {
+function indexCallables(ir: PassageIR): Map<string, CallableIR> {
   const declarations = new Map<string, CallableIR>();
   const collectCallable = (callable: CallableIR, depth: number): void => {
     invariant(depth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');

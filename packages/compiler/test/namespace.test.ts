@@ -8,6 +8,12 @@ import { generateModule } from '../dist/index.js';
 import { assert, compiled, text } from './helpers.js';
 
 const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
+const runtimeCompiler = new URL('../../runtime/dist/compiler/index.js', import.meta.url).href;
+
+const linkRuntime = (code: string) =>
+  code
+    .replaceAll('"@gneh/runtime/compiler"', JSON.stringify(runtimeCompiler))
+    .replaceAll('"@gneh/runtime"', JSON.stringify(runtime));
 
 test('namespace rewriting preserves primary module bindings that shadow passage ids', async () => {
   const source = `@view Card() { module card }
@@ -19,7 +25,7 @@ passage card`;
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-namespace-module-scope-'));
   try {
     const file = path.join(directory, 'story.mjs');
-    await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    await fs.writeFile(file, linkRuntime(output.code));
     const module = await import(pathToFileURL(file).href);
     assert.equal(text(new Story(module.default).view).trim(), 'module card');
   } finally {

@@ -9,6 +9,12 @@ export function isPassageSet(value: unknown): value is RuntimePassageSet {
   return !!value && typeof value === 'object' && (value as PassageSet)[passageSetBrand] === true;
 }
 
+/** Internal accessor that keeps PassageSet representation details in its owning module. */
+export function getPassageSetSetup(value: PassageSet): readonly Passage[] {
+  invariant(isPassageSet(value), 'PASSAGE_SET', 'Expected a branded PassageSet.');
+  return value[passageSetSetup];
+}
+
 function inputs(value: PassageInput | readonly PassageInput[]): readonly PassageInput[] {
   return Array.isArray(value) ? (value as readonly PassageInput[]) : [value as PassageInput];
 }
@@ -31,7 +37,11 @@ function createPassageSet(source: readonly PassageInput[], setupReferences: read
   }
   for (const reference of setupReferences) {
     const passage = typeof reference === 'string' ? result[reference] : reference;
-    invariant(passage && result[passage.id] === passage, 'SETUP_MISSING', `Unknown setup passage: ${String(reference)}`);
+    invariant(
+      passage && result[passage.id] === passage,
+      'SETUP_MISSING',
+      `Unknown setup passage: ${String(reference)}`,
+    );
     setup.push(passage);
   }
   const seen = new Set<string>();
