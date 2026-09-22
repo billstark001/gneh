@@ -118,7 +118,7 @@ export default definePassage({
 });
 ```
 
-A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScript. The complete ESM example is in `examples/vite-app/`.
+A real `.mjs` file is standard ESM; gneh does not rewrite `$name` inside JavaScript. The complete ESM and custom-renderer example is in `examples/opinion-wiki/`.
 
 ## Package boundaries
 
