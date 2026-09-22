@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import type { PassageIR, StoryNode } from '../../core/dist/index.js';
-import { Story, defineIRFragment, definePassage, definePassageSet, definePassages, defineView } from '../dist/index.js';
+import { Story, definePassage, definePassageSet, definePassages, defineView } from '../dist/index.js';
+import { defineIRFragment } from '../dist/compiler/index.js';
 import { assert, story, text } from './helpers.js';
 
 test('PassageSet entry selection has no property-order fallback', () => {
@@ -47,8 +48,12 @@ test('PassageSet setup plans compose in order and rebuild transient registration
 });
 
 test('failed setup rolls back state and registry during start and load', () => {
+  let disposals = 0;
   const setup = definePassage({
     id: 'Setup',
+    enter(ctx) {
+      ctx.onDispose(() => disposals++);
+    },
     render(ctx) {
       ctx.state.value = 99;
       ctx.publish(
@@ -65,6 +70,7 @@ test('failed setup rolls back state and registry during start and load', () => {
   assert.throws(() => failed.start(), /setup failed/);
   assert.deepEqual(failed.state, { fail: true, value: 0 });
   assert.equal(failed.registrations.size, 0);
+  disposals = 0;
 
   const instance = new Story(passages, { state: { fail: false, value: 0 } }).start();
   const registration = instance.registrations.get('temporary');
@@ -75,6 +81,9 @@ test('failed setup rolls back state and registry during start and load', () => {
   assert.deepEqual(instance.state, { fail: false, value: 99 });
   assert.equal(instance.registrations.get('temporary'), registration);
   assert.equal(text(instance.view), 'ready');
+  assert.equal(disposals, 1, 'only the failed replacement setup frame is disposed');
+  instance.dispose();
+  assert.equal(disposals, 2, 'the original setup frame remains live until the story is disposed');
 });
 
 test('load and reset start a lazy story without replaying setup on first view', () => {

@@ -8,8 +8,14 @@ import { generateModule } from '../dist/index.js';
 import { Story, definePassages } from '../../runtime/dist/index.js';
 
 const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
+const runtimeCompiler = new URL('../../runtime/dist/compiler/index.js', import.meta.url).href;
 
 const core = new URL('../../core/dist/index.js', import.meta.url).href;
+
+const linkRuntime = (code: string) =>
+  code
+    .replaceAll('"@gneh/runtime/compiler"', JSON.stringify(runtimeCompiler))
+    .replaceAll('"@gneh/runtime"', JSON.stringify(runtime));
 
 async function emittedStory(source, state = {}, modules = {}) {
   const result = compiled(source, 'inkdown', { state });
@@ -17,10 +23,7 @@ async function emittedStory(source, state = {}, modules = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-esm-'));
   const file = path.join(dir, 'story.mjs');
   for (const [name, contents] of Object.entries(modules)) await fs.writeFile(path.join(dir, name), contents);
-  await fs.writeFile(
-    file,
-    output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)).replaceAll('"@gneh/core"', JSON.stringify(core)),
-  );
+  await fs.writeFile(file, linkRuntime(output.code).replaceAll('"@gneh/core"', JSON.stringify(core)));
   const module = await import(pathToFileURL(file).href);
   const s = new Story(module.default, {
     entry: result.story.entry,
@@ -183,12 +186,7 @@ Next scene`;
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-local-'));
   try {
     const file = path.join(dir, 'chapter.mjs');
-    await fs.writeFile(
-      file,
-      output.code
-        .replaceAll('"@gneh/runtime"', JSON.stringify(runtime))
-        .replaceAll('"@gneh/core"', JSON.stringify(core)),
-    );
+    await fs.writeFile(file, linkRuntime(output.code).replaceAll('"@gneh/core"', JSON.stringify(core)));
     const module = await import(pathToFileURL(file).href);
     const first = new Story(module.default, { entry: 'chapters/one.inkdown#Start' }).start();
     assert.equal(first.current, 'chapters/one.inkdown#Start');
@@ -216,12 +214,7 @@ ${id}`;
         namespace: id,
       });
       const file = path.join(dir, id + '.mjs');
-      await fs.writeFile(
-        file,
-        output.code
-          .replaceAll('"@gneh/runtime"', JSON.stringify(runtime))
-          .replaceAll('"@gneh/core"', JSON.stringify(core)),
-      );
+      await fs.writeFile(file, linkRuntime(output.code).replaceAll('"@gneh/core"', JSON.stringify(core)));
       modules.push(await import(pathToFileURL(file).href));
     }
     const instance = new Story(definePassages(...modules.map((m) => m.default)), { entry: 'alpha#Start' }).start();
@@ -244,7 +237,7 @@ passage`;
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-namespace-scope-'));
   try {
     const file = path.join(dir, 'chapter.mjs');
-    await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    await fs.writeFile(file, linkRuntime(output.code));
     const module = await import(pathToFileURL(file).href);
     const instance = new Story(module.default, { entry: 'chapter#Start' }).start();
     assert.match(text(instance.view), /lexical/);

@@ -20,6 +20,11 @@ test('independently built Vite applications conform in a real browser', { timeou
   const checks = [];
   const errors = [];
 
+  for (const [site, directory] of sites) {
+    const entry = path.join(directory, 'index.html');
+    if (!fs.existsSync(entry)) throw new Error(`Missing browser build for ${site}: ${entry}`);
+  }
+
   function check(condition, name) {
     if (!condition) throw new Error(name);
     checks.push(name);
@@ -79,15 +84,39 @@ test('independently built Vite applications conform in a real browser', { timeou
 
   async function pageAt(pathname, viewport = { width: 1280, height: 900 }) {
     const page = await browser.newPage();
+    const diagnostics = [];
     await page.setViewport(viewport);
-    page.on('pageerror', (error) => errors.push(String(error)));
-    await page.goto(origin + pathname, { waitUntil: 'networkidle0' });
+    page.on('pageerror', (error) => {
+      const message = `pageerror ${pathname}: ${error.stack ?? String(error)}`;
+      diagnostics.push(message);
+      errors.push(message);
+    });
+    page.on('requestfailed', (request) => {
+      diagnostics.push(
+        `requestfailed ${pathname}: ${request.method()} ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`,
+      );
+    });
+    page.on('response', (response) => {
+      const url = response.url();
+      if (url.startsWith(origin) && !url.endsWith('/favicon.ico') && response.status() >= 400)
+        diagnostics.push(`http ${pathname}: ${response.status()} ${url}`);
+    });
+    const response = await page.goto(origin + pathname, { waitUntil: 'networkidle0' });
+    if (!response?.ok() || diagnostics.length)
+      throw new Error(`Browser page failed to load:\n${diagnostics.join('\n') || `${response?.status()} ${pathname}`}`);
+    try {
+      await page.waitForFunction(() => window.gnehApp?.story);
+    } catch (error) {
+      throw new Error(
+        `Browser application failed to start at ${pathname}${diagnostics.length ? `:\n${diagnostics.join('\n')}` : '.'}`,
+        { cause: error },
+      );
+    }
     return page;
   }
 
   try {
     let page = await pageAt('/starter/?environment=wiki');
-    await page.waitForFunction(() => window.gnehApp?.story);
     check(
       (await page.$eval('h1', (node) => node.textContent)) === 'A new story',
       'starter: Vite compiles the configured story graph',
@@ -151,7 +180,6 @@ test('independently built Vite applications conform in a real browser', { timeou
     await page.close();
 
     page = await pageAt('/playground/');
-    await page.waitForFunction(() => window.gnehApp?.story);
     check(
       (await page.$eval('#story h1', (node) => node.textContent)) === 'The House at the End of Night',
       'playground: production HTML boots the Inkdown entry passage',
@@ -180,20 +208,27 @@ test('independently built Vite applications conform in a real browser', { timeou
     await page.close();
 
     page = await pageAt('/snapshot/');
-    await page.waitForFunction(() => window.gnehApp?.story);
     check(
-      (await page.$eval('#story h1', (node) => node.textContent)) === 'A document without live behavior',
-      'snapshot: production HTML boots the static entry passage',
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'No Clean Getaway',
+      'snapshot: production HTML boots the visual-novel entry passage',
     );
-    await page.locator(aria('link', 'Next page')).click();
+    await page.evaluate(() => {
+      const next = document.querySelector('#next');
+      if (!(next instanceof HTMLButtonElement)) throw new Error('Expected the visual-novel advance button');
+      while (!next.disabled) next.click();
+      const choice = [...document.querySelectorAll('#choices a')].find((node) =>
+        node.textContent?.includes('Open the door and call it solidarity'),
+      );
+      if (!(choice instanceof HTMLElement)) throw new Error('Expected the OpenDoor choice');
+      choice.click();
+    });
     check(
-      (await page.$eval('#story h1', (node) => node.textContent)) === 'Second page',
-      'snapshot: production HTML keeps passage navigation',
+      (await page.evaluate(() => window.gnehApp.story.current)) === 'OpenDoor',
+      'snapshot: production HTML keeps visual-novel passage navigation',
     );
     await page.close();
 
     page = await pageAt('/opinion-wiki/');
-    await page.waitForFunction(() => window.gnehApp?.story);
     check(
       (await page.$eval('#app-context', (node) => node.textContent)).includes('surrounding Vite application'),
       'opinion Wiki: unrelated Markdown remains owned by the surrounding frontend',

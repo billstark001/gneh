@@ -8,7 +8,13 @@ import { generateModule } from '../dist/index.js';
 import { definePassages, Story } from '../../runtime/dist/index.js';
 
 const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
+const runtimeCompiler = new URL('../../runtime/dist/compiler/index.js', import.meta.url).href;
 const core = new URL('../../core/dist/index.js', import.meta.url).href;
+
+const linkRuntime = (code: string) =>
+  code
+    .replaceAll('"@gneh/runtime/compiler"', JSON.stringify(runtimeCompiler))
+    .replaceAll('"@gneh/runtime"', JSON.stringify(runtime));
 
 async function emittedStory(source: string, modules: Record<string, string>) {
   const result = compiled(source);
@@ -16,7 +22,7 @@ async function emittedStory(source: string, modules: Record<string, string>) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-esm-linkage-'));
   for (const [name, contents] of Object.entries(modules)) await fs.writeFile(path.join(directory, name), contents);
   const file = path.join(directory, 'story.mjs');
-  await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+  await fs.writeFile(file, linkRuntime(output.code));
   const module = await import(pathToFileURL(file).href);
   return {
     story: new Story(module.default, { entry: result.story.entry }).start(),
@@ -58,7 +64,7 @@ imports:
   const storyFile = path.join(directory, 'story.mjs');
   const nativeFile = path.join(directory, 'native.mjs');
   try {
-    await fs.writeFile(storyFile, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    await fs.writeFile(storyFile, linkRuntime(output.code));
     await fs.writeFile(
       nativeFile,
       `import passages from './story.mjs';
@@ -99,7 +105,7 @@ exports: [count]
   try {
     await fs.writeFile(path.join(directory, 'counter.mjs'), 'let value = 0; export const next = () => ++value;');
     const file = path.join(directory, 'utility.mjs');
-    await fs.writeFile(file, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    await fs.writeFile(file, linkRuntime(output.code));
     const first = await import(pathToFileURL(file).href);
     const second = await import(pathToFileURL(file).href);
     assert.equal(first, second);

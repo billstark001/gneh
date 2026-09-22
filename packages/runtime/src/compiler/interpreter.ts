@@ -19,8 +19,9 @@ import {
   type StoryNode,
   type View,
 } from '@gneh/core';
-import { CallableRuntime, type ChildrenInvocation } from './callables.js';
-import { definePassage, isAuthoredCallable } from './definition.js';
+import { CallableRuntime, type ChildrenInvocation } from './callable-runtime.js';
+import { definePassage } from '../definitions/fragment.js';
+import { isAuthoredCallable } from '../definitions/callable.js';
 
 const maxIRDepth = 128;
 

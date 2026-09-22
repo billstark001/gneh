@@ -25,7 +25,7 @@
     "lsp": "node packages/lsp/dist/index.js --stdio",
     "build:offline": "node scripts/offline-build.mjs && node scripts/bundle.mjs --offline && node scripts/standalone.mjs",
     "test:offline": "pnpm build:offline && pnpm -r --workspace-concurrency=1 --if-present test",
-    "build:examples": "pnpm --filter @gneh/example-playground build && pnpm --filter @gneh/example-snapshot build && pnpm --filter @gneh/example-opinion-wiki build && pnpm --filter gneh-story build",
+    "build:examples": "pnpm --filter @gneh/example-playground --fail-if-no-match build && pnpm --filter @gneh/example-no-clean-getaway --fail-if-no-match build && pnpm --filter @gneh/example-opinion-wiki --fail-if-no-match build && pnpm --filter gneh-story --fail-if-no-match build",
     "audit:samples": "pnpm build && node scripts/audit-samples.mjs"
   },
   "devDependencies": {

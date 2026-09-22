@@ -1,7 +1,8 @@
 import { test } from 'vitest';
 import { assert, compiled, text } from './helpers.js';
 import { v } from '../../core/dist/index.js';
-import { Story, defineIRFragment, definePassage, definePassages } from '../dist/index.js';
+import { Story, definePassage, definePassages } from '../dist/index.js';
+import { defineIRFragment } from '../dist/compiler/index.js';
 
 test('handwritten flows are lazy and resume one explicit step at a time', () => {
   const reached: string[] = [];

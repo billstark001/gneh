@@ -24,7 +24,10 @@ async function offlineBundle(entry, output) {
   const ts = require(tsPath ? path.join(tsPath, 'lib/typescript.js') : 'typescript-language-service');
   const modules = new Map();
   function resolve(specifier, parent) {
-    if (specifier.startsWith('@gneh/')) return path.join(root, 'packages', specifier.slice(6), 'src/index.ts');
+    if (specifier.startsWith('@gneh/')) {
+      const [packageName, ...subpath] = specifier.slice(6).split('/');
+      return path.join(root, 'packages', packageName, 'src', ...subpath, 'index.ts');
+    }
     if (offlineBrowserDependencies.has(specifier)) return require.resolve(specifier, { paths: [path.dirname(parent)] });
     if (specifier.startsWith('.')) {
       const full = path.resolve(path.dirname(parent), specifier);
@@ -77,9 +80,16 @@ if (offline) {
     await build({
       configFile: false,
       resolve: {
-        alias: Object.fromEntries(
-          packages.map((name) => ['@gneh/' + name, path.join(root, 'packages', name, 'src/index.ts')]),
-        ),
+        alias: [
+          {
+            find: '@gneh/runtime/compiler',
+            replacement: path.join(root, 'packages/runtime/src/compiler/index.ts'),
+          },
+          ...packages.map((name) => ({
+            find: new RegExp(`^@gneh/${name}$`),
+            replacement: path.join(root, 'packages', name, 'src/index.ts'),
+          })),
+        ],
       },
       build: {
         target: 'es2022',

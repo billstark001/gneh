@@ -7,7 +7,7 @@ import {
   type DialectFrontend,
   type SourceInput,
 } from '@gneh/compiler';
-import { defineIRFragment } from '@gneh/runtime';
+import { defineIRFragment } from '@gneh/runtime/compiler';
 import { mountStory, type DOMStoryMount, type DOMStoryOptions } from '@gneh/renderer-dom';
 
 export * from '@gneh/core';
