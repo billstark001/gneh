@@ -9,6 +9,7 @@ import {
   type CallableIR,
   type EffectCallableRuntime,
   type EffectNode,
+  type EvaluationPhase,
   type Expression,
   type FragmentContext,
   type PassageIR,
@@ -116,20 +117,29 @@ export class CallableRuntime implements EffectCallableRuntime {
     return declaration ? this.instantiate(declaration, lexicalScope()) : undefined;
   }
 
-  context(ctx: FragmentContext, phase: FragmentContext['phase'] | 'value' = ctx.phase): FragmentContext {
-    const enhanced = Object.create(ctx) as FragmentContext;
-    Object.defineProperties(enhanced, {
-      phase: { value: phase, enumerable: true },
-      state: { value: phase === 'value' ? deepReadonly(ctx.state) : ctx.state, enumerable: true },
-      makeCallable: {
-        value: (id: string, scope: Scope) => {
-          const declaration = this.declarations.get(id);
-          invariant(declaration, 'E_CALLABLE', `Unknown callable declaration: ${id}`);
-          return this.callableValue(declaration, scope);
-        },
-      },
-      invokeValueCallable: {
-        value: (value: unknown, args: readonly unknown[]) => this.invokeValue(value, args, enhanced),
+  context(ctx: FragmentContext, phase: EvaluationPhase = ctx.phase): FragmentContext {
+    const state = phase === 'value' ? deepReadonly(ctx.state) : ctx.state;
+    const methods = new Map<PropertyKey, Function>();
+    let enhanced: FragmentContext;
+    enhanced = new Proxy(ctx, {
+      get: (target, property) => {
+        if (property === 'phase') return phase;
+        if (property === 'state') return state;
+        if (property === 'makeCallable')
+          return (id: string, scope: Scope) => {
+            const declaration = this.declarations.get(id);
+            invariant(declaration, 'E_CALLABLE', `Unknown callable declaration: ${id}`);
+            return this.callableValue(declaration, scope);
+          };
+        if (property === 'invokeValueCallable')
+          return (value: unknown, args: readonly unknown[]) => this.invokeValue(value, args, enhanced);
+        const value = Reflect.get(target, property, target) as unknown;
+        if (typeof value !== 'function') return value;
+        const bound = methods.get(property);
+        if (bound) return bound;
+        const next = value.bind(target);
+        methods.set(property, next);
+        return next;
       },
     });
     return enhanced;

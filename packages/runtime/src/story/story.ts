@@ -6,7 +6,6 @@ import {
   assertJson,
   cloneState,
   invariant,
-  normalizeView,
   safeKey,
   type AnyFragment,
   type FragmentContext,
@@ -17,7 +16,7 @@ import {
   type State,
   type StoryIR,
   type View,
-  type ViewInput,
+  type EvaluationPhase,
 } from '@gneh/core';
 import { deepReadonly } from '../internal/readonly.js';
 import { evaluateRenderInput } from './render.js';
@@ -37,19 +36,26 @@ import type {
   PassageSet,
 } from '../api-types.js';
 import type { Frame } from './frames.js';
+import { createFragmentContext, type ContextRuntimeHooks } from './context.js';
 
 const maxFragmentDepth = 128;
+const maxSteps = 100000;
 
 /** Renderer-neutral story kernel. Re-evaluation is batched per transaction (not signal-level). */
 export class Story {
   readonly live: boolean;
+  private readonly options: Readonly<StoryOptions>;
+  private readonly identity: string;
+  readonly #contextHooks: ContextRuntimeHooks;
+
   private readonly passageRegistry = new Map<string, AnyFragment>();
   private readonly setup: readonly Passage[];
   private readonly initialState: State;
   private readonly initialRoute: string;
+
   private values: State;
   private seed: number;
-  private readonly options: StoryOptions;
+
   private route: string;
   private props: Record<string, Json> = {};
   private frames = new Map<string, Frame>();
@@ -73,7 +79,6 @@ export class Story {
         props: Record<string, Json>;
       }
     | undefined;
-  private readonly identity: string;
   private renderDepth = 0;
   private settingUp = false;
   private restoredContinuations = new Map<string, ContinuationSnapshot>();
@@ -84,6 +89,7 @@ export class Story {
         accept?: (value: Json | undefined, ctx: FragmentContext) => void;
       }
     | undefined;
+
   constructor(input: StoryIR | PassageSet, options: StoryOptions = {}) {
     this.options = { ...options, flow: options.flow ? { ...options.flow } : undefined };
     this.live = this.options.live ?? true;
@@ -93,10 +99,32 @@ export class Story {
     this.setup = initialized.setup;
     this.identity = [...this.passageRegistry.keys()].sort().join('|');
     this.seed = (options.seed ?? 123456789) >>> 0;
+    const host = this.options.host;
+    this.#contextHooks = {
+      live: this.live,
+      projection: this.options.flow?.projection,
+      wikify: this.options.wikify,
+      state: (phase) => (phase === 'render' ? deepReadonly(this.values) : this.values),
+      restoring: () => this.skipEnter,
+      suspended: () => !!this.activeFlow,
+      bindings: () => ({ ...this.options.bindings, ...Object.fromEntries(this.registry) }),
+      step: () => this.#step(),
+      random: (min, max) => this.#random(min, max),
+      navigate: (target, props, frame, phase) => this.#performNavigation(target, props, frame, phase),
+      mutate: (fn) => this.mutate(fn),
+      installSuspension: (frame, key, resume, accept) => this.#installSuspension(frame, key, resume, accept),
+      dispatch: (action) => this.transact('action', action),
+      include: (target, props, frame, key) => this.#include(target, props, frame, key),
+      updateRegion: (frame, name, update) => this.#updateRegion(frame, name, update),
+      publish: (name, value) => this.#publish(name, value),
+      host: host ? (operation, args) => host(operation, args, this) : undefined,
+      runtimeExtension: (id) => this.options.runtimeExtensions?.[id],
+    };
     this.resolve(this.route);
     this.initialState = cloneState(this.values);
     this.initialRoute = this.route;
   }
+
   get state(): Readonly<State> {
     return deepReadonly(this.values);
   }
@@ -120,6 +148,7 @@ export class Story {
   get passages(): ReadonlyMap<string, AnyFragment> {
     return new Map(this.passageRegistry);
   }
+
   register(fragment: AnyFragment): void {
     invariant(isPassage(fragment), 'FRAGMENT_ABI', 'Expected a branded gneh Passage.');
     const existing = this.passageRegistry.get(fragment.id);
@@ -266,7 +295,7 @@ export class Story {
       this.renderDepth--;
     }
   }
-  private installSuspension(
+  #installSuspension(
     frame: Frame,
     key: string,
     resume: ResumeCondition,
@@ -304,240 +333,18 @@ export class Story {
     }
     return true;
   }
-  private context(frame: Frame, phase: 'render' | 'enter' | 'action'): FragmentContext {
-    // Keep an explicit kernel reference because accessors bind `this` to the context object.
-    // oxlint-disable-next-line typescript/no-this-alias
-    const story = this;
-    let includes = 0;
-    const alive = () => invariant(frame.alive, 'INSTANCE_DISPOSED', 'This fragment instance has been disposed.');
-    const readonlyState = phase === 'render' ? deepReadonly(story.values) : undefined;
-    const context: FragmentContext = {
-      get state() {
-        // Render is pure by contract. Enter/actions receive the transaction's
-        // private mutable copy, which is validated before it becomes observable.
-        return readonlyState ?? story.values;
-      },
-      get bindings() {
-        const linked: Record<string, unknown> = {};
-        const chain: Readonly<Record<string, unknown>>[] = [];
-        for (
-          let current = frame.fragment.bindings;
-          current && current !== Object.prototype;
-          current = Object.getPrototypeOf(current) as Readonly<Record<string, unknown>> | undefined
-        )
-          chain.push(current);
-        for (let index = chain.length - 1; index >= 0; index--)
-          for (const key of Object.keys(chain[index])) linked[key] = chain[index][key];
-        return {
-          ...linked,
-          ...story.options.bindings,
-          ...Object.fromEntries(story.registry),
-          navigate: (id: string, props?: FragmentProps) => context.navigate(id, props),
-          host: (operation: string, ...args: unknown[]) => context.host(operation, args),
-        };
-      },
-      live: this.live,
-      instanceId: frame.id,
-      mountKey: frame.key,
-      restoring: story.skipEnter,
-      get suspended() {
-        return !!story.activeFlow;
-      },
-      phase,
-      step() {
-        if (++story.steps > (story.options.maxSteps ?? 100000))
-          throw new GnehError('STEP_LIMIT', 'Execution budget exhausted.');
-      },
-      random(min, max) {
-        invariant(phase !== 'render', 'E_PURITY', 'Randomness must be stored during enter/actions.');
-        invariant(
-          Number.isSafeInteger(min) && Number.isSafeInteger(max) && max >= min && Number.isSafeInteger(max - min + 1),
-          'E_RANDOM',
-          'Invalid random range.',
-        );
-        story.seed = (Math.imul(1664525, story.seed) + 1013904223) >>> 0;
-        return min + Math.floor((story.seed / 4294967296) * (max - min + 1));
-      },
-      navigate(target: string | AnyFragment, props: object = {}) {
-        alive();
-        invariant(!story.settingUp, 'SETUP_NAVIGATION', 'Setup passages cannot navigate.');
-        const fragment = story.resolve(target, frame);
-        if (story.rendering && phase === 'enter') {
-          if (!story.passageRegistry.has(fragment.id)) story.register(fragment);
-          story.pendingRoute = {
-            id: fragment.id,
-            props: cloneState(props as Record<string, Json>),
-          };
-          story.newFrames = true;
-          return;
-        }
-        story.navigate(fragment, props as FragmentProps);
-      },
-      mutate(fn) {
-        alive();
-        story.mutate(fn);
-      },
-      local<T>(key: string, initialize: (ctx: FragmentContext) => T): T {
-        alive();
-        if (frame.locals.has(key)) return frame.locals.get(key) as T;
-        const value = initialize(story.context(frame, 'enter'));
-        const restored = frame.restoredScopes.get(key);
-        if (restored && value && typeof value === 'object' && !Array.isArray(value)) {
-          Object.assign(value as object, cloneState(restored));
-          frame.restoredScopes.delete(key);
-        }
-        frame.locals.set(key, value);
-        return value;
-      },
-      setLocal<T>(key: string, value: T) {
-        alive();
-        frame.locals.set(key, value);
-      },
-      continuation<T extends Json>(key: string, initialize: (ctx: FragmentContext) => T): T {
-        alive();
-        safeKey(key);
-        const storageKey = `continuation:${key}`;
-        if (frame.locals.has(storageKey)) return frame.locals.get(storageKey) as T;
-        const value = initialize(story.context(frame, 'enter'));
-        assertJson(value);
-        const cloned = cloneState(value);
-        frame.locals.set(storageKey, cloned);
-        return cloned;
-      },
-      setContinuation<T extends Json>(key: string, value: T) {
-        alive();
-        safeKey(key);
-        assertJson(value);
-        frame.locals.set(`continuation:${key}`, cloneState(value));
-      },
-      deleteContinuation(key) {
-        alive();
-        safeKey(key);
-        frame.locals.delete(`continuation:${key}`);
-      },
-      evaluate(input, key = 'nested') {
-        alive();
-        return evaluateRenderInput(context, input, `${frame.key}/${key}`, story.options.flow?.projection);
-      },
-      suspend(key, resume = { type: 'manual' }, accept) {
-        alive();
-        return story.installSuspension(frame, key, resume, accept);
-      },
-      effect(key, action) {
-        alive();
-        if (frame.locals.has('effect:' + key)) return;
-        frame.locals.set('effect:' + key, true);
-        if (!story.skipEnter) action(story.context(frame, 'enter'));
-      },
-      host(operation, args = []) {
-        alive();
-        invariant(story.options.host, 'HOST_CAPABILITY', `Host operation is unavailable: ${operation}`);
-        return story.options.host(operation, args, story);
-      },
-      invokeExtension(id, extensionPhase, args, children) {
-        alive();
-        invariant(
-          (extensionPhase === 'view' && phase === 'render') || (extensionPhase === 'effect' && phase === 'enter'),
-          'RUNTIME_EXTENSION_PHASE',
-          `Runtime extension ${id} cannot run during ${phase}.`,
-        );
-        const extension = story.options.runtimeExtensions?.[id];
-        invariant(extension, 'RUNTIME_EXTENSION_MISSING', `Runtime extension is unavailable: ${id}`);
-        invariant(
-          extension.phases.includes(extensionPhase),
-          'RUNTIME_EXTENSION_PHASE',
-          `Runtime extension ${id} does not support ${extensionPhase}.`,
-        );
-        return normalizeView(extension.invoke({ id, phase: extensionPhase, args, context, children }) ?? undefined);
-      },
-      dispatch(action) {
-        alive();
-        invariant(story.live, 'CAPABILITY_LIVE', 'This context does not allow live actions.');
-        story.transact('action', () => action(story.context(frame, 'action')));
-      },
-      include(target: string | AnyFragment, props: object = {}, key = `call${includes++}`) {
-        alive();
-        const fragment = story.resolve(target, frame);
-        const child = story.frame(fragment, props as FragmentProps, `${frame.key}/${key}`);
-        return story.renderFrame(child);
-      },
-      region(name) {
-        alive();
-        invariant(story.live, 'CAPABILITY_LIVE', 'This context has no mutable regions.');
-        invariant(
-          frame.declaredRegions.has(name),
-          'REGION_MISSING',
-          `No mounted region named ${name} in ${frame.fragment.id}.`,
-        );
-        return story.regionHandle(frame, name);
-      },
-      regionView(name, fallback) {
-        // A handle is valid only while mounted; overrides belong to its frame, not story state.
-        safeKey(name);
-        frame.declaredRegions.add(name);
-        const override = frame.regions.get(name);
-        let children = override?.replace ? [] : fallback();
-        const renderItems = (items: (ViewInput | AnyFragment)[], side: string) =>
-          items.flatMap((content, index) =>
-            typeof content === 'object' &&
-            content !== null &&
-            !Array.isArray(content) &&
-            'kind' in content &&
-            content.kind === 'gneh.fragment'
-              ? context.include(content as AnyFragment, {}, `region:${name}:${side}:${index}`)
-              : normalizeView(content as ViewInput),
-          );
-        if (override)
-          children = renderItems(override.before, 'before').concat(children, renderItems(override.after, 'after'));
-        return { kind: 'region', key: `${frame.id}/region:${name}`, attrs: { name }, children };
-      },
-      onDispose(cleanup) {
-        invariant(phase === 'enter', 'LIFECYCLE_PHASE', 'Register disposal during enter(), not during render().');
-        frame.cleanups.add(cleanup);
-      },
-      publish(name, value) {
-        alive();
-        safeKey(name);
-        story.registry.set(name, value);
-      },
-    };
-    if (this.options.wikify) context.wikify = this.options.wikify;
-    return context;
+  private context(frame: Frame, phase: EvaluationPhase): FragmentContext {
+    return createFragmentContext(this.#contextHooks, frame, phase);
   }
-  private regionHandle(frame: Frame, name: string): RegionHandle {
-    const update = (fn: () => void) => {
-      invariant(frame.alive, 'INSTANCE_DISPOSED', 'Region owner is no longer mounted.');
-      invariant(frame.declaredRegions.has(name), 'REGION_MISSING', 'Region is no longer visible.');
-      fn();
-      if (this.rendering) this.newFrames = true;
-      else if (!this.transactionDepth) this.refresh();
-    };
-    return {
-      set: (content) => update(() => frame.regions.set(name, { replace: true, before: [], after: [content] })),
-      append: (content) =>
-        update(() => {
-          const existing = frame.regions.get(name) ?? {
-            replace: false,
-            before: [],
-            after: [],
-          };
-          existing.after.push(content);
-          frame.regions.set(name, existing);
-        }),
-      prepend: (content) =>
-        update(() => {
-          const existing = frame.regions.get(name) ?? {
-            replace: false,
-            before: [],
-            after: [],
-          };
-          existing.before.unshift(content);
-          frame.regions.set(name, existing);
-        }),
-      clear: () => update(() => frame.regions.set(name, { replace: true, before: [], after: [] })),
-      reset: () => update(() => frame.regions.delete(name)),
-    };
+
+  #updateRegion(frame: Frame, name: string, update: () => void): void {
+    invariant(frame.alive, 'INSTANCE_DISPOSED', 'Region owner is no longer mounted.');
+    invariant(frame.declaredRegions.has(name), 'REGION_MISSING', 'Region is no longer visible.');
+    update();
+    if (this.rendering) this.newFrames = true;
+    else if (!this.transactionDepth) this.refresh();
   }
+
   /** Root-scoped lookup. Nested fragment regions stay private to their own context. */
   region(name: string): RegionHandle {
     const root = this.frames.get('root');
@@ -559,11 +366,25 @@ export class Story {
     });
     return true;
   }
+
+  /** Generate a random number within the specified range, then advance the seed. */
+  #random(min: number, max: number): number {
+    this.seed = (Math.imul(1664525, this.seed) + 1013904223) >>> 0;
+    return min + Math.floor((this.seed / 4294967296) * (max - min + 1));
+  }
+
+  /** Advance the execution step. */
+  #step(): void {
+    if (++this.steps > (this.options.maxSteps ?? maxSteps))
+      throw new GnehError('STEP_LIMIT', 'Execution budget exhausted.');
+  }
+
   /** Resume a manual suspension. */
   advance(value?: Json): boolean {
     if (this.activeFlow?.descriptor.resume.type !== 'manual') return false;
     return this.resumeActive(value);
   }
+
   /** Deliver a named signal to the active suspension. */
   signal(name: string, value?: Json): boolean {
     const condition = this.activeFlow?.descriptor.resume;
@@ -571,18 +392,21 @@ export class Story {
     if (condition.filter !== undefined && JSON.stringify(condition.filter) !== JSON.stringify(value)) return false;
     return this.resumeActive(value);
   }
+
   /** Resume a timer suspension once the injected clock reaches its deadline. */
   tick(now = this.options.now?.() ?? Date.now()): boolean {
     const active = this.activeFlow?.descriptor;
     if (!active || active.resume.type !== 'timer' || active.dueAt === undefined || now < active.dueAt) return false;
     return this.resumeActive(now);
   }
+
   /** Complete an application-owned task suspension with a JSON result. */
   completeTask(operation: string, value?: Json): boolean {
     const condition = this.activeFlow?.descriptor.resume;
     if (!condition || condition.type !== 'task' || condition.operation !== operation) return false;
     return this.resumeActive(value);
   }
+
   navigate(target: string | AnyFragment, props: FragmentProps = {}): void {
     const fragment = this.resolve(target);
     if (!this.passageRegistry.has(fragment.id)) this.register(fragment);
@@ -597,6 +421,38 @@ export class Story {
       this.pendingRoute = { id: fragment.id, props: cloneState(props as Record<string, Json>) };
     });
   }
+
+  #performNavigation(
+    target: string | AnyFragment,
+    props: FragmentProps = {},
+    frame: Frame | undefined,
+    phase: EvaluationPhase,
+  ): void {
+    invariant(!this.settingUp, 'SETUP_NAVIGATION', 'Setup passages cannot navigate.');
+    const fragment = this.resolve(target, frame);
+    if (this.rendering && phase === 'enter') {
+      if (!this.passageRegistry.has(fragment.id)) this.register(fragment);
+      this.pendingRoute = {
+        id: fragment.id,
+        props: cloneState(props as Record<string, Json>),
+      };
+      this.newFrames = true;
+      return;
+    }
+    this.navigate(fragment, props as FragmentProps);
+  }
+
+  #include(target: string | AnyFragment, props: object, frame: Frame, key: string): View[] {
+    const fragment = this.resolve(target, frame);
+    const child = this.frame(fragment, props as FragmentProps, `${frame.key}/${key}`);
+    return this.renderFrame(child);
+  }
+
+  #publish(name: string, value: unknown): void {
+    safeKey(name);
+    this.registry.set(name, value);
+  }
+
   private transact(type: 'action' | 'navigate' | 'resume', action: () => void): void {
     invariant(!this.rendering, 'RENDER_EFFECT', 'Navigation and mutations cannot occur while rendering.');
     if (this.transactionDepth) {
