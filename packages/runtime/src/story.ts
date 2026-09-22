@@ -122,7 +122,8 @@ export class Story {
     return this.currentView;
   }
   get suspension(): ActiveSuspension | undefined {
-    return this.activeFlow?.descriptor;
+    const descriptor = this.activeFlow?.descriptor;
+    return descriptor ? { ...descriptor, resume: cloneState(descriptor.resume) } : undefined;
   }
   get passages(): ReadonlyMap<string, AnyFragment> {
     return new Map(this.passageRegistry);
@@ -423,11 +424,12 @@ export class Story {
     const story = this;
     let includes = 0;
     const alive = () => invariant(frame.alive, 'INSTANCE_DISPOSED', 'This fragment instance has been disposed.');
+    const readonlyState = phase === 'render' ? deepReadonly(story.values) : undefined;
     const context: FragmentContext = {
       get state() {
         // Render is pure by contract. Enter/actions receive the transaction's
         // private mutable copy, which is validated before it becomes observable.
-        return phase === 'render' ? deepReadonly(story.values) : story.values;
+        return readonlyState ?? story.values;
       },
       get bindings() {
         const linked: Record<string, unknown> = {};
@@ -873,6 +875,7 @@ export class Story {
     const beforePast = this.past;
     const beforeFuture = this.future;
     const beforeRegistry = new Map(this.registry);
+    const wasStarted = this.started;
     try {
       this.past = storySupport.boundedHistory(data.past, this.options.historyLimit);
       this.future = storySupport.boundedHistory(data.future, this.options.historyLimit);
@@ -898,8 +901,14 @@ export class Story {
       this.future = beforeFuture;
       this.registry = beforeRegistry;
       this.restoredContinuations = new Map(Object.entries(cloneState(before.continuations)));
-      this.skipEnter = true;
-      this.refresh();
+      this.started = wasStarted;
+      if (wasStarted) {
+        this.skipEnter = true;
+        this.refresh();
+      } else {
+        this.skipEnter = false;
+        this.currentView = [];
+      }
       throw error;
     }
   }
@@ -908,6 +917,7 @@ export class Story {
     const beforePast = this.past;
     const beforeFuture = this.future;
     const beforeRegistry = new Map(this.registry);
+    const wasStarted = this.started;
     try {
       this.route = this.initialRoute;
       this.props = {};
@@ -931,8 +941,14 @@ export class Story {
       this.future = beforeFuture;
       this.registry = beforeRegistry;
       this.restoredContinuations = new Map(Object.entries(cloneState(before.continuations)));
-      this.skipEnter = true;
-      this.refresh();
+      this.started = wasStarted;
+      if (wasStarted) {
+        this.skipEnter = true;
+        this.refresh();
+      } else {
+        this.skipEnter = false;
+        this.currentView = [];
+      }
       throw error;
     }
   }

@@ -20,6 +20,12 @@ export function deepReadonly<T>(value: T, cache = new WeakMap<object, unknown>()
     defineProperty() {
       throw new GnehError('READ_ONLY', 'Render state is read-only.');
     },
+    setPrototypeOf() {
+      throw new GnehError('READ_ONLY', 'Render state is read-only.');
+    },
+    preventExtensions() {
+      throw new GnehError('READ_ONLY', 'Render state is read-only.');
+    },
   });
   cache.set(value, proxy);
   return proxy as T;

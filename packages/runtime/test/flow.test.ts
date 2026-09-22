@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import { assert, compiled, text } from './helpers.js';
-import { Story, defineIRFragment, definePassage, definePassages, v } from '../dist/index.js';
+import { v } from '../../core/dist/index.js';
+import { Story, defineIRFragment, definePassage, definePassages } from '../dist/index.js';
 
 test('handwritten flows are lazy and resume one explicit step at a time', () => {
   const reached: string[] = [];
@@ -190,6 +191,20 @@ test('signal, timer and task suspensions resume only through their matching API'
   assert.equal(s.completeTask('other'), false);
   assert.equal(s.completeTask('fetch', { ok: true }), true);
   assert.equal(text(s.view), 'ABCD');
+});
+
+test('the public suspension descriptor cannot mutate the active suspension', () => {
+  const passage = definePassage({
+    id: 'Protected',
+    capabilities: ['live'],
+    render: () => v.flow('A', v.suspend({ type: 'manual' }, 'pause'), 'B'),
+  });
+  const instance = new Story(definePassages(passage), { entry: 'Protected' }).start();
+  const exposed = instance.suspension!;
+
+  (exposed.resume as { type: string }).type = 'signal';
+  assert.equal(instance.advance(), true);
+  assert.equal(text(instance.view), 'AB');
 });
 
 test('a failed load restores the prior continuation frontier', () => {
