@@ -93,7 +93,7 @@ export interface RuntimeExtensionInvocation {
 }
 
 export interface RuntimeExtension {
-  readonly phases: readonly (InvocationPhase)[];
+  readonly phases: readonly InvocationPhase[];
   invoke(invocation: RuntimeExtensionInvocation): ViewInput | void;
 }
 

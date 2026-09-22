@@ -11,6 +11,7 @@ export interface Expression {
 }
 
 export type InvocationPhase = 'view' | 'effect';
+
 export type CallablePhase = InvocationPhase | 'value';
 
 export interface ValueCallableBodyIR {

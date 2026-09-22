@@ -315,6 +315,10 @@ class FragmentContextImpl implements FragmentContext {
   }
 }
 
-export function createFragmentContext(hooks: ContextRuntimeHooks, frame: Frame, phase: EvaluationPhase): FragmentContext {
+export function createFragmentContext(
+  hooks: ContextRuntimeHooks,
+  frame: Frame,
+  phase: EvaluationPhase,
+): FragmentContext {
   return new FragmentContextImpl(hooks, frame, phase);
 }
