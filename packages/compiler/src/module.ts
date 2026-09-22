@@ -163,7 +163,7 @@ export function generateModule(
         ? `import * as ${value.local} from ${JSON.stringify(value.source)};`
         : `import { ${value.imported}${value.imported === value.local ? '' : ` as ${value.local}`} } from ${JSON.stringify(value.source)};`,
     ),
-    'import { defineIRFragment as __gneh, definePassages as __sets, initializeModule as __init } from "@gneh/runtime";',
+    'import { defineIRFragment as __gneh, definePassageSet as __sets, initializeModule as __init } from "@gneh/runtime";',
   ];
   const mapping: {
     line: number;

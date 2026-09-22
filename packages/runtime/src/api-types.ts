@@ -1,16 +1,61 @@
-import {
+import type {
   ABI_VERSION,
-  type AnyFragment,
-  type Dialect,
-  type Fragment,
-  type FragmentProps,
-  type Json,
-  type ResumeCondition,
-  type RuntimeExtension,
-  type State,
-  type ViewInput,
+  CallablePhase,
+  Dialect,
+  Fragment,
+  FragmentContext,
+  FragmentProps,
+  Json,
+  Metadata,
+  PassageIR,
+  RenderInput,
+  ResumeCondition,
+  RuntimeExtension,
+  State,
 } from '@gneh/core';
 import type { Story } from './story.js';
+import type { authoredCallableBrand, passageBrand, passageSetBrand } from './brands.js';
+
+export interface FragmentDefinition<P extends object> {
+  id: string;
+  metadata?: Metadata;
+  capabilities?: string[];
+  bindings?: Readonly<Record<string, unknown>>;
+  ir?: PassageIR;
+  enter?: (ctx: FragmentContext, props: P) => void;
+  render: (ctx: FragmentContext, props: P) => RenderInput;
+}
+
+export interface PassageDefinition<P extends object> extends FragmentDefinition<P> {
+  name?: string;
+}
+
+export interface Passage<P extends object = FragmentProps> extends Fragment<P> {
+  readonly [passageBrand]: true;
+}
+
+export type PassageRecord = Readonly<Record<string, Passage>>;
+
+export type PassageSet = PassageRecord & { readonly [passageSetBrand]: true };
+
+export type PassageInput = Passage | PassageSet | PassageRecord;
+
+export interface PassageSetDefinition {
+  passages: PassageInput | readonly PassageInput[];
+  setup?: readonly (Passage | string)[];
+}
+
+export interface AuthoredCallable<P extends CallablePhase = CallablePhase> {
+  readonly kind: 'gneh.authored-callable';
+  readonly phase: P;
+  readonly [authoredCallableBrand]: true;
+  readonly invoke: (...args: unknown[]) => unknown;
+}
+
+export interface ModuleBindingCell {
+  get(): unknown;
+  set(value: unknown): void;
+}
 
 export interface Snapshot {
   current: string;
@@ -70,30 +115,6 @@ export interface StoryOptions {
   now?: () => number;
   /** Renderer/application-owned effects. The story kernel never reaches for DOM or browser globals. */
   host?: (operation: string, args: readonly unknown[], story: Story) => unknown;
-}
-
-export interface RegionOverride {
-  replace: boolean;
-  before: (ViewInput | AnyFragment)[];
-  after: (ViewInput | AnyFragment)[];
-}
-
-/** Runtime identity and transient UI state for one mounted Fragment invocation. */
-export interface Frame {
-  id: string;
-  key: string;
-  fragment: AnyFragment;
-  props: FragmentProps;
-  alive: boolean;
-  entered: boolean;
-  cleanups: Set<() => void>;
-  regions: Map<string, RegionOverride>;
-  declaredRegions: Set<string>;
-  locals: Map<string, unknown>;
-  /** Suspension keys already crossed by this mounted invocation. */
-  passed: Set<string>;
-  /** Serialized lexical slots applied when their scope is reconstructed. */
-  restoredScopes: Map<string, State>;
 }
 
 export interface ActiveSuspension {

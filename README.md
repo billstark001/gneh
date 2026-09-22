@@ -98,7 +98,8 @@ File YAML owns module metadata, imports, named exports, and setup. Passage metad
 ## Handwritten JavaScript uses the same ABI
 
 ```js
-import { definePassage, v } from '@gneh/runtime';
+import { v } from '@gneh/core';
+import { definePassage } from '@gneh/runtime';
 
 /** @typedef {{label: string}} Props */
 export default definePassage({

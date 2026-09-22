@@ -1,4 +1,5 @@
-import { definePassage, v } from '@gneh/runtime';
+import { v } from '@gneh/core';
+import { definePassage } from '@gneh/runtime';
 import passages from './story.inkdown';
 
 export const description = 'A handwritten Passage composed with the compiled Wiki at the application boundary.';

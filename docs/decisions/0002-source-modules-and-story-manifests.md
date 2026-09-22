@@ -205,13 +205,13 @@ Compatibility constructs such as Sugarcast `<<include>>` and Karlowe `(display:)
 
 ## Generated ESM and PassageSet
 
-`PassageSet` is an immutable keyed collection whose keys are canonical passage IDs. It also carries a compiler-owned, non-enumerable ordered setup plan:
+`PassageSet` is an immutable keyed collection whose keys are canonical passage IDs. It also carries a runtime-private, non-enumerable ordered setup plan:
 
 ```ts
-declare const passageSetSetup: unique symbol;
+declare const passageSetTypeBrand: unique symbol;
 
 type PassageSet = Readonly<Record<string, Passage>> & {
-  readonly [passageSetSetup]: readonly Passage[];
+  readonly [passageSetTypeBrand]: true;
 };
 
 type PassageRecord = Readonly<Record<string, Passage>>;
@@ -255,7 +255,7 @@ const __passage1: Passage = definePassage({
   // compiled body IR
 });
 
-const passages = definePassages({
+const passages = definePassageSet({
   passages: {
     Start,
     EnemyCard: __passage1,
@@ -266,12 +266,12 @@ const passages = definePassages({
 export default passages;
 ```
 
-Generated JavaScript omits TypeScript annotations and `satisfies`, but retains the `definePassages` call for branding, freezing, key/ID validation, and diagnostics. Passage names which are not safe JavaScript identifiers use compiler-owned local names and quoted object keys.
+Generated JavaScript omits TypeScript annotations and `satisfies`, but retains the `definePassageSet` call for branding, freezing, key/ID validation, and diagnostics. Passage names which are not safe JavaScript identifiers use compiler-owned local names and quoted object keys.
 
-`definePassages` is an ordinary pure JavaScript function, not a compiler macro. It accepts keyed passages and existing PassageSets, rejects duplicate canonical IDs unless an explicit policy says otherwise, and returns the same PassageSet type. Its object form provides exactly the same setup capability as file YAML:
+`definePassages` and `definePassageSet` are ordinary pure JavaScript functions, not compiler macros. `definePassages` composes passages, keyed records, and existing PassageSets. `definePassageSet` adds an explicit setup plan without reserving any possible passage ID in a keyed record:
 
 ```ts
-export default definePassages({
+export default definePassageSet({
   passages: {
     Start,
     Definitions,
@@ -292,10 +292,10 @@ import { definePassages } from '@gneh/runtime';
 export default definePassages(intro, reading, vault);
 ```
 
-Composition which adds setup passages uses the object form. Inherited plans run first in input order, followed by the explicitly listed passages:
+Composition which adds setup passages uses `definePassageSet`. Inherited plans run first in input order, followed by the explicitly listed passages:
 
 ```ts
-export default definePassages({
+export default definePassageSet({
   passages: [intro, reading, vault],
   setup: [ApplicationSetup],
 });

@@ -10,11 +10,7 @@ import {
   type View,
 } from '@gneh/core';
 import { defineIRFragment } from './fragment.js';
-
-export interface ModuleBindingCell {
-  get(): unknown;
-  set(value: unknown): void;
-}
+import type { ModuleBindingCell } from './api-types.js';
 
 const unavailable = (facility: string): never => {
   throw new GnehError('PRIMARY_CONTEXT', `${facility} is unavailable in the primary initializer.`);

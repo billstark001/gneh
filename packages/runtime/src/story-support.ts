@@ -8,9 +8,11 @@ import {
   type State,
   type StoryIR,
 } from '@gneh/core';
-import { isPassage, passageSetSetup, type Passage, type PassageSet } from './definition.js';
+import { isPassage } from './definition.js';
+import { passageSetSetup } from './brands.js';
 import { defineIRFragment } from './fragment.js';
-import type { Frame, SaveData, Snapshot, StoryOptions } from './story-types.js';
+import type { Passage, PassageSet, SaveData, Snapshot, StoryOptions } from './api-types.js';
+import type { Frame } from './story-internals.js';
 
 export interface StoryInitialization {
   setup: readonly Passage[];
@@ -77,7 +79,7 @@ export function initializeStoryInput(
   return {
     route: options.entry ?? starts[0].id,
     values: cloneState(options.state ?? {}),
-    setup: passageSet[passageSetSetup],
+    setup: (passageSet as PassageSet & { readonly [passageSetSetup]: readonly Passage[] })[passageSetSetup],
   };
 }
 

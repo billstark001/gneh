@@ -1,54 +1,16 @@
-import {
-  invariant,
-  type Fragment,
-  type FragmentContext,
-  type FragmentProps,
-  type Metadata,
-  type PassageIR,
-  type CallablePhase,
-  type RenderInput,
-} from '@gneh/core';
+import { invariant, type FragmentProps, type CallablePhase, type Fragment, type RenderInput } from '@gneh/core';
+import type {
+  AuthoredCallable,
+  FragmentDefinition,
+  Passage,
+  PassageDefinition,
+  PassageInput,
+  PassageSet,
+  PassageSetDefinition,
+} from './api-types.js';
+import { authoredCallableBrand, passageBrand, passageSetBrand, passageSetSetup } from './brands.js';
 
-export const passageSetSetup: unique symbol = Symbol('gneh.passage-set.setup');
-
-const passageBrand: unique symbol = Symbol('gneh.passage');
-const callableBrand: unique symbol = Symbol('gneh.authored-callable');
-
-export interface FragmentDefinition<P extends object> {
-  id: string;
-  metadata?: Metadata;
-  capabilities?: string[];
-  bindings?: Readonly<Record<string, unknown>>;
-  ir?: PassageIR;
-  enter?: (ctx: FragmentContext, props: P) => void;
-  render: (ctx: FragmentContext, props: P) => RenderInput;
-}
-
-export interface PassageDefinition<P extends object> extends FragmentDefinition<P> {
-  name?: string;
-}
-
-export interface Passage<P extends object = FragmentProps> extends Fragment<P> {
-  readonly [passageBrand]: true;
-}
-
-export type PassageRecord = Readonly<Record<string, Passage>>;
-
-export type PassageSet = PassageRecord & { readonly [passageSetSetup]: readonly Passage[] };
-
-export type PassageInput = Passage | PassageSet | PassageRecord;
-
-export interface PassageSetDefinition {
-  passages: PassageInput | readonly PassageInput[];
-  setup?: readonly (Passage | string)[];
-}
-
-export interface AuthoredCallable<P extends CallablePhase = CallablePhase> {
-  readonly kind: 'gneh.authored-callable';
-  readonly phase: P;
-  readonly [callableBrand]: true;
-  readonly invoke: (...args: unknown[]) => unknown;
-}
+type RuntimePassageSet = PassageSet & { readonly [passageSetSetup]: readonly Passage[] };
 
 function defineCallable<P extends CallablePhase, Args extends unknown[]>(
   phase: P,
@@ -58,7 +20,7 @@ function defineCallable<P extends CallablePhase, Args extends unknown[]>(
   return Object.freeze({
     kind: 'gneh.authored-callable' as const,
     phase,
-    [callableBrand]: true as const,
+    [authoredCallableBrand]: true as const,
     invoke: invoke as (...args: unknown[]) => unknown,
   });
 }
@@ -71,7 +33,12 @@ export const defineValue = <Args extends unknown[]>(invoke: (...args: Args) => u
   defineCallable('value', invoke);
 
 export function isAuthoredCallable(value: unknown): value is AuthoredCallable {
-  return !!value && typeof value === 'object' && (value as AuthoredCallable).kind === 'gneh.authored-callable';
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    (value as AuthoredCallable).kind === 'gneh.authored-callable' &&
+    (value as AuthoredCallable)[authoredCallableBrand] === true
+  );
 }
 
 export function defineFragment<P extends object = FragmentProps>(definition: FragmentDefinition<P>): Fragment<P> {
@@ -93,31 +60,22 @@ export function definePassage<P extends object = FragmentProps>(definition: Pass
     ...definition,
     metadata: { ...definition.metadata, name: definition.name ?? definition.metadata?.name ?? definition.id },
   });
-  return Object.freeze({ ...fragment, [passageBrand]: true as const }) as Passage<P>;
+  return Object.freeze({ ...fragment, [passageBrand]: true as const });
 }
 
 export function isPassage(value: unknown): value is Passage {
   return !!value && typeof value === 'object' && (value as Passage)[passageBrand] === true;
 }
 
-export function isPassageSet(value: unknown): value is PassageSet {
-  return !!value && typeof value === 'object' && passageSetSetup in value;
+export function isPassageSet(value: unknown): value is RuntimePassageSet {
+  return !!value && typeof value === 'object' && (value as PassageSet)[passageSetBrand] === true;
 }
 
 function inputs(value: PassageInput | readonly PassageInput[]): readonly PassageInput[] {
   return Array.isArray(value) ? (value as readonly PassageInput[]) : [value as PassageInput];
 }
 
-export function definePassages(...values: [PassageSetDefinition] | PassageInput[]): PassageSet {
-  const objectForm =
-    values.length === 1 &&
-    !!values[0] &&
-    typeof values[0] === 'object' &&
-    !isPassage(values[0]) &&
-    !isPassageSet(values[0]) &&
-    Object.hasOwn(values[0], 'passages');
-  const definition = objectForm ? (values[0] as PassageSetDefinition) : undefined;
-  const source = definition ? inputs(definition.passages) : (values as PassageInput[]);
+function createPassageSet(source: readonly PassageInput[], setupReferences: readonly (Passage | string)[]): PassageSet {
   const result: Record<string, Passage> = Object.create(null);
   const setup: Passage[] = [];
   const addPassage = (key: string, passage: Passage) => {
@@ -133,7 +91,7 @@ export function definePassages(...values: [PassageSetDefinition] | PassageInput[
       if (isPassageSet(input)) setup.push(...input[passageSetSetup]);
     }
   }
-  for (const reference of definition?.setup ?? []) {
+  for (const reference of setupReferences) {
     const passage = typeof reference === 'string' ? result[reference] : reference;
     invariant(
       passage && result[passage.id] === passage,
@@ -147,6 +105,17 @@ export function definePassages(...values: [PassageSetDefinition] | PassageInput[
     invariant(!seen.has(passage.id), 'DUPLICATE_SETUP', `Duplicate setup passage: ${passage.id}`);
     seen.add(passage.id);
   }
-  Object.defineProperty(result, passageSetSetup, { value: Object.freeze(setup), enumerable: false });
+  Object.defineProperties(result, {
+    [passageSetBrand]: { value: true, enumerable: false },
+    [passageSetSetup]: { value: Object.freeze(setup), enumerable: false },
+  });
   return Object.freeze(result) as PassageSet;
+}
+
+export function definePassages(...values: PassageInput[]): PassageSet {
+  return createPassageSet(values, []);
+}
+
+export function definePassageSet(definition: PassageSetDefinition): PassageSet {
+  return createPassageSet(inputs(definition.passages), definition.setup ?? []);
 }

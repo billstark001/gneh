@@ -8,6 +8,7 @@ import { generateModule } from '../dist/index.js';
 import { definePassages, Story } from '../../runtime/dist/index.js';
 
 const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
+const core = new URL('../../core/dist/index.js', import.meta.url).href;
 
 async function emittedStory(source: string, modules: Record<string, string>) {
   const result = compiled(source);
@@ -61,7 +62,8 @@ imports:
     await fs.writeFile(
       nativeFile,
       `import passages from './story.mjs';
-import { definePassage, v } from ${JSON.stringify(runtime)};
+import { definePassage } from ${JSON.stringify(runtime)};
+import { v } from ${JSON.stringify(core)};
 export default definePassage({
   id: 'ModelLab',
   bindings: { get Primer() { return passages.Primer; } },

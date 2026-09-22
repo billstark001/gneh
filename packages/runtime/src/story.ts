@@ -25,28 +25,21 @@ import {
   type ViewInput,
 } from '@gneh/core';
 import { deepReadonly } from './readonly.js';
-import { type Passage, type PassageSet, isPassage } from './definition.js';
+import { isPassage } from './definition.js';
 import * as storySupport from './story-support.js';
 import type {
   ActiveSuspension,
   ContinuationSnapshot,
-  Frame,
   SaveData,
   Snapshot,
   StoryOptions,
   TraceEvent,
-} from './story-types.js';
+  Passage,
+  PassageSet,
+} from './api-types.js';
+import type { Frame } from './story-internals.js';
 
 const maxFragmentDepth = 128;
-
-export type {
-  ActiveSuspension,
-  ContinuationSnapshot,
-  SaveData,
-  Snapshot,
-  StoryOptions,
-  TraceEvent,
-} from './story-types.js';
 
 /** Renderer-neutral story kernel. Re-evaluation is batched per transaction (not signal-level). */
 export class Story {
@@ -965,5 +958,3 @@ export class Story {
     this.currentView = [];
   }
 }
-
-export const createStory = (input: StoryIR | PassageSet, options?: StoryOptions): Story => new Story(input, options);

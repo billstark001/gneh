@@ -1,4 +1,5 @@
-import { defineView, v } from '@gneh/runtime';
+import { v } from '@gneh/core';
+import { defineView } from '@gneh/runtime';
 
 export const formulaDescription =
   'A handwritten defineView() emits a semantic extension node; a renderer-dom plugin owns the resulting DOM.';

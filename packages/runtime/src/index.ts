@@ -1,27 +1,32 @@
 /** Stable package entry point. */
-export { v } from '@gneh/core';
+export { bindFragment } from './binding.js';
+export {
+  defineAction,
+  defineFragment,
+  definePassage,
+  definePassageSet,
+  definePassages,
+  defineValue,
+  defineView,
+} from './definition.js';
+export { defineIRFragment } from './fragment.js';
+export { initializeModule } from './module.js';
+export { Story } from './story.js';
 
 export type {
-  Flow,
-  FlowEach,
-  FlowLazy,
-  FlowNode,
-  FlowSuspend,
-  Fragment,
-  FragmentContext,
-  FragmentProps,
-  RenderInput,
-  ResumeCondition,
-  View,
-  ViewInput,
-  Renderer,
-} from '@gneh/core';
-
-export * from './fragment.js';
-export * from './definition.js';
-export * from './module.js';
-export * from './binding.js';
-
-export { deepReadonly } from './readonly.js';
-
-export * from './story.js';
+  ActiveSuspension,
+  AuthoredCallable,
+  ContinuationSnapshot,
+  FragmentDefinition,
+  ModuleBindingCell,
+  Passage,
+  PassageDefinition,
+  PassageInput,
+  PassageRecord,
+  PassageSet,
+  PassageSetDefinition,
+  SaveData,
+  Snapshot,
+  StoryOptions,
+  TraceEvent,
+} from './api-types.js';

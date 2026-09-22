@@ -17,7 +17,8 @@ import {
   type ValueCallableBodyIR,
 } from '@gneh/core';
 import { deepReadonly } from './readonly.js';
-import { isAuthoredCallable, type AuthoredCallable } from './definition.js';
+import { isAuthoredCallable } from './definition.js';
+import type { AuthoredCallable } from './api-types.js';
 
 const maxIRDepth = 128;
 const maxCallDepth = 128;

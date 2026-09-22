@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import type { PassageIR, StoryNode } from '../../core/dist/index.js';
-import { Story, defineIRFragment, definePassage, definePassages, defineView } from '../dist/index.js';
+import { Story, defineIRFragment, definePassage, definePassageSet, definePassages, defineView } from '../dist/index.js';
 import { assert, story, text } from './helpers.js';
 
 test('PassageSet entry selection has no property-order fallback', () => {
@@ -31,8 +31,8 @@ test('PassageSet setup plans compose in order and rebuild transient registration
     },
   });
   const start = definePassage({ id: 'Start', metadata: { tags: ['start'] }, render: () => 'ready' });
-  const inherited = definePassages({ passages: [setupA, start], setup: [setupA] });
-  const passages = definePassages({ passages: [inherited, setupB], setup: [setupB] });
+  const inherited = definePassageSet({ passages: [setupA, start], setup: [setupA] });
+  const passages = definePassageSet({ passages: [inherited, setupB], setup: [setupB] });
   const instance = new Story(passages, { state: { order: '' } }).start();
   assert.equal(instance.state.order, 'AB');
   const first = instance.registrations.get('shared');
@@ -41,7 +41,7 @@ test('PassageSet setup plans compose in order and rebuild transient registration
   assert.equal(instance.state.order, 'AB');
   assert.notEqual(instance.registrations.get('shared'), first);
   assert.throws(
-    () => definePassages({ passages: [setupA, start], setup: [setupA, setupA] }),
+    () => definePassageSet({ passages: [setupA, start], setup: [setupA, setupA] }),
     /Duplicate setup passage/,
   );
 });
@@ -60,7 +60,7 @@ test('failed setup rolls back state and registry during start and load', () => {
     },
   });
   const start = definePassage({ id: 'Start', metadata: { tags: ['start'] }, render: () => 'ready' });
-  const passages = definePassages({ passages: [setup, start], setup: [setup] });
+  const passages = definePassageSet({ passages: [setup, start], setup: [setup] });
   const failed = new Story(passages, { state: { fail: true, value: 0 } });
   assert.throws(() => failed.start(), /setup failed/);
   assert.deepEqual(failed.state, { fail: true, value: 0 });
@@ -92,7 +92,7 @@ test('load and reset start a lazy story without replaying setup on first view', 
       return String(ctx.state.runs);
     },
   });
-  const passages = definePassages({ passages: [setup, start], setup: [setup] });
+  const passages = definePassageSet({ passages: [setup, start], setup: [setup] });
   const makeStory = () => new Story(passages, { state: { runs: 0 } });
 
   const source = makeStory().start();
@@ -145,4 +145,12 @@ test('IR declaration discovery is depth-bounded before runtime rendering', () =>
     capabilities: [],
   };
   assert.throws(() => defineIRFragment(ir), /IR nesting/i);
+});
+
+test('a passage record may use passages as a canonical id without changing call shape', () => {
+  const passages = definePassage({ id: 'passages', render: () => 'reserved-looking id' });
+  const other = definePassage({ id: 'Other', render: () => 'other' });
+  const set = definePassages({ passages, Other: other });
+
+  assert.deepEqual(Object.keys(set), ['passages', 'Other']);
 });
