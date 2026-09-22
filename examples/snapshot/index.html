@@ -1,59 +1,63 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-gneh-environment="visual-novel">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="No Clean Getaway — a toxic romance in six bad decisions, built with gneh." />
+    <meta
+      name="description"
+      content="No Clean Getaway — a toxic romance presented in gneh's visual-novel environment."
+    />
     <title>No Clean Getaway</title>
   </head>
-  <body data-scene="yard" data-ending="false">
-    <div class="backdrop" aria-hidden="true"></div>
-    <div class="grain" aria-hidden="true"></div>
+  <body>
+    <div id="app" class="gneh-app" data-environment="visual-novel" data-scene="yard">
+      <div class="scene-backdrop" aria-hidden="true"></div>
+      <div class="scene-vignette" aria-hidden="true"></div>
 
-    <header class="topbar">
-      <a class="brand" href="#Start" aria-label="No Clean Getaway">
-        <span class="brand-rule"></span>
-        <span><b>NO CLEAN GETAWAY</b><small>A GNEH VISUAL NOVEL</small></span>
-      </a>
-      <div class="case-id"><span>CASE</span><b>02:17—MQ</b></div>
-    </header>
+      <header class="vn-hud">
+        <div class="title-lockup">
+          <span>NO CLEAN GETAWAY</span>
+          <small>A GNEH VISUAL NOVEL</small>
+        </div>
+        <div class="route-lockup">
+          <span id="route">Start</span>
+          <strong id="route-title">The Dead Bird Alarm</strong>
+        </div>
+        <div class="metrics" aria-label="Persistent story state">
+          <span>TRUST <b id="metric-trust">0</b></span>
+          <span>HEAT <b id="metric-heat">0</b></span>
+          <span>DEBT <b id="metric-debt">$0</b></span>
+        </div>
+        <button id="quick-menu" class="menu-button" type="button" aria-label="Toggle quick menu">MENU</button>
+      </header>
 
-    <main class="stage">
-      <aside class="rail rail-left" aria-label="Story status">
-        <span class="rail-label">CURRENT PASSAGE</span>
-        <strong id="route">Start</strong>
-        <i></i>
-        <span id="route-title">No Clean Getaway</span>
-      </aside>
+      <main class="vn-stage">
+        <div class="character-layer" aria-hidden="true">
+          <img class="sprite sprite-lenora" src="/assets/lenora-sprite.png" alt="" />
+          <img class="sprite sprite-mars" src="/assets/mars-sprite.png" alt="" />
+        </div>
 
-      <section class="novel-shell">
-        <div class="scene-label" aria-hidden="true"><span>MARLOWE BAY</span><span>AFTER MIDNIGHT</span></div>
-        <article id="story" aria-live="polite"></article>
-      </section>
+        <aside class="quick-menu" aria-label="Visual novel controls">
+          <button id="undo" type="button">Back</button>
+          <button id="redo" type="button">Forward</button>
+          <button id="save" type="button">Quick Save</button>
+          <button id="load" type="button">Quick Load</button>
+          <button id="reset" type="button">Restart</button>
+        </aside>
 
-      <aside class="rail rail-right" aria-label="Persistent story state">
-        <div><span>TRUST</span><strong id="metric-trust">0</strong></div>
-        <div><span>HEAT</span><strong id="metric-heat">0</strong></div>
-        <div><span>DEBT</span><strong id="metric-debt">$0</strong></div>
-      </aside>
-    </main>
+        <section id="choices" class="choice-overlay" aria-label="Choices"></section>
 
-    <footer class="story-tools" aria-label="Story controls">
-      <div class="tool-group history-tools">
-        <button id="undo" type="button" title="Undo · Left arrow">↶ <span>Undo</span></button>
-        <button id="redo" type="button" title="Redo · Right arrow">↷ <span>Redo</span></button>
-      </div>
-      <div class="status-stack">
-        <div class="progress-track" aria-hidden="true"><i id="progress-fill"></i></div>
-        <p id="app-status" role="status">The reverse alarm is dying in the rain.</p>
-      </div>
-      <div class="tool-group save-tools">
-        <button id="sound" type="button" aria-pressed="false">Ambient: on</button>
-        <button id="save" type="button" title="Save · S">Save</button>
-        <button id="load" type="button" title="Load · L">Load</button>
-        <button id="reset" type="button">Restart</button>
-      </div>
-    </footer>
+        <section id="dialogue-window" class="dialogue-window" aria-label="Dialogue" tabindex="0">
+          <div class="dialogue-ornament" aria-hidden="true"><i></i><span>MARLOWE BAY · 02:17</span></div>
+          <article id="story" aria-live="polite"></article>
+          <footer class="advance-bar">
+            <output id="app-status" aria-live="polite">Click the dialogue box or press Space to continue.</output>
+            <span id="beat-counter">01 / 01</span>
+            <button id="next" type="button" aria-label="Next line">NEXT <b>▶</b></button>
+          </footer>
+        </section>
+      </main>
+    </div>
 
     <script type="module" src="/src/main.mjs"></script>
   </body>
