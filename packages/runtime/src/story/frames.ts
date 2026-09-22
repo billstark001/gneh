@@ -24,13 +24,7 @@ export interface Frame {
   restoredScopes: Map<string, State>;
 }
 
-export function createFrame(
-  id: string,
-  fragment: AnyFragment,
-  props: FragmentProps,
-  entered = false,
-  key = id,
-): Frame {
+export function createFrame(id: string, fragment: AnyFragment, props: FragmentProps, entered = false, key = id): Frame {
   return {
     id,
     key,
@@ -46,6 +40,7 @@ export function createFrame(
     restoredScopes: new Map(),
   };
 }
+
 export function disposeFrame(frame: Frame): void {
   frame.alive = false;
   for (const cleanup of frame.cleanups) {

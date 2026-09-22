@@ -1,6 +1,6 @@
 import type { Snapshot } from '../api-types.js';
 
-/** Everything outside a Snapshot that must be restored when an operation fails. */
+/** Persistent runtime state that must be restored when an operation fails. */
 export interface RuntimeCheckpoint {
   snapshot: Snapshot;
   past: Snapshot[];
@@ -9,7 +9,7 @@ export interface RuntimeCheckpoint {
   started: boolean;
 }
 
-export function checkpoint(
+export function createCheckpoint(
   snapshot: Snapshot,
   past: readonly Snapshot[],
   future: readonly Snapshot[],

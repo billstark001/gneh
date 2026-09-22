@@ -1,5 +1,5 @@
 import { test } from 'vitest';
-import { Story, definePassage, definePassages } from '../dist/index.js';
+import { Story, definePassage, definePassageSet, definePassages } from '../dist/index.js';
 import { assert, text } from './helpers.js';
 
 test('read-only state blocks meta-object mutations and keeps identity within one render', () => {
@@ -46,4 +46,63 @@ test('a failed load does not consume enter lifecycle on a lazy story', () => {
   target.start();
   assert.equal(enters, 1);
   assert.equal(text(target.view), 'ready');
+});
+
+test('a failed transaction restores state and reports the restore trace', () => {
+  const traces: string[] = [];
+  const passage = definePassage({
+    id: 'TransactionRollback',
+    render(ctx) {
+      if (ctx.state.fail) throw new Error('transaction render failed');
+      return 'ready';
+    },
+  });
+  const instance = new Story(definePassages(passage), {
+    entry: 'TransactionRollback',
+    state: { fail: false },
+    onTrace(event) {
+      traces.push(event.type);
+    },
+  }).start();
+  traces.length = 0;
+
+  assert.throws(
+    () =>
+      instance.mutate((state) => {
+        state.fail = true;
+      }),
+    /transaction render failed/,
+  );
+  assert.deepEqual(instance.state, { fail: false });
+  assert.deepEqual(traces, ['render', 'restore']);
+});
+
+test('a setup frame is replaced only after the complete load succeeds', () => {
+  let disposals = 0;
+  const setup = definePassage({
+    id: 'Setup',
+    enter(ctx) {
+      ctx.onDispose(() => disposals++);
+    },
+    render: () => [],
+  });
+  const passage = definePassage({
+    id: 'StagedSetup',
+    render(ctx) {
+      if (ctx.state.fail) throw new Error('passage render failed');
+      return 'ready';
+    },
+  });
+  const instance = new Story(definePassageSet({ passages: [setup, passage], setup: [setup] }), {
+    entry: 'StagedSetup',
+    state: { fail: false },
+  }).start();
+  const saved = JSON.parse(instance.save());
+  saved.present.state.fail = true;
+
+  assert.throws(() => instance.load(JSON.stringify(saved)), /passage render failed/);
+  assert.equal(disposals, 1, 'the staged replacement frame is disposed');
+  assert.equal(text(instance.view), 'ready');
+  instance.dispose();
+  assert.equal(disposals, 2, 'the original frame survives until normal disposal');
 });

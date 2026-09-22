@@ -21,7 +21,7 @@ import {
 } from '@gneh/core';
 import { deepReadonly } from '../internal/readonly.js';
 import { evaluateRenderInput } from './render.js';
-import { checkpoint, type RuntimeCheckpoint } from './transaction.js';
+import { createCheckpoint, type RuntimeCheckpoint } from './transaction.js';
 import { isPassage } from '../definitions/fragment.js';
 import { initializeStoryInput } from './catalog.js';
 import { createFrame, disposeFrame } from './frames.js';
@@ -144,12 +144,15 @@ export class Story {
   start(): this {
     if (!this.started) {
       const before = this.snapshot();
+      let previousSetupFrames: Map<string, Frame> | undefined;
       this.started = true;
       try {
         this.registry.clear();
-        this.runSetup();
+        previousSetupFrames = this.runSetup();
         this.refresh();
+        this.commitSetupFrames(previousSetupFrames);
       } catch (error) {
+        this.rollbackSetupFrames(previousSetupFrames);
         this.resetFrames();
         this.route = before.current;
         this.props = cloneState(before.props);
@@ -186,10 +189,10 @@ export class Story {
   private trace(type: TraceEvent['type']): void {
     this.options.onTrace?.({ type, fragment: this.route, state: cloneState(this.values) });
   }
-  private checkpoint(): RuntimeCheckpoint {
-    return checkpoint(this.snapshot(), this.past, this.future, this.registry, this.started);
+  private checkpoint(snapshot = this.snapshot()): RuntimeCheckpoint {
+    return createCheckpoint(snapshot, this.past, this.future, this.registry, this.started);
   }
-  private rollback(checkpoint: RuntimeCheckpoint): void {
+  private rollback(checkpoint: RuntimeCheckpoint, traceRestore = false): void {
     this.resetFrames();
     this.route = checkpoint.snapshot.current;
     this.props = cloneState(checkpoint.snapshot.props);
@@ -203,6 +206,7 @@ export class Story {
     if (checkpoint.started) {
       this.skipEnter = true;
       this.refresh();
+      if (traceRestore) this.trace('restore');
     } else {
       this.skipEnter = false;
       this.currentView = [];
@@ -601,7 +605,7 @@ export class Story {
     }
     // Copy-on-transaction isolates changes; failure restores state, RNG, and both histories.
     const before = this.snapshot();
-    const rollback = this.checkpoint();
+    const rollback = this.checkpoint(before);
     this.values = cloneState(this.values);
     this.steps = 0;
     this.transactionDepth++;
@@ -624,7 +628,7 @@ export class Story {
     } catch (error) {
       this.transactionDepth = 0;
       this.pendingRoute = undefined;
-      this.rollback(rollback);
+      this.rollback(rollback, true);
       throw error;
     }
   }
@@ -682,12 +686,22 @@ export class Story {
     for (const frame of this.setupFrames.values()) disposeFrame(frame);
     this.setupFrames.clear();
   }
-  private runSetup(): void {
-    if (!this.setup.length) return;
+  private commitSetupFrames(previous: Map<string, Frame> | undefined): void {
+    if (previous) for (const frame of previous.values()) disposeFrame(frame);
+  }
+  private rollbackSetupFrames(previous: Map<string, Frame> | undefined): void {
+    if (!previous) return;
+    this.resetSetupFrames();
+    this.setupFrames = previous;
+  }
+  private runSetup(): Map<string, Frame> | undefined {
+    if (!this.setup.length) return undefined;
     const beforeState = cloneState(this.values);
     const beforeRegistry = new Map(this.registry);
+    const previousFrames = this.setupFrames;
+    const nextFrames = new Map<string, Frame>();
     this.values = cloneState(this.values);
-    this.resetSetupFrames();
+    this.setupFrames = nextFrames;
     this.settingUp = true;
     try {
       for (const passage of this.setup) {
@@ -697,10 +711,12 @@ export class Story {
         passage.render(this.context(frame, 'enter'), {});
       }
       assertJson(this.values);
+      return previousFrames;
     } catch (error) {
       this.values = beforeState;
       this.registry = beforeRegistry;
-      this.resetSetupFrames();
+      for (const frame of nextFrames.values()) disposeFrame(frame);
+      this.setupFrames = previousFrames;
       throw error;
     } finally {
       this.settingUp = false;
@@ -749,6 +765,7 @@ export class Story {
   load(source: string): void {
     const data = readSave(source, this.identity, (id) => this.resolve(id));
     const rollback = this.checkpoint();
+    let previousSetupFrames: Map<string, Frame> | undefined;
     try {
       this.past = boundedHistory(data.past, this.options.historyLimit);
       this.future = boundedHistory(data.future, this.options.historyLimit);
@@ -759,18 +776,21 @@ export class Story {
       this.resetFrames();
       this.restoredContinuations = new Map(Object.entries(cloneState(data.present.continuations)));
       this.registry.clear();
-      this.runSetup();
+      previousSetupFrames = this.runSetup();
       this.skipEnter = true;
       this.refresh();
       this.trace('restore');
       this.started = true;
+      this.commitSetupFrames(previousSetupFrames);
     } catch (error) {
+      this.rollbackSetupFrames(previousSetupFrames);
       this.rollback(rollback);
       throw error;
     }
   }
   reset(): void {
     const rollback = this.checkpoint();
+    let previousSetupFrames: Map<string, Frame> | undefined;
     try {
       this.route = this.initialRoute;
       this.props = {};
@@ -781,10 +801,12 @@ export class Story {
       this.registry.clear();
       this.resetFrames();
       this.restoredContinuations.clear();
-      this.runSetup();
+      previousSetupFrames = this.runSetup();
       this.refresh();
       this.started = true;
+      this.commitSetupFrames(previousSetupFrames);
     } catch (error) {
+      this.rollbackSetupFrames(previousSetupFrames);
       this.rollback(rollback);
       throw error;
     }
