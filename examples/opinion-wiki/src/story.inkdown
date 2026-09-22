@@ -1,0 +1,268 @@
+---
+imports:
+  ./Formula.mjs:
+    default: Formula
+    formulaDescription: =
+  ./ModelLab.mjs:
+    default: ModelLab
+---
+@action markRead(topic) {
+  @if (!$completed.includes(topic)) {
+    @do $completed.push(topic);
+  }
+}
+
+@view TopicHeader({ eyebrow, title, summary }) {
+  ::: topic-header {eyebrow={{ eyebrow }} title={{ title }}}
+  # {{ title }}
+
+  {{ summary }}
+  :::
+}
+
+@view KeyIdea({ label }) {
+  ::: key-idea {label={{ label }}}
+  @children
+  :::
+}
+
+:: Primer [start overview] {"title":"Field primer","group":"Start here","order":10}
+@TopicHeader({
+  eyebrow: "Opinion dynamics · a compact field guide",
+  title: "How opinions and networks co-evolve",
+  summary: "A public, model-agnostic primer for reading computational and mesoscopic work on bounded-confidence systems."
+})
+
+This Wiki builds the shared vocabulary needed to read two related papers without presenting their hypotheses, implementations, data, parameter choices, results, or conclusions.
+
+::: callout {tone="scope" title="Scope boundary"}
+Everything here is established background: agents, opinions, bounded confidence, adaptive networks, recommendation kernels, coarse-graining, and stochastic outcomes. The research begins where this primer ends.
+:::
+
+## Two scales, one feedback loop
+
+1. **Microscopic:** agents hold opinions, see a limited set of others, update, and sometimes change ties.
+2. **Mesoscopic:** densities and edge-conditioned distributions summarize many microscopic states.
+3. **Macroscopic:** observables such as consensus, fragmentation, polarization, or segregation describe system-level patterns.
+
+@KeyIdea({ label: "Keep the levels separate" }) {
+A fraction of agents inside one run is not the same thing as the probability of an outcome across many runs.
+}
+
+## Suggested path
+
+- Begin with [[bounded confidence -> BoundedConfidence]].
+- Then connect [[opinions to network structure -> AdaptiveNetworks]].
+- Learn how [[algorithmic exposure -> Recommendation]] enters the loop.
+- Move from agents to [[mesoscopic descriptions -> Mesoscopic]].
+- Finish with [[finite-system outcomes -> Outcomes]] and the [[reading map -> ReadingMap]].
+
+[[Open the interactive concept lab -> ModelLab({label: "Bounded-confidence concept lab"})]]
+
+:: BoundedConfidence [foundations] {"title":"Bounded confidence","group":"Foundations","order":20}
+@TopicHeader({
+  eyebrow: "Foundations · interaction rules",
+  title: "Bounded confidence",
+  summary: "Similarity controls who can influence whom."
+})
+
+Let agent *i* have scalar opinion *xᵢ* in an interval. A confidence radius *ε* says that another opinion is eligible for interaction only when the distance is small enough.
+
+::: latex {formula="confidence" label="The confidence neighbourhood of agent i"}
+:::
+
+@KeyIdea({ label: "Local agreement need not imply global consensus" }) {
+Even when every accepted interaction is conciliatory, bounded interaction can leave several clusters that are too far apart to communicate.
+}
+
+## Two canonical update families
+
+### Hegselmann–Krause (HK)
+
+An agent moves toward an average over its confidence neighbourhood. Updates are often synchronous: all next opinions are computed from the same current state.
+
+::: latex {formula="hk" label="A basic Hegselmann Krause update"}
+:::
+
+### Deffuant–Weisbuch
+
+A sampled compatible pair compromises by some fraction *μ*. The interaction is pairwise and typically asynchronous.
+
+::: latex {formula="deffuant" label="A symmetric pairwise compromise update"}
+:::
+
+The two families share a confidence condition, but their event structures differ. Group averaging and random pair compromise should not be treated as interchangeable.
+
+[[Mark this topic as read => markRead("BoundedConfidence")]]
+
+Continue to [[adaptive networks -> AdaptiveNetworks]] or return to the [[primer -> Primer]].
+
+:: AdaptiveNetworks [foundations] {"title":"Adaptive networks","group":"Foundations","order":30}
+@TopicHeader({
+  eyebrow: "Foundations · co-evolution",
+  title: "Adaptive networks",
+  summary: "States change along a network, while the network changes in response to states."
+})
+
+A static network fixes the possible interaction channels. An **adaptive network** lets node states and edges co-evolve:
+
+- **Social influence:** exposure can move an opinion.
+- **Social selection:** similarity can affect tie formation or removal.
+- **Feedback:** today’s ties shape tomorrow’s exposure, which can reshape later ties.
+
+::: flow {steps="opinion → exposure → update → rewiring → exposure"}
+The important object is a feedback loop, not a one-way pipeline.
+:::
+
+## Directed ties
+
+Online following is often directed. If *i* follows *j*, information can flow from *j* to *i* without a reciprocal edge. Direction matters for degree, reachability, exposure, and the interpretation of an edge-conditioned distribution.
+
+## Structure and state answer different questions
+
+Opinion polarization concerns the distribution of node states. Network segregation concerns who is connected or exposed to whom. They may correlate, but neither is a substitute for the other, and their time ordering is an empirical or mathematical question rather than a definition.
+
+[[Mark this topic as read => markRead("AdaptiveNetworks")]]
+
+Continue to [[algorithmic exposure -> Recommendation]] or revisit [[bounded confidence -> BoundedConfidence]].
+
+:: Recommendation [foundations] {"title":"Algorithmic exposure","group":"Foundations","order":40}
+@TopicHeader({
+  eyebrow: "Foundations · selection",
+  title: "Algorithmic exposure",
+  summary: "A recommender changes the distribution from which an agent’s next exposure is sampled."
+})
+
+A useful abstraction is a conditional kernel *R(j | i, Sₜ)*: given focal agent *i* and current system state *Sₜ*, it assigns weights or probabilities to candidate *j*.
+
+@Formula({
+  id: "recommendation",
+  label: "A normalized recommendation kernel over eligible candidates"
+})
+
+## Common strategy families
+
+- **Content- or state-based:** rank by similarity, relevance, topic, or predicted preference.
+- **Link- or topology-based:** rank through shared neighbours, short paths, or other graph proximity.
+- **Random or mixed:** retain exploration, baselines, or a blend of several signals.
+
+@KeyIdea({ label: "Kernel, list, and action are distinct" }) {
+A ranking distribution does not by itself say how many items are shown, whether duplicates are allowed, which candidates are excluded, or whether exposure causes opinion change or rewiring. Those belong to the event law.
+}
+
+## Feedback and evaluation
+
+When user responses update future recommendations, the data-generating process is endogenous. Evaluation therefore needs time, diversity, and system-level outcomes—not only one-step relevance.
+
+[[Mark this topic as read => markRead("Recommendation")]]
+
+Continue to [[mesoscopic descriptions -> Mesoscopic]] or return to [[adaptive networks -> AdaptiveNetworks]].
+
+:: Mesoscopic [methods] {"title":"Mesoscopic descriptions","group":"From agents to fields","order":50}
+@TopicHeader({
+  eyebrow: "From agents to fields · coarse-graining",
+  title: "Mesoscopic descriptions",
+  summary: "Keep distributions and selected correlations while discarding individual identities."
+})
+
+Let *ρ(x,t)* denote an opinion density. It records how population mass is distributed over opinion space, but it does not identify particular agents.
+
+@Formula({
+  id: "density",
+  label: "A normalized opinion density"
+})
+
+For a co-evolving network, a second object may be needed. An edge density *E(x,y,t)* can describe the mass of directed ties whose source and target opinions are near *x* and *y*.
+
+## A ladder of descriptions
+
+1. **Agent simulation:** explicit opinions, identities, edges, and random events.
+2. **Master or jump equation:** a distribution evolves under finite transitions.
+3. **Kinetic equation:** a nonlocal gain–loss operator evolves a density.
+4. **Drift–diffusion approximation:** low jump moments produce a local differential operator under an appropriate scaling.
+
+::: callout {tone="caution" title="Approximation is not identity"}
+A closure replaces unresolved correlations with an assumption. A diffusion approximation additionally requires a small-step regime. Numerical refinement cannot repair a structurally invalid closure.
+:::
+
+## Finite lists matter
+
+If an agent sees only a short list, the number of compatible items is random. The expectation of a ratio generally differs from the ratio of expectations, especially when an empty compatible list has non-negligible probability.
+
+[[Mark this topic as read => markRead("Mesoscopic")]]
+
+Continue to [[stochastic outcomes -> Outcomes]] or revisit [[algorithmic exposure -> Recommendation]].
+
+:: Outcomes [methods] {"title":"Stochastic outcomes","group":"From agents to fields","order":60}
+@TopicHeader({
+  eyebrow: "From agents to fields · uncertainty",
+  title: "Finite-system outcomes",
+  summary: "Within-run distributions and across-run probabilities are different mathematical objects."
+})
+
+A deterministic density may show several peaks inside one evolving population. A finite stochastic system may instead end in different terminal patterns across repeated runs.
+
+## Three questions that should not be conflated
+
+- **State:** what does this run look like now?
+- **Path:** in what order did opinion and network observables change?
+- **Outcome probability:** how often does the whole system reach each terminal set?
+
+For a Markov process, a **committor** assigns the probability of reaching one target set before another. It is naturally associated with a backward equation, even when probabilities are estimated by forward simulation.
+
+::: latex {formula="committor" label="The probability of reaching target set A before target set B from state s"}
+:::
+
+@KeyIdea({ label: "Validate at the level of the claim" }) {
+Local drift, transient trajectories, relaxation times, and terminal probabilities require different diagnostics. Agreement on one does not guarantee agreement on the others.
+}
+
+[[Mark this topic as read => markRead("Outcomes")]]
+
+Continue to the [[reading map -> ReadingMap]] or return to [[mesoscopic descriptions -> Mesoscopic]].
+
+:: ReadingMap [overview] {"title":"Reading map","group":"Start here","order":70}
+@TopicHeader({
+  eyebrow: "Orientation · no research results",
+  title: "A two-paper reading map",
+  summary: "Use the same vocabulary while keeping modeling levels and claims explicit."
+})
+
+## Paper A: computational / agent-based lens
+
+Review these concepts first:
+
+- bounded-confidence eligibility and update timing;
+- directed follower networks and rewiring;
+- content-based versus topology-based exposure;
+- the distinction between polarization and segregation;
+- trajectories versus end states.
+
+## Paper B: mesoscopic / mathematical lens
+
+Add these concepts:
+
+- node densities and edge-conditioned densities;
+- finite-step transition kernels and gain–loss equations;
+- closures, moment approximations, and their validity regimes;
+- Markov generators, absorbing sets, and committors;
+- validation against the observable actually being predicted.
+
+::: callout {tone="scope" title="Deliberate omission"}
+This map does not name model variants, derived operators, experimental configurations, numerical findings, or proposed mechanisms from either paper.
+:::
+
+## Implementation tour
+
+This example also serves as a gneh feature map:
+
+- passages, metadata, links, lists, styled containers, and authored views live in `story.inkdown`;
+- `Formula.mjs` uses `defineView()` to emit semantic LaTeX nodes;
+- `latex-plugin.mjs` is an application-owned `renderer-dom` plugin backed by KaTeX;
+- `ModelLab.mjs` is a handwritten `definePassage()` with state, lifecycle, regions, and actions;
+- `main.mjs` uses `definePassages()` to compose native and compiled passages, then mounts them beside ordinary application chrome;
+- the host adds search, progress, undo, and local save/load without putting DOM authority in story source.
+
+{{ formulaDescription }}
+
+[[Open the concept lab -> ModelLab]] or return to the [[primer -> Primer]].

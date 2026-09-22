@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="A gneh-powered primer on bounded-confidence opinion dynamics, adaptive networks, and mesoscopic modeling."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230b3b2c'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-size='15' fill='white'%3EO~%3C/text%3E%3C/svg%3E"
+    />
+    <title>Opinion Dynamics Primer · gneh Wiki</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#story">Skip to article</a>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Opinion Dynamics Primer home">
+        <span class="brand-mark" aria-hidden="true">O∿</span>
+        <span><strong>Opinion Dynamics</strong><small>field primer</small></span>
+      </a>
+      <div class="header-actions" aria-label="Reading tools">
+        <button type="button" data-command="undo">Undo</button>
+        <button type="button" data-command="redo">Redo</button>
+        <button type="button" data-command="save">Save</button>
+        <button type="button" data-command="load">Load</button>
+      </div>
+    </header>
+    <div class="app-layout">
+      <aside class="sidebar" aria-label="Wiki navigation">
+        <label class="search-label" for="wiki-search">Search topics</label>
+        <input id="wiki-search" type="search" placeholder="e.g. network" autocomplete="off" />
+        <nav id="wiki-navigation"></nav>
+        <div class="reading-card">
+          <div><span>Reading progress</span><strong id="completed-count">0 / 5 topics</strong></div>
+          <progress id="reading-progress" value="0" max="5">0 of 5</progress>
+        </div>
+      </aside>
+      <main class="content-column">
+        <div class="context-bar">
+          <span id="current-route">Primer</span>
+          <span class="privacy-note">Public background only</span>
+        </div>
+        <article id="story" tabindex="-1"></article>
+        <footer class="article-footer">
+          <p id="app-context"></p>
+          <output id="app-status" aria-live="polite"></output>
+        </footer>
+      </main>
+      <aside class="page-aside" aria-label="About this example">
+        <p class="overline">Built with gneh</p>
+        <h2>One Wiki, several boundaries</h2>
+        <dl>
+          <div>
+            <dt>Story</dt>
+            <dd>Portable meaning, state, and navigation</dd>
+          </div>
+          <div>
+            <dt>Runtime</dt>
+            <dd>Transactions, history, and passage instances</dd>
+          </div>
+          <div>
+            <dt>Renderer</dt>
+            <dd>DOM ownership and the LaTeX plugin</dd>
+          </div>
+          <div>
+            <dt>Host</dt>
+            <dd>Search, persistence, and application chrome</dd>
+          </div>
+        </dl>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.mjs"></script>
+  </body>
+</html>

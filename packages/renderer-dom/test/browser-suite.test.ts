@@ -13,7 +13,7 @@ test('independently built Vite applications conform in a real browser', { timeou
     ['starter', path.join(root, 'packages/create/template/dist')],
     ['playground', path.join(root, 'examples/playground/dist')],
     ['snapshot', path.join(root, 'examples/snapshot/dist')],
-    ['vite-app', path.join(root, 'examples/vite-app/dist')],
+    ['opinion-wiki', path.join(root, 'examples/opinion-wiki/dist')],
   ]);
   const reportDirectory = path.join(root, 'verification');
   fs.mkdirSync(reportDirectory, { recursive: true });
@@ -192,39 +192,35 @@ test('independently built Vite applications conform in a real browser', { timeou
     );
     await page.close();
 
-    page = await pageAt('/vite-app/');
-    await page.waitForFunction(() => window.app?.story);
+    page = await pageAt('/opinion-wiki/');
+    await page.waitForFunction(() => window.gnehApp?.story);
     check(
-      (await page.$eval('#existing-app', (node) => node.textContent)).includes('surrounding frontend'),
-      'Vite: unrelated Markdown remains owned by the surrounding frontend',
+      (await page.$eval('#app-context', (node) => node.textContent)).includes('surrounding Vite application'),
+      'opinion Wiki: unrelated Markdown remains owned by the surrounding frontend',
     );
     check(
-      (await page.$eval('#story h1', (node) => node.textContent)).includes('Markdown'),
-      'Vite: gneh mounts beside existing DOM instead of owning the page',
+      (await page.$eval('#story h1', (node) => node.textContent)).includes('opinions and networks'),
+      'opinion Wiki: compiled Inkdown mounts inside application-owned chrome',
+    );
+    await page.locator('#wiki-navigation button[data-passage=Recommendation]').click();
+    check(
+      await page.$eval('.math-block', (node) => node.querySelector('.katex') !== null),
+      'opinion Wiki: imported defineView output is rendered through the LaTeX DOM plugin',
+    );
+    await page.locator('#wiki-navigation button[data-passage=Primer]').click();
+    await page.locator(aria('link', 'Open the interactive concept lab')).click();
+    const before = await page.evaluate(() => window.gnehApp.story.state.confidence);
+    await page.locator(aria('button', 'Widen +0.05')).click();
+    check(
+      await page.evaluate((value) => window.gnehApp.story.state.confidence > value, before),
+      'opinion Wiki: a handwritten JavaScript passage shares runtime state with compiled Inkdown',
     );
     check(
-      (await page.$eval('#story', (node) => node.textContent)).includes(
-        'Rendered by a handwritten defineView() callable.',
-      ),
-      'Vite: imported defineView callables render inside Inkdown',
-    );
-    const before = await page.evaluate(() => window.app.story.state.count);
-    await page.locator(aria('link', 'Open the native JavaScript Fragment')).click();
-    await page.locator(aria('button', 'Increment')).click();
-    check(
-      await page.evaluate((value) => window.app.story.state.count === value + 1, before),
-      'Vite: handwritten JavaScript fragments coexist with compiled Inkdown',
-    );
-    check(
-      await page.evaluate(() => window.gnehTest.safeURL('javascript:alert(1)') === ''),
-      'DOM backend: unsafe URL schemes remain rejected',
-    );
-    check(
-      await page.evaluate(() => document.querySelector('#existing-app').isConnected),
-      'coexistence: mounting a story preserves sibling application roots',
+      await page.evaluate(() => document.querySelector('#wiki-navigation').isConnected),
+      'coexistence: mounting the Wiki preserves sibling application roots',
     );
     await page.screenshot({
-      path: path.join(reportDirectory, 'vite-coexistence.png'),
+      path: path.join(reportDirectory, 'opinion-wiki.png'),
       fullPage: true,
     });
     await page.close();

@@ -1,0 +1,23 @@
+{
+  "name": "@gneh/example-opinion-wiki",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@gneh/core": "workspace:*",
+    "@gneh/renderer-dom": "workspace:*",
+    "@gneh/runtime": "workspace:*",
+    "katex": "^0.16.22"
+  },
+  "devDependencies": {
+    "@gneh/inkdown": "workspace:*",
+    "@gneh/vite": "workspace:*",
+    "@types/node": "^22.20.3",
+    "typescript": "7.0.2",
+    "vite": "^8.3.0"
+  }
+}
