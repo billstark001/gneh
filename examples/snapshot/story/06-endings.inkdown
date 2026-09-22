@@ -1,0 +1,185 @@
+:: BetterThings {"title":"Ending 1 / Toward Better Things","scene":"dawn"}
+@do $ending = "Toward Better Things"
+
+# Toward Better Things
+
+@Chapter("ENDING 1 OF 6", "Distance, with witnesses")
+
+Mars takes the company job. You stop checking whether the spare key has moved.
+
+Three months later you meet at a diner halfway between her apartment and your house.
+She pays for coffee. You pay for pie. Neither expense becomes evidence.
+
+When she kisses you in the parking lot, both of you have somewhere else to sleep.
+It is not a happy ending. It is the first ending that does not need either woman to lose.
+
+::: ending {.ending-card tone="clear"}
+**TOWARD BETTER THINGS**
+
+Unlocked by trust, honesty, and the terrifying possibility of separate lives.
+:::
+
+[[Review the case file -> CaseNotes]]
+
+[[Begin again -> Start]]
+
+:: KeyReturned {"title":"Ending 2 / A Key Returned","scene":"dawn"}
+@do $ending = "A Key Returned"
+
+# A Key Returned
+
+@Chapter("ENDING 2 OF 6", "No debt collected")
+
+Mars leaves the spare key on the table. You slide it back.
+
+“For emergencies,” you say.
+
+“Whose?”
+
+You do not answer. She takes the key anyway, but not the room. On Tuesday she drives
+a white truck with matching doors. You learn not to call every silence abandonment.
+
+::: ending {.ending-card tone="quiet"}
+**A KEY RETURNED**
+
+Care is not clean just because nobody sends an invoice.
+:::
+
+[[Review the case file -> CaseNotes]]
+
+[[Begin again -> Start]]
+
+:: TermsAndConditions {"title":"Ending 3 / Terms and Conditions","scene":"yard"}
+@do $ending = "Terms and Conditions"
+
+# Terms and Conditions
+
+@Chapter("ENDING 3 OF 6", "Read before signing")
+
+The new company is boring on purpose. Roadside starts. Tire changes. Legal recovery.
+Each woman owns half; either can leave with thirty days' notice.
+
+Mars adds one handwritten clause: **NO THERAPY LANGUAGE DURING PAYROLL**.
+
+You add another: **NO BOYFRIENDS WITH BOLT CUTTERS**.
+
+The signatures are cautious. So is the first kiss after.
+
+::: ending {.ending-card tone="clear"}
+**TERMS AND CONDITIONS**
+
+The paperwork is clean. The people remain complicated.
+:::
+
+[[Review the case file -> CaseNotes]]
+
+[[Begin again -> Start]]
+
+:: BusinessPartners {"title":"Ending 4 / Unfortunately","scene":"yard"}
+@do $ending = "Unfortunately"
+
+# Unfortunately
+
+@Chapter("ENDING 4 OF 6", "Co-applicants")
+
+The lender asks your relationship.
+
+You write **BUSINESS PARTNERS**. Mars adds **UNFORTUNATELY**. The clerk points to the
+box for married applicants and says everybody tells him that after the credit check.
+
+You buy a funeral-home tow truck with gold wings beneath the black paint. The loan
+can take the vehicle, your equipment, and half the house.
+
+This is not a wedding. For both of you, it is close enough.
+
+::: ending {.ending-card tone="amber"}
+**UNFORTUNATELY**
+
+Love survives as a jointly held liability.
+:::
+
+[[Review the case file -> CaseNotes]]
+
+[[Begin again -> Start]]
+
+:: WomenOwned {"title":"Ending 5 / Women-Owned","scene":"yard"}
+@do $ending = "Women-Owned"
+
+# Women-Owned
+
+@Chapter("ENDING 5 OF 6", "The numbers work")
+
+Sister Shift expands. The card reader asks impounded drivers to add a 20, 25, or 30
+percent tip. The **NO TIP** button asks if they are sure.
+
+One winter morning, a nurse begs you not to take the car she needs for work. Her
+parking pass expired yesterday. A sick child watches from an upstairs window.
+
+Mars lowers the hook.
+
+“Are we bad people?” she asks once the building disappears behind you.
+
+“We are a women-owned business,” you say.
+
+Both of you laugh because stopping would require an answer.
+
+::: ending {.ending-card tone="red"}
+**WOMEN-OWNED**
+
+The truck is finally legal. Nothing else is.
+:::
+
+[[Review the case file -> CaseNotes]]
+
+[[Begin again -> Start]]
+
+:: HonestWreck {"title":"Ending 6 / The Honest Wreck","scene":"dawn"}
+@do $ending = "The Honest Wreck"
+
+# The Honest Wreck
+
+@Chapter("ENDING 6 OF 6", "Nothing to tow")
+
+Mars takes the key but not the room. The house is silent for weeks.
+
+On Wednesdays you keep arranging chairs. Eventually two people arrive. You tell
+them the group has no answers tonight. Nobody leaves.
+
+Mars does not come back. She sends a photograph of a white recovery truck from an
+unknown number. You do not save it under evidence.
+
+::: ending {.ending-card tone="quiet"}
+**THE HONEST WRECK**
+
+Some endings are only clean because they leave nothing attached.
+:::
+
+[[Review the case file -> CaseNotes]]
+
+[[Begin again -> Start]]
+
+:: LockedRoom {"title":"Ending 0 / The Locked Room","scene":"kitchen"}
+@do $ending = "The Locked Room"
+
+# The Locked Room
+
+@Chapter("BAD END", "The safest place")
+
+Mars leaves. Three weeks later she returns with a split lip and no truck. You hand
+her frozen peas and do not ask whose fault it was, because both possible answers
+frighten you.
+
+She sleeps beside you with the width of another person between your bodies.
+
+In the morning you discuss a loan.
+
+::: ending {.ending-card tone="red"}
+**THE LOCKED ROOM**
+
+She returned. You decide not to ask whether that means you won.
+:::
+
+[[Review the case file -> CaseNotes]]
+
+[[Begin again -> Start]]
+

@@ -1,0 +1,78 @@
+:: WednesdayCircle {"title":"Chapter II / A More Useful Theory","scene":"kitchen"}
+# A more useful theory
+
+@Chapter("CHAPTER II · WEEK THREE", "The group gets practical")
+
+Your weekly empowerment circle has one guest and twelve empty chairs. You guide a
+breathing exercise about taking up space under systems built to make women smaller.
+
+::: dialogue {.dialogue speaker="Mars" mood="helpful"}
+“The system making me smallest is my bank balance.”
+:::
+
+The guest opens her eyes. “She has a point.”
+
+The next week, six people come. You explain structures. Mars knows their street
+addresses, bail schedules, unreliable exes, and which engine noise means **do not
+drive this car to work tomorrow**.
+
+After the last guest leaves, Mars says you need people to be broken so you can be
+the least broken person in the room.
+
+You tell her Cal keeps towing her life away because she hands him the keys.
+
+The argument stops one inch before becoming honest.
+
+[[Kiss her and call it mutual aid -> Kiss]]
+
+[[Apologize without explaining the apology -> Apology]]
+
+[[Win the argument; sleep alone -> WinArgument]]
+
+:: Kiss {"title":"Chapter II / Mutual Aid","scene":"kitchen"}
+@do $trust += 2
+@do $leverage += 1
+@do $notes.push({id: $notes.length, text: "Their first kiss ended an argument without resolving it."})
+
+@Chapter("INCIDENT REPORT", "Mutual aid")
+
+You kiss her. Mars holds your wrist as if checking whether you can still leave.
+
+“This does not define us,” you say afterward.
+
+“Say mutual aid and I am going back to Cal.”
+
+You kiss her again.
+
+[[Three weeks later, a profitable complaint arrives -> FirstTow]]
+
+:: Apology {"title":"Chapter II / No Framework","scene":"kitchen"}
+@do $trust += 3
+@do $honesty += 2
+@do $notes.push({id: $notes.length, text: "Lenora apologized once without naming a social structure."})
+
+@Chapter("INCIDENT REPORT", "No framework")
+
+“That was cruel,” you say. “And it was about me, not Cal.”
+
+Mars studies you, suspicious of a sentence with no framework attached.
+
+She kisses your cheek on the way to bed. It is gentler than either of you knows how
+to discuss.
+
+[[Three weeks later, a profitable complaint arrives -> FirstTow]]
+
+:: WinArgument {"title":"Chapter II / Technically Correct","scene":"kitchen"}
+@do $trust -= 2
+@do $leverage += 2
+@do $notes.push({id: $notes.length, text: "Lenora won an argument and spent the night listening for Mars to leave."})
+
+@Chapter("INCIDENT REPORT", "Technically correct")
+
+You prove every point. Mars runs out of jokes. She sleeps in the spare room while
+you listen to the secondhand air conditioner cough dust through the wall.
+
+In the morning she is still there. You count this as victory.
+
+[[Three weeks later, a profitable complaint arrives -> FirstTow]]
+

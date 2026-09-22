@@ -1,0 +1,115 @@
+:: JulesArrives {"title":"Chapter IV / An Exit with Benefits","scene":"kitchen"}
+@action readCard() {
+  @do $sawJobCard = true;
+  @do $notes.push({id: $notes.length, text: "Jules offered Mars a legal fleet job with insurance and fixed hours."});
+}
+
+# An exit with benefits
+
+@Chapter("CHAPTER IV · SUNDAY", "The successful nephew returns")
+
+Jules arrives in a black car clean enough to insult the street. He sees Mars in your
+lavender robe, the Sister Shift ledger, and his old jacket still hanging in the closet.
+
+He needs only ten seconds.
+
+::: dialogue {.dialogue speaker="Jules" mood="tired"}
+“Auntie, you are committing crimes with nonprofit margins.”
+:::
+
+He slides a card toward Mars. A regional recovery fleet needs a driver. Legal wages.
+Insurance. Fixed shifts. They check records, but Jules knows a manager.
+
+@region jobCard {
+  @if (!$sawJobCard) {
+    [[Turn over the card => readCard]]
+  } @else {
+    @CaseFile("INTERVIEW", "MONDAY · 9:00 A.M.")
+    @CaseFile("VEHICLE", "COMPANY OWNED · FULLY INSURED")
+  }
+}
+
+Then Jules looks at you.
+
+“Mars needs a job. You need Mars to need you. Those are not the same thing.”
+
+After he leaves, the card remains on the table.
+
+[[Tape it when Mars is not looking -> GiveCard]]
+
+[[Put it in the trash and say nothing -> HideCard]]
+
+[[Tell Mars you are afraid she'll take it -> ConfessFear]]
+
+:: GiveCard {"title":"Chapter IV / Transparent Tape","scene":"kitchen"}
+@do $honesty += 1
+@do $trust += 1
+@do $notes.push({id: $notes.length, text: "Lenora repaired the job card and left it beside Mars's coffee."})
+
+@Chapter("MONDAY · 7:10 A.M.", "Transparent tape")
+
+You tape the card together and leave it by Mars's mug. You also list six ways the
+company probably exploits labor. Mars reads all six.
+
+“You forgot number seven,” she says. “They expect me to arrive on time.”
+
+[[Drive her to the interview -> InterviewMorning]]
+
+:: HideCard {"title":"Chapter IV / The Private Archive","scene":"kitchen"}
+@do $leverage += 3
+@do $trust -= 2
+@do $notes.push({id: $notes.length, text: "Lenora hid the job card in the same drawer as Mars's spare key."})
+
+@Chapter("MONDAY · 7:10 A.M.", "The private archive")
+
+You place the card in the drawer where you keep tax notices, spare keys, and things
+you prefer to call evidence instead of secrets.
+
+Mars dresses carefully anyway. Jules sent her the address before he came.
+
+“I am meeting someone,” she says.
+
+You can still decide what kind of person meets her at the door.
+
+[[Give her the card and admit where it was -> LateConfession]]
+
+[[Say nothing. Make a phone call after she leaves -> TheCall]]
+
+:: ConfessFear {"title":"Chapter IV / A Sentence Without Armor","scene":"kitchen"}
+@do $honesty += 3
+@do $trust += 2
+@do $notes.push({id: $notes.length, text: "Lenora admitted she was afraid of becoming unnecessary."})
+
+@Chapter("MONDAY · 7:10 A.M.", "A sentence without armor")
+
+“I am afraid you will find somewhere that does not need me,” you say.
+
+Mars waits for the theory that will turn confession into weather. None comes.
+
+“That is the first useful thing you have said all month.”
+
+She pockets the card. “Come with me. Do not speak to the manager.”
+
+[[Promise absolutely nothing and drive -> InterviewMorning]]
+
+:: LateConfession {"title":"Chapter IV / Before the Truck Starts","scene":"yard"}
+@do $honesty += 2
+@do $trust -= 1
+@do $notes.push({id: $notes.length, text: "Lenora confessed before sabotage could become a plan."})
+
+@Chapter("MONDAY · 8:04 A.M.", "Before the truck starts")
+
+You catch Mars at the curb. The taped card looks pathetic in your palm.
+
+“I hid this.”
+
+Mars looks from the card to you. “Did it work?”
+
+“No.”
+
+“Then get in. I need a ride.”
+
+It is not forgiveness. It is transportation.
+
+[[Drive in silence -> InterviewMorning]]
+

@@ -3,10 +3,58 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>gneh / Snapshot documents</title>
+    <meta name="description" content="No Clean Getaway — a toxic romance in six bad decisions, built with gneh." />
+    <title>No Clean Getaway</title>
   </head>
-  <body>
-    <main id="story"></main>
+  <body data-scene="yard" data-ending="false">
+    <div class="backdrop" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#Start" aria-label="No Clean Getaway">
+        <span class="brand-rule"></span>
+        <span><b>NO CLEAN GETAWAY</b><small>A GNEH VISUAL NOVEL</small></span>
+      </a>
+      <div class="case-id"><span>CASE</span><b>02:17—MQ</b></div>
+    </header>
+
+    <main class="stage">
+      <aside class="rail rail-left" aria-label="Story status">
+        <span class="rail-label">CURRENT PASSAGE</span>
+        <strong id="route">Start</strong>
+        <i></i>
+        <span id="route-title">No Clean Getaway</span>
+      </aside>
+
+      <section class="novel-shell">
+        <div class="scene-label" aria-hidden="true"><span>MARLOWE BAY</span><span>AFTER MIDNIGHT</span></div>
+        <article id="story" aria-live="polite"></article>
+      </section>
+
+      <aside class="rail rail-right" aria-label="Persistent story state">
+        <div><span>TRUST</span><strong id="metric-trust">0</strong></div>
+        <div><span>HEAT</span><strong id="metric-heat">0</strong></div>
+        <div><span>DEBT</span><strong id="metric-debt">$0</strong></div>
+      </aside>
+    </main>
+
+    <footer class="story-tools" aria-label="Story controls">
+      <div class="tool-group history-tools">
+        <button id="undo" type="button" title="Undo · Left arrow">↶ <span>Undo</span></button>
+        <button id="redo" type="button" title="Redo · Right arrow">↷ <span>Redo</span></button>
+      </div>
+      <div class="status-stack">
+        <div class="progress-track" aria-hidden="true"><i id="progress-fill"></i></div>
+        <p id="app-status" role="status">The reverse alarm is dying in the rain.</p>
+      </div>
+      <div class="tool-group save-tools">
+        <button id="sound" type="button" aria-pressed="false">Ambient: on</button>
+        <button id="save" type="button" title="Save · S">Save</button>
+        <button id="load" type="button" title="Load · L">Load</button>
+        <button id="reset" type="button">Restart</button>
+      </div>
+    </footer>
+
     <script type="module" src="/src/main.mjs"></script>
   </body>
 </html>

@@ -1,0 +1,127 @@
+:: TheCall {"title":"Chapter V / No Happy Endings","scene":"kitchen"}
+@do $betrayed = true
+@do $heat += 3
+@do $trust -= 4
+@do $notes.push({id: $notes.length, text: "Lenora gave Cal the interview address."})
+
+# No happy endings
+
+@Chapter("CHAPTER V · 8:17 A.M.", "The call")
+
+Cal answers on the sixth ring.
+
+You tell him Mars is using **his** truck to get a new job. You give him the address.
+You tell yourself he deserves to know where his property is.
+
+The interview ends in a parking lot with two police officers, one expired insurance
+paper, and a truck registered to the absent Arthur. Nobody can prove ownership.
+Everyone can prove Mars has the worst documents.
+
+The truck leaves on the hook of another truck.
+
+At dusk Mars returns without keys.
+
+::: dialogue {.dialogue speaker="Mars" mood="quiet"}
+“Cal repeated your sentence word for word. He has never built a sentence that clean.”
+:::
+
+[[Admit you wanted her trapped -> Rupture]]
+
+[[Explain that the truck was never legally hers -> Justify]]
+
+:: InterviewMorning {"title":"Chapter V / The Company Lot","scene":"yard"}
+# The company lot
+
+@Chapter("CHAPTER V · 8:53 A.M.", "A truck with clean paperwork")
+
+The company lot contains twelve white trucks, each with matching doors and a reverse
+alarm that works. Mars touches one fender as if it belongs to a gentler species.
+
+The manager likes her. The record check does not. Jules's call keeps the conversation
+alive, but only just.
+
+The manager offers probationary shifts. Mars can start Tuesday, if she arrives without
+the disputed truck and if somebody covers the uniform deposit.
+
+@Pulse()
+
+[[Pay the deposit. Do not call it rescue -> PayDeposit]]
+
+[[Ask her to stay and make Sister Shift legitimate -> LegitimatePlan]]
+
+@if ($heat >= 4) {
+  [[Keep the apartment contracts; the money is finally real -> PredatoryPlan]]
+}
+
+:: PayDeposit {"title":"Finale / The Key on the Table","scene":"kitchen"}
+@do $debt += 180
+@do $honesty += 1
+@do $trust += 1
+
+@if ($honesty >= 4 && $trust >= 4) {
+  [[Let her leave, then ask her to dinner somewhere neutral -> BetterThings]]
+} @else {
+  [[Let her leave without making the debt a leash -> KeyReturned]]
+}
+
+:: LegitimatePlan {"title":"Finale / Terms","scene":"kitchen"}
+@do $debt += 900
+
+@Chapter("FINAL OFFER", "A company of two")
+
+You propose a new truck with clean papers, roadside assistance instead of ambush
+towing, and a ledger that can survive daylight. Mars asks who owns what.
+
+For once, you write it down before you answer.
+
+@if ($honesty >= 3 && $heat <= 3) {
+  [[Split it down the middle, including the exit clause -> TermsAndConditions]]
+} @else {
+  [[Put the house up as collateral -> BusinessPartners]]
+}
+
+:: PredatoryPlan {"title":"Finale / Sister Shift Recovery","scene":"yard"}
+@do $debt -= 200
+@do $heat += 3
+
+@Chapter("FINAL OFFER", "The numbers finally work")
+
+You show Mars the apartment contracts. She shows you the uniform deposit form.
+
+One future pays less and might let her sleep. The other is already yours.
+
+[[Choose the money you understand -> WomenOwned]]
+
+[[Tear up the worst contract and take the Tuesday shift -> KeyReturned]]
+
+:: Rupture {"title":"Finale / What It Was For","scene":"kitchen"}
+@do $honesty += 2
+
+@Chapter("AFTER THE CALL", "What it was for")
+
+“I wanted you to come back,” you say. “I wanted the outside world to fail before you
+could decide I was the failure.”
+
+Mars packs the plastic basket. At the door she pauses.
+
+@if ($honesty >= 3) {
+  [[Give her the house key and do not ask where she is going -> HonestWreck]]
+} @else {
+  [[Tell her nobody else knows how to keep her safe -> LockedRoom]]
+}
+
+:: Justify {"title":"Finale / Legally Speaking","scene":"kitchen"}
+@do $leverage += 2
+@do $trust -= 2
+
+@Chapter("AFTER THE CALL", "Legally speaking")
+
+You explain the registration, the liability, and every risk you prevented. Mars
+listens until your argument is flawless.
+
+“You do not love me,” she says. “You love being the locked door and the spare key.”
+
+[[Tell her to leave -> LockedRoom]]
+
+[[Ask her to stay without using the word safe -> BusinessPartners]]
+

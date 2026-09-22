@@ -1,0 +1,82 @@
+:: FirstTow {"title":"Chapter III / Sisters in Motion","scene":"yard"}
+# Sisters in motion
+
+@Chapter("CHAPTER III · MONTH TWO", "Control is difficult to invoice")
+
+A man blocks the driveway of someone from the Wednesday circle. He is her ex. He
+parks there to force a conversation.
+
+You call it coercive control. Mars calls it a parking violation.
+
+Control is difficult to invoice. Parking violations are not.
+
+That night Mars tows his sedan. He pays $240 because the glove box contains
+something he does not want the police to inventory. Mars places eighty dollars on
+your kitchen table.
+
+Within a week you have business cards for **SISTER SHIFT RECOVERY**. The logo is a
+raised fist holding a tow hook. The slogan is worse.
+
+::: dialogue {.dialogue speaker="Mars" mood="delighted"}
+“Every time you turn theft into a workshop title, an angel loses her catalytic converter.”
+:::
+
+Which calls do you accept?
+
+[[Only clear safety cases: blocked drives, abandoned cars -> EthicalRoute]]
+
+[[Anyone your circle says has earned the inconvenience -> FavorRoute]]
+
+[[Apartment contracts. Volume makes the numbers work -> ContractRoute]]
+
+:: EthicalRoute {"title":"Chapter III / A Narrow Lane","scene":"yard"}
+@do $heat += 1
+@do $trust += 1
+@do $debt += 120
+@do $notes.push({id: $notes.length, text: "Sister Shift refused easy money and discovered ethics have overhead."})
+
+@Chapter("BUSINESS MODEL A", "A narrow lane")
+
+You take only the calls you can defend without changing the subject. There are not
+enough of them. Fuel, permits, and the truck's mysterious thirst for transmission
+fluid eat every dollar.
+
+Mars never complains about the money. She starts checking job listings when she
+thinks you are asleep.
+
+[[Open the envelope on the kitchen table -> JulesArrives]]
+
+:: FavorRoute {"title":"Chapter III / Community Standards","scene":"yard"}
+@do $heat += 3
+@do $leverage += 2
+@do $debt += 40
+@do $notes.push({id: $notes.length, text: "The definition of community safety expanded to include people Lenora disliked."})
+
+@Chapter("BUSINESS MODEL B", "Community standards")
+
+First you tow dangerous men. Then unreliable brothers. Then the mother of a woman
+who mocked your breathing exercise online.
+
+Mars says the boundary is getting blurry. You tell her justice is context-sensitive.
+
+“Funny how the context keeps having your phone number,” she says.
+
+[[Open the envelope on the kitchen table -> JulesArrives]]
+
+:: ContractRoute {"title":"Chapter III / Scale","scene":"yard"}
+@do $heat += 5
+@do $debt -= 100
+@do $leverage += 1
+@do $notes.push({id: $notes.length, text: "Sister Shift signed its first apartment contract and stopped asking who called."})
+
+@Chapter("BUSINESS MODEL C", "Scale")
+
+The apartment manager pays on time. Tenants do not. You begin patrolling after
+midnight, when expired permits are easy to see and exhausted people are slow to argue.
+
+For the first time, Sister Shift has cash left after fuel.
+
+For the first time, Mars stops telling you the names of the people whose cars you take.
+
+[[Open the envelope on the kitchen table -> JulesArrives]]
+

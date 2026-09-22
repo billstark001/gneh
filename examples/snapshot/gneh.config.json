@@ -1,7 +1,18 @@
 {
-  "title": "gneh / Snapshot documents",
+  "title": "No Clean Getaway",
   "entry": "Start",
-  "sources": ["story.inkdown"],
-  "live": false,
-  "state": { "name": "Reader" }
+  "sources": ["story"],
+  "live": true,
+  "state": {
+    "trust": 0,
+    "heat": 0,
+    "debt": 0,
+    "honesty": 0,
+    "leverage": 0,
+    "sawJulesRoom": false,
+    "sawJobCard": false,
+    "betrayed": false,
+    "ending": "",
+    "notes": [{ "id": 0, "text": "A tow truck arrived at Marigold Court at 2:17 a.m." }]
+  }
 }

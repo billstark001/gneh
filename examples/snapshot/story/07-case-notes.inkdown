@@ -1,0 +1,21 @@
+:: CaseNotes {"title":"Case File / What the Story Remembers","scene":"file"}
+# Case file
+
+@Chapter("PERSISTENT STATE", "What the story remembers")
+
+The route changed; the state stayed. These entries were pushed into an array by
+actions and passage effects, then rendered with an `@each` loop.
+
+@each (note of $notes; key note.id) {
+  ::: note {.case-entry}
+  {{ note.text }}
+  :::
+}
+
+@Pulse()
+
+@CaseFile("ENDING", $ending || "UNRESOLVED")
+@CaseFile("JOB CARD READ", $sawJobCard ? "YES" : "NO")
+@CaseFile("INTERVIEW SABOTAGED", $betrayed ? "YES" : "NO")
+
+[[Return to the beginning -> Start]]

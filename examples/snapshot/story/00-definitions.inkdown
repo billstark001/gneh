@@ -1,0 +1,27 @@
+---
+metadata:
+  tags: [visual-novel, noir-comedy, toxic-romance, showcase]
+setup: [Definitions]
+---
+:: Definitions
+@view Chapter(kicker, title) {
+  ::: chapter {.chapter-card}
+  **{{ kicker }}**
+
+  ## {{ title }}
+  :::
+}
+
+@view Pulse() {
+  ::: status {.story-pulse}
+  TRUST **{{ $trust }}** · HEAT **{{ $heat }}** · DEBT **${{ $debt }}**
+  :::
+}
+
+@view CaseFile(label, value) {
+  ::: note {.case-file}
+  {{ label }} · **{{ value }}**
+  :::
+}
+
+@publish { Chapter, Pulse, CaseFile }

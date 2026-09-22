@@ -1,0 +1,131 @@
+:: Start [start] {"title":"Prologue / The Dead Bird Alarm","scene":"yard"}
+# No Clean Getaway
+
+@Chapter("2:17 A.M. · MARLOWE BAY", "The dead bird alarm")
+
+The tow truck reverses into Marigold Court with a warning beep that sounds like a
+dying electronic bird. It cries seven times, coughs once, and gives up.
+
+You are **Lenora Vale**: organizer, landlady, survivor of three certificate programs
+and one extremely public bankruptcy. From behind the curtain you watch **Mars Quinn**
+climb down from the cab carrying a grocery bag. The bottom shows one bottle of vodka
+and two tins of cat food.
+
+Neither of you owns a cat.
+
+::: dialogue {.dialogue speaker="Mars" mood="dry"}
+“I saw the curtain move, Lenny.”
+:::
+
+::: dialogue {.dialogue speaker="Lenora" mood="sharp"}
+“Only people I like call me Lenny.”
+:::
+
+Mars says she needs one night. She says her boyfriend Cal used the rent for a
+“business emergency.” She says the tow truck is hers, except for the registration,
+the insurance, the notice taped to the door, and one man named Arthur whom nobody
+has seen since spring.
+
+This is the first decision. Later, both women will insist it was the other's.
+
+[[Open the door and call it solidarity -> OpenDoor]]
+
+[[Make her admit she has nowhere else to go -> MakeHerAsk]]
+
+[[Offer cash for a motel instead -> MotelMoney]]
+
+:: OpenDoor {"title":"One Night / Structural Resources","scene":"kitchen"}
+@do $trust += 2
+@do $notes.push({id: $notes.length, text: "Lenora opened the door before Mars had to ask twice."})
+
+@Chapter("ONE NIGHT", "Structural resources")
+
+“A woman does not close a door on another woman in need,” you say, opening it.
+
+Mars steps past you. “You were absolutely about to close it.”
+
+“Thought is conditioned. Action reveals essence.”
+
+“Where does my essence sleep?”
+
+[[Show her the room you definitely do not keep for your nephew -> WeekOne]]
+
+:: MakeHerAsk {"title":"One Night / The Cost of Asking","scene":"kitchen"}
+@do $trust -= 1
+@do $leverage += 2
+@do $notes.push({id: $notes.length, text: "Mars said please. Lenora kept the word like collateral."})
+
+@Chapter("ONE NIGHT", "The cost of asking")
+
+You leave the chain on until Mars says the word **please**. She says it flatly,
+without handing you the satisfaction of sounding small.
+
+You release the chain. She notices that you notice.
+
+“One night,” you say.
+
+“One night,” Mars agrees, which is the first contract neither of you intends to honor.
+
+[[Point her toward the spare room -> WeekOne]]
+
+:: MotelMoney {"title":"One Night / A Clean Boundary","scene":"yard"}
+@do $debt += 80
+@do $honesty += 1
+@do $notes.push({id: $notes.length, text: "Lenora tried to purchase a clean boundary for eighty dollars."})
+
+@Chapter("ONE NIGHT", "A clean boundary")
+
+You offer eighty dollars for a motel. Mars looks at the bills, then at the tow truck.
+
+“You know Cal will take this if I go back for my things.”
+
+“Then don't go back.”
+
+“That easy?”
+
+“No. That simple.”
+
+Mars pockets the money and sleeps in the truck outside your house. At six, you find
+her repairing your front gate in yesterday's clothes. At seven, you make coffee for two.
+
+[[Let the boundary become a guest room -> WeekOne]]
+
+:: WeekOne {"title":"Chapter I / The Room That Is Not Waiting","scene":"kitchen"}
+@action inspectRoom() {
+  @do $sawJulesRoom = true;
+  @do $trust += 1;
+  @do $notes.push({id: $notes.length, text: "Mars found Jules's jacket inside Lenora's so-called renewal room."});
+}
+
+# The room that is not waiting
+
+@Chapter("CHAPTER I · DAY FOUR", "Mutual aid, with conditions")
+
+The spare room contains a folding cot, discount crystals, seven unopened self-help
+books, and a sign reading **PATRIARCHAL ENERGY QUARANTINE**. In the closet hangs the
+old varsity jacket of your nephew Jules, now a wealthy crisis manager who returns
+calls through an assistant.
+
+Mars says the room is waiting for him.
+
+You say it is evidence, not a shrine.
+
+@region roomEvidence {
+  @if (!$sawJulesRoom) {
+    [[Look behind the quarantine sign => inspectRoom]]
+  } @else {
+    ::: discovery {.discovery}
+    Behind the sign is a pencil mark: **JULES · 16 · STILL GROWING**. Mars does not
+    make a joke. Her restraint feels more invasive than a joke would have.
+    :::
+  }
+}
+
+By the fourth morning, Mars has repaired the faucet and moved a plastic basket under
+the bathroom sink. You move it from the left side to the right so the house will know
+who is in charge.
+
+@Pulse()
+
+[[Invite her to the Wednesday circle -> WednesdayCircle]]
+
