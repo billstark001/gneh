@@ -27,7 +27,7 @@ const maxIRDepth = 128;
 export function defineIRFragment(
   ir: PassageIR,
   options: {
-    bindings?: Record<string, unknown>;
+    bindings?: Readonly<Record<string, unknown>>;
     rootScope?: Scope;
   } = {},
 ): Fragment {

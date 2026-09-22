@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assert, compiled, compileSource, text } from './helpers.js';
 import { generateModule } from '../dist/index.js';
-import { Story } from '../../runtime/dist/index.js';
+import { definePassages, Story } from '../../runtime/dist/index.js';
 
 const runtime = new URL('../../runtime/dist/index.js', import.meta.url).href;
 
@@ -37,6 +37,49 @@ imports:
     assert.equal(text(output.story.view), 'Hello Ada');
   } finally {
     await output.dispose();
+  }
+});
+
+test('generated modules keep native passage bindings lazy across an ESM cycle', async () => {
+  const source = `---
+imports:
+  ./native.mjs:
+    default: ModelLab
+---
+@const heading = "Primer"
+:: Primer [start]
+# {{ heading }}
+[[Open lab -> ModelLab]]`;
+  const result = compileSource(source, 'story.inkdown', { dialect: 'inkdown' });
+  assert.deepEqual(result.diagnostics, []);
+  const output = generateModule(result, source, 'story.inkdown');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gneh-esm-cycle-'));
+  const storyFile = path.join(directory, 'story.mjs');
+  const nativeFile = path.join(directory, 'native.mjs');
+  try {
+    await fs.writeFile(storyFile, output.code.replaceAll('"@gneh/runtime"', JSON.stringify(runtime)));
+    await fs.writeFile(
+      nativeFile,
+      `import passages from './story.mjs';
+import { definePassage, v } from ${JSON.stringify(runtime)};
+export default definePassage({
+  id: 'ModelLab',
+  bindings: { get Primer() { return passages.Primer; } },
+  render(ctx) {
+    return v.choice('Back to primer', passages.Primer.id, () => ctx.navigate(passages.Primer));
+  },
+});`,
+    );
+
+    // Loading the native side first reproduces the browser's failing evaluation
+    // order: native -> generated story -> still-uninitialized native binding.
+    const native = await import(pathToFileURL(nativeFile).href);
+    const generated = await import(pathToFileURL(storyFile).href);
+    const story = new Story(definePassages(generated.default, native.default), { entry: 'Primer' }).start();
+    story.navigate(native.default);
+    assert.equal(text(story.view), 'Back to primer');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
   }
 });
 

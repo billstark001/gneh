@@ -72,7 +72,10 @@ export function initializeModule(
     onDispose: () => unavailable('Mount cleanup'),
     publish: () => unavailable('Story-global publication'),
   };
-  const fragment = defineIRFragment(initializer, { bindings: { ...bindings }, rootScope: scope });
+  // Keep imported ESM bindings lazy. Generated source modules expose imports as
+  // getters so a native fragment can refer back to the compiled PassageSet
+  // without forcing an uninitialized binding during cyclic module evaluation.
+  const fragment = defineIRFragment(initializer, { bindings, rootScope: scope });
   const output = fragment.render(context, {});
   const views = Array.isArray(output) ? output : output == null ? [] : [output];
   invariant(
