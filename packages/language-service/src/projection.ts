@@ -107,6 +107,23 @@ export function createVirtualFile(
   const emitNodes = (nodes: StoryNode[]) => {
     for (const node of nodes) {
       switch (node.type) {
+        case 'suspend':
+          if (node.resume.type === 'timer') {
+            emit('void(');
+            emitExpression(node.resume.durationMs);
+            emit(');\n');
+          } else if (node.resume.type === 'signal' && node.resume.filter) {
+            emit('void(');
+            emitExpression(node.resume.filter);
+            emit(');\n');
+          } else if (node.resume.type === 'task') {
+            for (const expression of node.resume.args) {
+              emit('void(');
+              emitExpression(expression);
+              emit(');\n');
+            }
+          }
+          break;
         case 'value':
           emit('display(');
           emitExpression(node.expression);

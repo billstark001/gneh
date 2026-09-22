@@ -6,7 +6,7 @@ import {
   type Metadata,
   type PassageIR,
   type CallablePhase,
-  type ViewInput,
+  type RenderInput,
 } from '@gneh/core';
 
 export const passageSetSetup: unique symbol = Symbol('gneh.passage-set.setup');
@@ -21,7 +21,7 @@ export interface FragmentDefinition<P extends object> {
   bindings?: Readonly<Record<string, unknown>>;
   ir?: PassageIR;
   enter?: (ctx: FragmentContext, props: P) => void;
-  render: (ctx: FragmentContext, props: P) => ViewInput;
+  render: (ctx: FragmentContext, props: P) => RenderInput;
 }
 
 export interface PassageDefinition<P extends object> extends FragmentDefinition<P> {
@@ -63,7 +63,7 @@ function defineCallable<P extends CallablePhase, Args extends unknown[]>(
   });
 }
 
-export const defineView = <Args extends unknown[]>(invoke: (...args: Args) => ViewInput): AuthoredCallable<'view'> =>
+export const defineView = <Args extends unknown[]>(invoke: (...args: Args) => RenderInput): AuthoredCallable<'view'> =>
   defineCallable('view', invoke);
 export const defineAction = <Args extends unknown[]>(invoke: (...args: Args) => void): AuthoredCallable<'effect'> =>
   defineCallable('effect', invoke);

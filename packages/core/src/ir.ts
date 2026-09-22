@@ -63,6 +63,13 @@ export type Dialect = 'inkdown' | 'karlowe' | 'sugarcast';
 
 export type Metadata = Record<string, Json>;
 
+/** Serializable suspension descriptions. Expressions are resolved when reached. */
+export type ResumeConditionIR =
+  | { type: 'manual' }
+  | { type: 'timer'; durationMs: Expression; clock?: 'active' | 'wall' }
+  | { type: 'signal'; name: string; filter?: Expression }
+  | { type: 'task'; operation: string; args: Expression[] };
+
 export type ContentKind =
   | 'paragraph'
   | 'heading'
@@ -90,6 +97,7 @@ export type StoryNode =
   | { type: 'text'; value: string; span: Span }
   | { type: 'content'; kind: ContentKind; attrs: Metadata; children: StoryNode[]; span: Span }
   | { type: 'effect'; effects: EffectNode[]; span: Span }
+  | { type: 'suspend'; id?: string; resume: ResumeConditionIR; bind?: BindingPattern; span: Span }
   | { type: 'value'; expression: Expression; span: Span }
   | { type: 'if'; test: Expression; yes: StoryNode[]; no: StoryNode[]; span: Span }
   | {

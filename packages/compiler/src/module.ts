@@ -74,7 +74,11 @@ function runtimePassage(
     for (const node of nodes) {
       spanOwners.add(node);
       if (node.type === 'value') markExpression(node.expression);
-      else if (node.type === 'if') {
+      else if (node.type === 'suspend') {
+        if (node.resume.type === 'timer') markExpression(node.resume.durationMs);
+        else if (node.resume.type === 'signal' && node.resume.filter) markExpression(node.resume.filter);
+        else if (node.resume.type === 'task') for (const argument of node.resume.args) markExpression(argument);
+      } else if (node.type === 'if') {
         markExpression(node.test);
         markNodes(node.yes);
         markNodes(node.no);

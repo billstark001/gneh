@@ -5,6 +5,7 @@ import {
   type Fragment,
   type FragmentProps,
   type Json,
+  type ResumeCondition,
   type RuntimeExtension,
   type State,
   type ViewInput,
@@ -16,6 +17,14 @@ export interface Snapshot {
   props: Record<string, Json>;
   state: State;
   seed: number;
+  continuations: Record<string, ContinuationSnapshot>;
+}
+
+export interface ContinuationSnapshot {
+  fragment: string;
+  passed: string[];
+  locals: Record<string, Json>;
+  scopes: Record<string, State>;
 }
 
 export interface SaveData {
@@ -27,7 +36,7 @@ export interface SaveData {
 }
 
 export interface TraceEvent {
-  type: 'enter' | 'render' | 'action' | 'navigate' | 'restore';
+  type: 'enter' | 'render' | 'action' | 'navigate' | 'resume' | 'restore';
   fragment: string;
   state?: State;
 }
@@ -53,6 +62,12 @@ export interface StoryOptions {
   onTrace?: (event: TraceEvent) => void;
   /** Optional trusted compiler bridge used by explicit runtime wikification features. */
   wikify?: (source: string, dialect?: Dialect) => Fragment;
+  /** Projection for declarative flow segments. Defaults to all revealed segments. */
+  flow?: {
+    projection?: 'revealed' | 'current' | 'all';
+  };
+  /** Injectable wall clock used by timer suspensions. Defaults to Date.now. */
+  now?: () => number;
   /** Renderer/application-owned effects. The story kernel never reaches for DOM or browser globals. */
   host?: (operation: string, args: readonly unknown[], story: Story) => unknown;
 }
@@ -66,6 +81,7 @@ export interface RegionOverride {
 /** Runtime identity and transient UI state for one mounted Fragment invocation. */
 export interface Frame {
   id: string;
+  key: string;
   fragment: AnyFragment;
   props: FragmentProps;
   alive: boolean;
@@ -74,4 +90,17 @@ export interface Frame {
   regions: Map<string, RegionOverride>;
   declaredRegions: Set<string>;
   locals: Map<string, unknown>;
+  /** Suspension keys already crossed by this mounted invocation. */
+  passed: Set<string>;
+  /** Serialized lexical slots applied when their scope is reconstructed. */
+  restoredScopes: Map<string, State>;
+}
+
+export interface ActiveSuspension {
+  readonly key: string;
+  readonly fragment: string;
+  readonly instanceId: string;
+  readonly resume: ResumeCondition;
+  readonly startedAt?: number;
+  readonly dueAt?: number;
 }

@@ -38,6 +38,11 @@ export function initializeStoryInput(
     'RANDOM_SEED',
     'StoryOptions.seed must be an unsigned 32-bit integer.',
   );
+  invariant(
+    options.flow?.projection === undefined || ['revealed', 'current', 'all'].includes(options.flow.projection),
+    'FLOW_PROJECTION',
+    'StoryOptions.flow.projection must be revealed, current, or all.',
+  );
   const storyIR = input as StoryIR;
   if (typeof storyIR.abi === 'number' && Array.isArray(storyIR.passages)) {
     invariant(storyIR.abi === ABI_VERSION, 'ABI_VERSION', `Unsupported story ABI: ${storyIR.abi}`);
@@ -76,9 +81,16 @@ export function initializeStoryInput(
   };
 }
 
-export function createFrame(id: string, fragment: AnyFragment, props: Frame['props'], entered = false): Frame {
+export function createFrame(
+  id: string,
+  fragment: AnyFragment,
+  props: Frame['props'],
+  entered = false,
+  key = id,
+): Frame {
   return {
     id,
+    key,
     fragment,
     props,
     alive: true,
@@ -87,6 +99,8 @@ export function createFrame(id: string, fragment: AnyFragment, props: Frame['pro
     regions: new Map(),
     declaredRegions: new Set(),
     locals: new Map(),
+    passed: new Set(),
+    restoredScopes: new Map(),
   };
 }
 
@@ -111,6 +125,38 @@ export function validateSnapshot(value: Snapshot, resolve: (id: string) => unkno
     'SAVE_SEED',
     'Invalid saved random state.',
   );
+  invariant(
+    value.continuations !== null && typeof value.continuations === 'object' && !Array.isArray(value.continuations),
+    'SAVE_CONTINUATION',
+    'Saved continuations must be an object.',
+  );
+  for (const [frameKey, continuation] of Object.entries(value.continuations)) {
+    invariant(frameKey.length > 0, 'SAVE_CONTINUATION', 'Continuation frame keys must not be empty.');
+    invariant(
+      continuation && typeof continuation === 'object' && !Array.isArray(continuation),
+      'SAVE_CONTINUATION',
+      'Invalid continuation frame.',
+    );
+    invariant(typeof continuation.fragment === 'string', 'SAVE_CONTINUATION', 'Invalid continuation fragment.');
+    resolve(continuation.fragment);
+    invariant(
+      Array.isArray(continuation.passed) && continuation.passed.every((key) => typeof key === 'string'),
+      'SAVE_CONTINUATION',
+      'Invalid continuation frontier.',
+    );
+    invariant(
+      continuation.locals !== null && typeof continuation.locals === 'object' && !Array.isArray(continuation.locals),
+      'SAVE_CONTINUATION',
+      'Continuation locals must be an object.',
+    );
+    invariant(
+      continuation.scopes !== null && typeof continuation.scopes === 'object' && !Array.isArray(continuation.scopes),
+      'SAVE_CONTINUATION',
+      'Continuation scopes must be an object.',
+    );
+    assertJson(continuation.locals);
+    assertJson(continuation.scopes);
+  }
 }
 
 /** Apply the configured history bound without `slice(-0)` accidentally retaining every entry. */
@@ -129,6 +175,8 @@ export function disposeFrame(frame: Frame): void {
   }
   frame.cleanups.clear();
   frame.locals.clear();
+  frame.passed.clear();
+  frame.restoredScopes.clear();
   frame.regions.clear();
   frame.declaredRegions.clear();
   frame.props = {};

@@ -1,5 +1,5 @@
 import type { ContentKind, Dialect, Metadata, PassageIR } from './ir.js';
-import type { Scalar, State } from './json.js';
+import type { Json, Scalar, State } from './json.js';
 import { display } from './json.js';
 
 export type Scope = Record<string, unknown>;
@@ -15,7 +15,17 @@ export interface EvaluationContext {
 }
 
 export interface View {
-  kind: ContentKind | 'text' | 'group' | 'choice' | 'button' | 'region' | `control:${string}` | `extension:${string}`;
+  kind:
+    | ContentKind
+    | 'text'
+    | 'group'
+    | 'choice'
+    | 'button'
+    | 'region'
+    /** Runtime-internal flow boundary; Story removes it before renderer delivery. */
+    | 'suspend'
+    | `control:${string}`
+    | `extension:${string}`;
   key?: string;
   text?: string;
   attrs?: Record<string, unknown>;
@@ -27,6 +37,50 @@ export interface View {
 export type FragmentProps = Record<string, unknown>;
 
 export type ViewInput = View | View[] | Scalar | undefined;
+
+/** A renderer-neutral condition which can resume a suspended flow. */
+export type ResumeCondition =
+  | { type: 'manual' }
+  | { type: 'timer'; durationMs: number; clock?: 'active' | 'wall' }
+  | { type: 'signal'; name: string; filter?: Json }
+  | { type: 'task'; operation: string; args?: Json[] };
+
+export interface FlowLazy {
+  readonly kind: 'gneh.flow.lazy';
+  readonly id?: string;
+  readonly render: (ctx: FragmentContext) => RenderInput;
+}
+
+export interface FlowSuspend {
+  readonly kind: 'gneh.flow.suspend';
+  readonly id?: string;
+  readonly resume: ResumeCondition;
+  /** Store the JSON resume value in a continuation local with this name. */
+  readonly bind?: string;
+}
+
+export interface FlowEach {
+  readonly kind: 'gneh.flow.each';
+  readonly id?: string;
+  readonly items: readonly Json[] | ((ctx: FragmentContext) => readonly Json[]);
+  readonly key: (item: Json, index: number) => string | number;
+  readonly render: (item: Json, index: number, ctx: FragmentContext) => RenderInput;
+}
+
+export type FlowNode = ViewInput | Flow | FlowLazy | FlowSuspend | FlowEach;
+
+/** A declarative, resumable render program for handwritten passages and views. */
+export interface Flow {
+  readonly kind: 'gneh.flow';
+  readonly nodes: readonly FlowNode[];
+}
+
+export type RenderInput = ViewInput | Flow;
+
+export interface RenderEvaluation {
+  readonly view: View[];
+  readonly suspended: boolean;
+}
 
 export interface RuntimeExtensionInvocation {
   readonly id: string;
@@ -52,8 +106,12 @@ export interface RegionHandle {
 export interface FragmentContext extends EvaluationContext {
   readonly live: boolean;
   readonly instanceId: string;
+  /** Stable structural mount key used by continuation state. */
+  readonly mountKey: string;
   /** True only while rebuilding transient runtime structure from a save. */
   readonly restoring: boolean;
+  /** True after the current render pass reaches an unresolved suspension. */
+  readonly suspended: boolean;
   dispatch(action: (ctx: FragmentContext) => void): void;
   regionView(name: string, fallback: () => View[]): View;
   navigate<P extends object>(target: Fragment<P>, ...args: {} extends P ? [props?: P] : [props: P]): void;
@@ -62,6 +120,18 @@ export interface FragmentContext extends EvaluationContext {
   /** Per-mounted-fragment transient storage used by materialized source dialects. */
   local<T>(key: string, initialize: (ctx: FragmentContext) => T): T;
   setLocal<T>(key: string, value: T): void;
+  /** JSON continuation storage. It is retained by history and save/load. */
+  continuation<T extends Json>(key: string, initialize: (ctx: FragmentContext) => T): T;
+  setContinuation<T extends Json>(key: string, value: T): void;
+  deleteContinuation(key: string): void;
+  /** Evaluate a handwritten declarative flow inside this mounted Fragment. */
+  evaluate(input: RenderInput, key?: string): RenderEvaluation;
+  /** Install a suspension point. Returns true when evaluation must stop here. */
+  suspend(
+    key: string,
+    resume?: ResumeCondition,
+    accept?: (value: Json | undefined, ctx: FragmentContext) => void,
+  ): boolean;
   /** Execute an initialization effect once; restoration marks it complete without replaying it. */
   effect(key: string, action: (ctx: FragmentContext) => void): void;
   host(operation: string, args?: unknown[]): unknown;
@@ -86,7 +156,7 @@ export interface Fragment<P extends object = FragmentProps> {
   readonly ir?: PassageIR;
   readonly bindings?: Readonly<Record<string, unknown>>;
   enter?: (ctx: FragmentContext, props: P) => void;
-  render: (ctx: FragmentContext, props: P) => ViewInput;
+  render: (ctx: FragmentContext, props: P) => RenderInput;
 }
 
 /** Type-erased storage boundary; public include/navigation overloads preserve props. */
@@ -141,5 +211,34 @@ export const v = {
     kind: `extension:${name}`,
     attrs,
     children: children.flatMap(normalizeView),
+  }),
+  /** Compose lazy flow instructions without evaluating later segments eagerly. */
+  flow: (...nodes: FlowNode[]): Flow => ({ kind: 'gneh.flow', nodes }),
+  /** Lazily produce content when the flow frontier reaches this instruction. */
+  lazy: (render: (ctx: FragmentContext) => RenderInput, id?: string): FlowLazy => ({
+    kind: 'gneh.flow.lazy',
+    id,
+    render,
+  }),
+  /** Suspend after a lazily rendered segment. */
+  step: (render: (ctx: FragmentContext) => RenderInput, id?: string): Flow => ({
+    kind: 'gneh.flow',
+    nodes: [
+      { kind: 'gneh.flow.lazy', id: id ? `${id}:content` : undefined, render },
+      { kind: 'gneh.flow.suspend', id, resume: { type: 'manual' } },
+    ],
+  }),
+  suspend: (resume: ResumeCondition = { type: 'manual' }, id?: string, bind?: string): FlowSuspend => ({
+    kind: 'gneh.flow.suspend',
+    id,
+    resume,
+    bind,
+  }),
+  each: (items: FlowEach['items'], key: FlowEach['key'], render: FlowEach['render'], id?: string): FlowEach => ({
+    kind: 'gneh.flow.each',
+    id,
+    items,
+    key,
+    render,
   }),
 };

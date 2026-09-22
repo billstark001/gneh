@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- lifecycle, continuation, and transaction invariants stay in one kernel. */
 /** Renderer-neutral story kernel, lifecycle, history and regions. */
 import {
   ABI_VERSION,
@@ -10,7 +11,13 @@ import {
   type AnyFragment,
   type FragmentContext,
   type FragmentProps,
+  type Flow,
+  type FlowEach,
+  type FlowNode,
   type Json,
+  type RenderEvaluation,
+  type RenderInput,
+  type ResumeCondition,
   type RegionHandle,
   type State,
   type StoryIR,
@@ -20,11 +27,26 @@ import {
 import { deepReadonly } from './readonly.js';
 import { type Passage, type PassageSet, isPassage } from './definition.js';
 import * as storySupport from './story-support.js';
-import type { Frame, SaveData, Snapshot, StoryOptions, TraceEvent } from './story-types.js';
+import type {
+  ActiveSuspension,
+  ContinuationSnapshot,
+  Frame,
+  SaveData,
+  Snapshot,
+  StoryOptions,
+  TraceEvent,
+} from './story-types.js';
 
 const maxFragmentDepth = 128;
 
-export type { SaveData, Snapshot, StoryOptions, TraceEvent } from './story-types.js';
+export type {
+  ActiveSuspension,
+  ContinuationSnapshot,
+  SaveData,
+  Snapshot,
+  StoryOptions,
+  TraceEvent,
+} from './story-types.js';
 
 /** Renderer-neutral story kernel. Re-evaluation is batched per transaction (not signal-level). */
 export class Story {
@@ -62,8 +84,16 @@ export class Story {
   private readonly identity: string;
   private renderDepth = 0;
   private settingUp = false;
+  private restoredContinuations = new Map<string, ContinuationSnapshot>();
+  private activeFlow:
+    | {
+        descriptor: ActiveSuspension;
+        frame: Frame;
+        accept?: (value: Json | undefined, ctx: FragmentContext) => void;
+      }
+    | undefined;
   constructor(input: StoryIR | PassageSet, options: StoryOptions = {}) {
-    this.options = { ...options };
+    this.options = { ...options, flow: options.flow ? { ...options.flow } : undefined };
     this.live = this.options.live ?? true;
     const initialized = storySupport.initializeStoryInput(input, this.options, (passage) => this.register(passage));
     this.route = initialized.route;
@@ -90,6 +120,9 @@ export class Story {
   get view(): View[] {
     if (!this.started) this.start();
     return this.currentView;
+  }
+  get suspension(): ActiveSuspension | undefined {
+    return this.activeFlow?.descriptor;
   }
   get passages(): ReadonlyMap<string, AnyFragment> {
     return new Map(this.passageRegistry);
@@ -150,6 +183,45 @@ export class Story {
       props: cloneState(this.props),
       state: cloneState(this.values),
       seed: this.seed,
+      continuations: Object.fromEntries(
+        [...this.frames.entries()]
+          .map(([key, frame]) => [key, this.serializeContinuation(frame)] as const)
+          .filter((entry): entry is readonly [string, ContinuationSnapshot] => entry[1] !== undefined),
+      ),
+    };
+  }
+  private serializeContinuation(frame: Frame): ContinuationSnapshot | undefined {
+    const locals: Record<string, Json> = Object.create(null) as Record<string, Json>;
+    const scopes: Record<string, State> = Object.create(null) as Record<string, State>;
+    for (const [key, value] of frame.locals) {
+      if (key.startsWith('scope:') && value && typeof value === 'object' && !Array.isArray(value)) {
+        const slots: State = Object.create(null) as State;
+        for (const [name, slot] of Object.entries(value)) {
+          if (name.startsWith('__')) continue;
+          try {
+            assertJson(slot);
+            slots[name] = cloneState(slot);
+          } catch (error) {
+            if (name.startsWith('_')) throw error;
+          }
+        }
+        scopes[key] = slots;
+        continue;
+      }
+      try {
+        assertJson(value);
+        locals[key] = cloneState(value);
+      } catch {
+        // Runtime callables, native handles and other transient implementation
+        // values are reconstructed. JSON locals are retained without liveness pruning.
+      }
+    }
+    if (!frame.passed.size && !Object.keys(locals).length && !Object.keys(scopes).length) return;
+    return {
+      fragment: frame.fragment.id,
+      passed: [...frame.passed],
+      locals,
+      scopes,
     };
   }
   private trace(type: TraceEvent['type']): void {
@@ -169,7 +241,16 @@ export class Story {
         'CAPABILITY_LIVE',
         `${target.id} requires live rendering.`,
       );
-      frame = storySupport.createFrame(`i${this.frameSerial++}:${key}`, target, props);
+      frame = storySupport.createFrame(`i${this.frameSerial++}:${key}`, target, props, false, key);
+      const restored = this.restoredContinuations.get(key);
+      if (restored) {
+        invariant(restored.fragment === target.id, 'SAVE_CONTINUATION', `Continuation target changed at ${key}.`);
+        frame.passed = new Set(restored.passed);
+        for (const [localKey, value] of Object.entries(restored.locals)) frame.locals.set(localKey, cloneState(value));
+        frame.restoredScopes = new Map(
+          Object.entries(restored.scopes).map(([scopeKey, value]) => [scopeKey, cloneState(value)]),
+        );
+      }
       this.frames.set(key, frame);
       this.newFrames = true;
     }
@@ -189,10 +270,152 @@ export class Story {
     this.renderDepth++;
     try {
       frame.declaredRegions.clear();
-      return normalizeView(frame.fragment.render(this.context(frame, 'render'), deepReadonly(frame.props)));
+      const context = this.context(frame, 'render');
+      return this.evaluateRenderInput(
+        frame,
+        context,
+        frame.fragment.render(context, deepReadonly(frame.props)),
+        `${frame.key}/flow`,
+      ).view;
     } finally {
       this.renderDepth--;
     }
+  }
+  private evaluateRenderInput(
+    frame: Frame,
+    context: FragmentContext,
+    input: RenderInput,
+    path: string,
+  ): RenderEvaluation {
+    const segments: View[][] = [[]];
+    const splitBoundaries = (view: View): View[] => {
+      if (view.kind === 'suspend' || !view.children?.length) return [view];
+      const flattened = view.children.flatMap(splitBoundaries);
+      if (!flattened.some((child) => child.kind === 'suspend')) return [view];
+      const output: View[] = [];
+      let children: View[] = [];
+      let part = 0;
+      const flush = () => {
+        if (!children.length) return;
+        output.push({ ...view, key: view.key ? `${view.key}:flow:${part++}` : undefined, children });
+        children = [];
+      };
+      for (const child of flattened) {
+        if (child.kind === 'suspend') {
+          flush();
+          output.push(child);
+        } else children.push(child);
+      }
+      flush();
+      return output;
+    };
+    const appendViews = (views: View[]) => {
+      for (const view of views.flatMap(splitBoundaries)) {
+        if (view.kind === 'suspend') {
+          if (segments.at(-1)!.length || segments.length === 1) segments.push([]);
+          if (view.attrs?.active) break;
+        } else segments.at(-1)!.push(view);
+      }
+    };
+    const visit = (value: RenderInput | FlowNode, currentPath: string): void => {
+      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow') {
+        const flow = value as Flow;
+        for (let index = 0; index < flow.nodes.length && !context.suspended; index++)
+          visit(flow.nodes[index], `${currentPath}/${index}`);
+        return;
+      }
+      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.lazy') {
+        const lazy = value as import('@gneh/core').FlowLazy;
+        visit(lazy.render(context), `${currentPath}/${lazy.id ?? 'lazy'}`);
+        return;
+      }
+      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.suspend') {
+        const suspension = value as import('@gneh/core').FlowSuspend;
+        const key = `${currentPath}/${suspension.id ?? 'suspend'}`;
+        const stopped = context.suspend(
+          key,
+          suspension.resume,
+          suspension.bind
+            ? (resumeValue, actionContext) => {
+                actionContext.setContinuation(suspension.bind!, resumeValue ?? null);
+              }
+            : undefined,
+        );
+        segments.push([]);
+        if (stopped) return;
+        return;
+      }
+      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.each') {
+        const each = value as FlowEach;
+        const loopPath = `${currentPath}/${each.id ?? 'each'}`;
+        const items = context.continuation(`flow:items:${loopPath}`, (initial) => {
+          const resolved = typeof each.items === 'function' ? each.items(initial) : each.items;
+          invariant(Array.isArray(resolved), 'E_ITERABLE', 'A flow loop requires an array.');
+          assertJson(resolved);
+          return cloneState(resolved as Json[]);
+        });
+        const seen = new Set<string>();
+        for (let index = 0; index < items.length && !context.suspended; index++) {
+          const item = items[index];
+          const identity = each.key(item, index);
+          invariant(
+            typeof identity === 'string' || typeof identity === 'number',
+            'E_KEY',
+            'Flow loop keys must be strings or numbers.',
+          );
+          const stable = JSON.stringify(identity);
+          invariant(!seen.has(stable), 'DUPLICATE_KEY', `Duplicate flow loop key: ${stable}`);
+          seen.add(stable);
+          visit(each.render(item, index, context), `${loopPath}/${stable}`);
+        }
+        if (!context.suspended) context.deleteContinuation(`flow:items:${loopPath}`);
+        return;
+      }
+      appendViews(normalizeView(value as ViewInput));
+    };
+    visit(input, path);
+    const nonempty = segments.filter((segment) => segment.length > 0);
+    const projection = this.options.flow?.projection ?? 'revealed';
+    const view = projection === 'current' ? (nonempty.at(-1) ?? []) : nonempty.flatMap((segment) => segment);
+    return { view, suspended: context.suspended };
+  }
+  private installSuspension(
+    frame: Frame,
+    key: string,
+    resume: ResumeCondition,
+    accept?: (value: Json | undefined, ctx: FragmentContext) => void,
+  ): boolean {
+    safeKey(key);
+    assertJson(resume);
+    if (resume.type === 'timer')
+      invariant(
+        Number.isFinite(resume.durationMs) && resume.durationMs >= 0,
+        'SUSPEND_TIMER',
+        'Timer duration must be a finite non-negative number.',
+      );
+    if (frame.passed.has(key) || this.options.flow?.projection === 'all') return false;
+    if (!this.activeFlow) {
+      const timer =
+        resume.type === 'timer'
+          ? (() => {
+              const timerKey = `suspension:timer:${key}`;
+              const startedAt = frame.locals.has(timerKey)
+                ? (frame.locals.get(timerKey) as number)
+                : (this.options.now?.() ?? Date.now());
+              frame.locals.set(timerKey, startedAt);
+              return { startedAt, dueAt: startedAt + resume.durationMs };
+            })()
+          : {};
+      const descriptor: ActiveSuspension = {
+        key,
+        fragment: frame.fragment.id,
+        instanceId: frame.id,
+        resume: cloneState(resume),
+        ...timer,
+      };
+      this.activeFlow = { descriptor, frame, accept };
+    }
+    return true;
   }
   private context(frame: Frame, phase: 'render' | 'enter' | 'action'): FragmentContext {
     // Keep an explicit kernel reference because accessors bind `this` to the context object.
@@ -227,7 +450,11 @@ export class Story {
       },
       live: this.live,
       instanceId: frame.id,
+      mountKey: frame.key,
       restoring: story.skipEnter,
+      get suspended() {
+        return !!story.activeFlow;
+      },
       phase,
       step() {
         if (++story.steps > (story.options.maxSteps ?? 100000))
@@ -266,12 +493,47 @@ export class Story {
         alive();
         if (frame.locals.has(key)) return frame.locals.get(key) as T;
         const value = initialize(story.context(frame, 'enter'));
+        const restored = frame.restoredScopes.get(key);
+        if (restored && value && typeof value === 'object' && !Array.isArray(value)) {
+          Object.assign(value as object, cloneState(restored));
+          frame.restoredScopes.delete(key);
+        }
         frame.locals.set(key, value);
         return value;
       },
       setLocal<T>(key: string, value: T) {
         alive();
         frame.locals.set(key, value);
+      },
+      continuation<T extends Json>(key: string, initialize: (ctx: FragmentContext) => T): T {
+        alive();
+        safeKey(key);
+        const storageKey = `continuation:${key}`;
+        if (frame.locals.has(storageKey)) return frame.locals.get(storageKey) as T;
+        const value = initialize(story.context(frame, 'enter'));
+        assertJson(value);
+        const cloned = cloneState(value);
+        frame.locals.set(storageKey, cloned);
+        return cloned;
+      },
+      setContinuation<T extends Json>(key: string, value: T) {
+        alive();
+        safeKey(key);
+        assertJson(value);
+        frame.locals.set(`continuation:${key}`, cloneState(value));
+      },
+      deleteContinuation(key) {
+        alive();
+        safeKey(key);
+        frame.locals.delete(`continuation:${key}`);
+      },
+      evaluate(input, key = 'nested') {
+        alive();
+        return story.evaluateRenderInput(frame, context, input, `${frame.key}/${key}`);
+      },
+      suspend(key, resume = { type: 'manual' }, accept) {
+        alive();
+        return story.installSuspension(frame, key, resume, accept);
       },
       effect(key, action) {
         alive();
@@ -308,7 +570,7 @@ export class Story {
       include(target: string | AnyFragment, props: object = {}, key = `call${includes++}`) {
         alive();
         const fragment = story.resolve(target, frame);
-        const child = story.frame(fragment, props as FragmentProps, `${frame.id}/${key}`);
+        const child = story.frame(fragment, props as FragmentProps, `${frame.key}/${key}`);
         return story.renderFrame(child);
       },
       region(name) {
@@ -398,6 +660,41 @@ export class Story {
     invariant(this.live, 'CAPABILITY_LIVE', 'Snapshot context does not allow in-place actions.');
     this.transact('action', () => fn(this.values));
   }
+  private resumeActive(value?: Json): boolean {
+    const active = this.activeFlow;
+    if (!active) return false;
+    if (value !== undefined) assertJson(value);
+    this.transact('resume', () => {
+      active.frame.passed.add(active.descriptor.key);
+      active.accept?.(value === undefined ? undefined : cloneState(value), this.context(active.frame, 'action'));
+      this.activeFlow = undefined;
+    });
+    return true;
+  }
+  /** Resume a manual suspension. */
+  advance(value?: Json): boolean {
+    if (this.activeFlow?.descriptor.resume.type !== 'manual') return false;
+    return this.resumeActive(value);
+  }
+  /** Deliver a named signal to the active suspension. */
+  signal(name: string, value?: Json): boolean {
+    const condition = this.activeFlow?.descriptor.resume;
+    if (!condition || condition.type !== 'signal' || condition.name !== name) return false;
+    if (condition.filter !== undefined && JSON.stringify(condition.filter) !== JSON.stringify(value)) return false;
+    return this.resumeActive(value);
+  }
+  /** Resume a timer suspension once the injected clock reaches its deadline. */
+  tick(now = this.options.now?.() ?? Date.now()): boolean {
+    const active = this.activeFlow?.descriptor;
+    if (!active || active.resume.type !== 'timer' || active.dueAt === undefined || now < active.dueAt) return false;
+    return this.resumeActive(now);
+  }
+  /** Complete an application-owned task suspension with a JSON result. */
+  completeTask(operation: string, value?: Json): boolean {
+    const condition = this.activeFlow?.descriptor.resume;
+    if (!condition || condition.type !== 'task' || condition.operation !== operation) return false;
+    return this.resumeActive(value);
+  }
   navigate(target: string | AnyFragment, props: FragmentProps = {}): void {
     const fragment = this.resolve(target);
     if (!this.passageRegistry.has(fragment.id)) this.register(fragment);
@@ -412,7 +709,7 @@ export class Story {
       this.pendingRoute = { id: fragment.id, props: cloneState(props as Record<string, Json>) };
     });
   }
-  private transact(type: 'action' | 'navigate', action: () => void): void {
+  private transact(type: 'action' | 'navigate' | 'resume', action: () => void): void {
     invariant(!this.rendering, 'RENDER_EFFECT', 'Navigation and mutations cannot occur while rendering.');
     if (this.transactionDepth) {
       action();
@@ -456,12 +753,16 @@ export class Story {
     if (this.rendering) return;
     const oldRegistry = new Map(this.registry);
     this.rendering = true;
+    this.activeFlow = undefined;
     this.steps = 0;
     try {
       // A render can discover a new child or apply a source-order region change.
       // Re-render until those one-shot effects settle, then sweep dead frames.
       let iteration = 0;
       do {
+        // A settling pass supersedes the previous pass's frontier descriptor.
+        // Passed keys live on the frame; the active descriptor is render-derived.
+        this.activeFlow = undefined;
         this.newFrames = false;
         this.visited.clear();
         const root = this.frame(this.resolve(this.route), this.props, 'root');
@@ -481,6 +782,7 @@ export class Story {
           storySupport.disposeFrame(frame);
           this.frames.delete(key);
         }
+      this.restoredContinuations.clear();
       assertJson(this.values);
       this.trace('render');
     } catch (error) {
@@ -495,6 +797,7 @@ export class Story {
   private resetFrames(): void {
     for (const frame of this.frames.values()) storySupport.disposeFrame(frame);
     this.frames.clear();
+    this.activeFlow = undefined;
   }
   private resetSetupFrames(): void {
     for (const frame of this.setupFrames.values()) storySupport.disposeFrame(frame);
@@ -531,6 +834,7 @@ export class Story {
     this.values = cloneState(snapshot.state);
     this.seed = snapshot.seed;
     this.resetFrames();
+    this.restoredContinuations = new Map(Object.entries(cloneState(snapshot.continuations)));
     // Restoration recreates view-local frames, but must not replay semantic entry
     // effects that are already represented by the restored persistent state.
     this.skipEnter = true;
@@ -577,6 +881,7 @@ export class Story {
       this.values = cloneState(data.present.state);
       this.seed = data.present.seed;
       this.resetFrames();
+      this.restoredContinuations = new Map(Object.entries(cloneState(data.present.continuations)));
       this.registry.clear();
       this.runSetup();
       this.skipEnter = true;
@@ -592,6 +897,7 @@ export class Story {
       this.past = beforePast;
       this.future = beforeFuture;
       this.registry = beforeRegistry;
+      this.restoredContinuations = new Map(Object.entries(cloneState(before.continuations)));
       this.skipEnter = true;
       this.refresh();
       throw error;
@@ -611,6 +917,7 @@ export class Story {
       this.future = [];
       this.registry.clear();
       this.resetFrames();
+      this.restoredContinuations.clear();
       this.runSetup();
       this.refresh();
       this.started = true;
@@ -623,6 +930,7 @@ export class Story {
       this.past = beforePast;
       this.future = beforeFuture;
       this.registry = beforeRegistry;
+      this.restoredContinuations = new Map(Object.entries(cloneState(before.continuations)));
       this.skipEnter = true;
       this.refresh();
       throw error;
@@ -635,6 +943,8 @@ export class Story {
     this.resetFrames();
     this.resetSetupFrames();
     this.registry.clear();
+    this.restoredContinuations.clear();
+    this.activeFlow = undefined;
     this.listeners.clear();
     this.currentView = [];
   }

@@ -44,7 +44,9 @@ export function initializeModule(
     phase: 'enter',
     live: false,
     instanceId: 'primary',
+    mountKey: 'primary',
     restoring: false,
+    suspended: false,
     step() {
       invariant(++steps <= 100_000, 'STEP_LIMIT', 'Module initialization budget exhausted.');
     },
@@ -64,6 +66,11 @@ export function initializeModule(
     setLocal(key, value) {
       locals.set(key, value);
     },
+    continuation: () => unavailable('Continuations'),
+    setContinuation: () => unavailable('Continuations'),
+    deleteContinuation: () => unavailable('Continuations'),
+    evaluate: () => unavailable('Declarative flows'),
+    suspend: () => unavailable('Suspension'),
     effect(key, action) {
       if (locals.has('effect:' + key)) return;
       locals.set('effect:' + key, true);

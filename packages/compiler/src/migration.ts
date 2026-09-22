@@ -163,6 +163,12 @@ export function toInkdown(passages: PassageIR[]): string {
               .join(' ')}}\n${render(n.children)}\n:::\n`;
           case 'effect':
             return `\n@effect {\n${printEffects(n.effects)}\n}\n`;
+          case 'suspend':
+            throw new GnehError(
+              'MIGRATION_UNREPRESENTABLE',
+              'suspend has no source-language spelling. Keep the IR or rewrite it explicitly.',
+              n.span,
+            );
           case 'interaction':
           case 'region-change':
           case 'portal':
