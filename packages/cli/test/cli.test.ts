@@ -26,7 +26,7 @@ test('workspace bin entry resolves symlinked package paths', () => {
     timeout: 15000,
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Checked 3 files \/ 5 passages; no errors\./);
+  assert.match(result.stdout, /Checked 3 files \/ 8 passages; no errors\./);
 });
 
 test('CLI help, check, metadata and graph are usable without node_modules', () => {
@@ -34,7 +34,7 @@ test('CLI help, check, metadata and graph are usable without node_modules', () =
   assert.equal(run('check', 'examples/playground').status, 0);
   const metadata = JSON.parse(run('metadata', 'examples/playground').stdout);
   assert.equal(metadata.Status.nav, false);
-  assert.equal(metadata.Start.layout.accent, 'brass');
+  assert.equal(metadata.Start.layout.accent, 'amber');
   const graph = JSON.parse(run('graph', 'examples/playground', '--json').stdout);
   assert.ok(graph.some((edge) => edge.from === 'Start' && edge.to === 'Vault' && edge.kind === 'choice'));
 });

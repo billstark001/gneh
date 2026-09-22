@@ -182,13 +182,22 @@ test('independently built Vite applications conform in a real browser', { timeou
     page = await pageAt('/snapshot/');
     await page.waitForFunction(() => window.gnehApp?.story);
     check(
-      (await page.$eval('#story h1', (node) => node.textContent)) === 'A document without live behavior',
-      'snapshot: production HTML boots the static entry passage',
+      (await page.$eval('#story h1', (node) => node.textContent)) === 'No Clean Getaway',
+      'snapshot: production HTML boots the visual-novel entry passage',
     );
-    await page.locator(aria('link', 'Next page')).click();
+    await page.evaluate(() => {
+      const next = document.querySelector('#next');
+      if (!(next instanceof HTMLButtonElement)) throw new Error('Expected the visual-novel advance button');
+      while (!next.disabled) next.click();
+      const choice = [...document.querySelectorAll('#choices a')].find((node) =>
+        node.textContent?.includes('Open the door and call it solidarity'),
+      );
+      if (!(choice instanceof HTMLElement)) throw new Error('Expected the OpenDoor choice');
+      choice.click();
+    });
     check(
-      (await page.$eval('#story h1', (node) => node.textContent)) === 'Second page',
-      'snapshot: production HTML keeps passage navigation',
+      (await page.evaluate(() => window.gnehApp.story.current)) === 'OpenDoor',
+      'snapshot: production HTML keeps visual-novel passage navigation',
     );
     await page.close();
 
