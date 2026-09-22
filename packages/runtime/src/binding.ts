@@ -1,5 +1,5 @@
 import { type AnyFragment, type Fragment, type FragmentProps } from '@gneh/core';
-import { defineFragment } from './definition.js';
+import { defineFragment } from './definitions/fragment.js';
 
 export function bindFragment<P extends object>(fragment: Fragment<P>, props: P, id = fragment.id + ':bound'): Fragment {
   return defineFragment({

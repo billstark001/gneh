@@ -13,7 +13,7 @@ import type {
   RuntimeExtension,
   State,
 } from '@gneh/core';
-import type { Story } from './story.js';
+import type { Story } from './story/story.js';
 import type { authoredCallableBrand, passageBrand, passageSetBrand } from './brands.js';
 
 export interface FragmentDefinition<P extends object> {

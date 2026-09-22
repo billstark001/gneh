@@ -16,9 +16,9 @@ import {
   type StoryNode,
   type ValueCallableBodyIR,
 } from '@gneh/core';
-import { deepReadonly } from './readonly.js';
-import { isAuthoredCallable } from './definition.js';
-import type { AuthoredCallable } from './api-types.js';
+import { deepReadonly } from '../internal/readonly.js';
+import { isAuthoredCallable } from '../definitions/callable.js';
+import type { AuthoredCallable } from '../api-types.js';
 
 const maxIRDepth = 128;
 const maxCallDepth = 128;
@@ -46,51 +46,55 @@ const isCallable = (value: unknown): value is RuntimeCallable =>
 const isSerializedCallable = (value: unknown): value is SerializedCallable =>
   !!value && typeof value === 'object' && (value as SerializedCallable).kind === 'gneh.callable-ref';
 
-/** Owns declaration lookup and the explicit parent-linked environments captured by authored callables. */
-export class CallableRuntime implements EffectCallableRuntime {
-  private readonly declarations = new Map<string, CallableIR>();
-  private callDepth = 0;
-
-  constructor(ir: PassageIR) {
-    this.collectNodes(ir.body, 0);
-  }
-
-  private collectCallable(callable: CallableIR, depth: number): void {
+/** Index callable declarations once, independently from invocation state. */
+export function indexCallables(ir: PassageIR): Map<string, CallableIR> {
+  const declarations = new Map<string, CallableIR>();
+  const collectCallable = (callable: CallableIR, depth: number): void => {
     invariant(depth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');
-    this.declarations.set(callable.id, callable);
-    if (callable.phase === 'view') this.collectNodes(callable.body as StoryNode[], depth);
-    else if (callable.phase === 'effect') this.collectEffects(callable.body as EffectNode[], depth);
-    else this.collectEffects((callable.body as ValueCallableBodyIR).effects, depth);
-  }
-
-  private collectEffects(effects: EffectNode[], depth: number): void {
+    declarations.set(callable.id, callable);
+    if (callable.phase === 'view') collectNodes(callable.body as StoryNode[], depth);
+    else if (callable.phase === 'effect') collectEffects(callable.body as EffectNode[], depth);
+    else collectEffects((callable.body as ValueCallableBodyIR).effects, depth);
+  };
+  const collectEffects = (effects: EffectNode[], depth: number): void => {
     invariant(depth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');
     for (const effect of effects) {
       if (effect.type === 'assign-callable' || effect.type === 'publish-callable')
-        this.collectCallable(effect.callable, depth + 1);
+        collectCallable(effect.callable, depth + 1);
       else if (effect.type === 'call' && effect.call.callee.type === 'inline')
-        this.collectCallable(effect.call.callee.callable, depth + 1);
+        collectCallable(effect.call.callee.callable, depth + 1);
       else if (effect.type === 'if') {
-        this.collectEffects(effect.yes, depth + 1);
-        this.collectEffects(effect.no, depth + 1);
-      } else if (effect.type === 'each') this.collectEffects(effect.body, depth + 1);
+        collectEffects(effect.yes, depth + 1);
+        collectEffects(effect.no, depth + 1);
+      } else if (effect.type === 'each') collectEffects(effect.body, depth + 1);
     }
-  }
-
-  private collectNodes(nodes: StoryNode[], depth: number): void {
+  };
+  const collectNodes = (nodes: StoryNode[], depth: number): void => {
     invariant(depth < maxIRDepth, 'IR_DEPTH', 'Maximum runtime IR nesting exceeded.');
     for (const node of nodes) {
-      if (node.type === 'callable') this.collectCallable(node.callable, depth + 1);
+      if (node.type === 'callable') collectCallable(node.callable, depth + 1);
       if (node.type === 'if') {
-        this.collectNodes(node.yes, depth + 1);
-        this.collectNodes(node.no, depth + 1);
-      } else if ('children' in node) this.collectNodes(node.children, depth + 1);
-      if (node.type === 'effect') this.collectEffects(node.effects, depth + 1);
+        collectNodes(node.yes, depth + 1);
+        collectNodes(node.no, depth + 1);
+      } else if ('children' in node) collectNodes(node.children, depth + 1);
+      if (node.type === 'effect') collectEffects(node.effects, depth + 1);
       if ((node.type === 'button' || node.type === 'control') && node.action.callee.type === 'inline')
-        this.collectCallable(node.action.callee.callable, depth + 1);
+        collectCallable(node.action.callee.callable, depth + 1);
       if (node.type === 'call' && node.call.callee.type === 'inline')
-        this.collectCallable(node.call.callee.callable, depth + 1);
+        collectCallable(node.call.callee.callable, depth + 1);
     }
+  };
+  collectNodes(ir.body, 0);
+  return declarations;
+}
+
+/** Owns declaration lookup and the explicit parent-linked environments captured by authored callables. */
+export class CallableRuntime implements EffectCallableRuntime {
+  private readonly declarations: Map<string, CallableIR>;
+  private callDepth = 0;
+
+  constructor(ir: PassageIR) {
+    this.declarations = indexCallables(ir);
   }
 
   private instantiate(declaration: CallableIR, environment: Scope): RuntimeCallable {

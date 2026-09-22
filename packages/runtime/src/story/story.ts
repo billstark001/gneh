@@ -11,12 +11,7 @@ import {
   type AnyFragment,
   type FragmentContext,
   type FragmentProps,
-  type Flow,
-  type FlowEach,
-  type FlowNode,
   type Json,
-  type RenderEvaluation,
-  type RenderInput,
   type ResumeCondition,
   type RegionHandle,
   type State,
@@ -24,9 +19,13 @@ import {
   type View,
   type ViewInput,
 } from '@gneh/core';
-import { deepReadonly } from './readonly.js';
-import { isPassage } from './definition.js';
-import * as storySupport from './story-support.js';
+import { deepReadonly } from '../internal/readonly.js';
+import { evaluateRenderInput } from './render.js';
+import { checkpoint, type RuntimeCheckpoint } from './transaction.js';
+import { isPassage } from '../definitions/fragment.js';
+import { initializeStoryInput } from './catalog.js';
+import { createFrame, disposeFrame } from './frames.js';
+import { boundedHistory, readSave, serializeContinuation, validateSnapshot } from './persistence.js';
 import type {
   ActiveSuspension,
   ContinuationSnapshot,
@@ -36,8 +35,8 @@ import type {
   TraceEvent,
   Passage,
   PassageSet,
-} from './api-types.js';
-import type { Frame } from './story-internals.js';
+} from '../api-types.js';
+import type { Frame } from './frames.js';
 
 const maxFragmentDepth = 128;
 
@@ -88,7 +87,7 @@ export class Story {
   constructor(input: StoryIR | PassageSet, options: StoryOptions = {}) {
     this.options = { ...options, flow: options.flow ? { ...options.flow } : undefined };
     this.live = this.options.live ?? true;
-    const initialized = storySupport.initializeStoryInput(input, this.options, (passage) => this.register(passage));
+    const initialized = initializeStoryInput(input, this.options, (passage) => this.register(passage));
     this.route = initialized.route;
     this.values = initialized.values;
     this.setup = initialized.setup;
@@ -179,53 +178,41 @@ export class Story {
       seed: this.seed,
       continuations: Object.fromEntries(
         [...this.frames.entries()]
-          .map(([key, frame]) => [key, this.serializeContinuation(frame)] as const)
+          .map(([key, frame]) => [key, serializeContinuation(frame)] as const)
           .filter((entry): entry is readonly [string, ContinuationSnapshot] => entry[1] !== undefined),
       ),
-    };
-  }
-  private serializeContinuation(frame: Frame): ContinuationSnapshot | undefined {
-    const locals: Record<string, Json> = Object.create(null) as Record<string, Json>;
-    const scopes: Record<string, State> = Object.create(null) as Record<string, State>;
-    for (const [key, value] of frame.locals) {
-      if (key.startsWith('scope:') && value && typeof value === 'object' && !Array.isArray(value)) {
-        const slots: State = Object.create(null) as State;
-        for (const [name, slot] of Object.entries(value)) {
-          if (name.startsWith('__')) continue;
-          try {
-            assertJson(slot);
-            slots[name] = cloneState(slot);
-          } catch (error) {
-            if (name.startsWith('_')) throw error;
-          }
-        }
-        scopes[key] = slots;
-        continue;
-      }
-      try {
-        assertJson(value);
-        locals[key] = cloneState(value);
-      } catch {
-        // Runtime callables, native handles and other transient implementation
-        // values are reconstructed. JSON locals are retained without liveness pruning.
-      }
-    }
-    if (!frame.passed.size && !Object.keys(locals).length && !Object.keys(scopes).length) return;
-    return {
-      fragment: frame.fragment.id,
-      passed: [...frame.passed],
-      locals,
-      scopes,
     };
   }
   private trace(type: TraceEvent['type']): void {
     this.options.onTrace?.({ type, fragment: this.route, state: cloneState(this.values) });
   }
+  private checkpoint(): RuntimeCheckpoint {
+    return checkpoint(this.snapshot(), this.past, this.future, this.registry, this.started);
+  }
+  private rollback(checkpoint: RuntimeCheckpoint): void {
+    this.resetFrames();
+    this.route = checkpoint.snapshot.current;
+    this.props = cloneState(checkpoint.snapshot.props);
+    this.values = cloneState(checkpoint.snapshot.state);
+    this.seed = checkpoint.snapshot.seed;
+    this.past = checkpoint.past;
+    this.future = checkpoint.future;
+    this.registry = checkpoint.registry;
+    this.restoredContinuations = new Map(Object.entries(cloneState(checkpoint.snapshot.continuations)));
+    this.started = checkpoint.started;
+    if (checkpoint.started) {
+      this.skipEnter = true;
+      this.refresh();
+    } else {
+      this.skipEnter = false;
+      this.currentView = [];
+    }
+  }
   private frame(target: AnyFragment, props: FragmentProps, key: string): Frame {
     // Structural mount keys let repeated Fragment includes keep regions and cleanups isolated.
     let frame = this.frames.get(key);
     if (frame && frame.fragment !== target) {
-      storySupport.disposeFrame(frame);
+      disposeFrame(frame);
       this.frames.delete(key);
       frame = undefined;
     }
@@ -235,7 +222,7 @@ export class Story {
         'CAPABILITY_LIVE',
         `${target.id} requires live rendering.`,
       );
-      frame = storySupport.createFrame(`i${this.frameSerial++}:${key}`, target, props, false, key);
+      frame = createFrame(`i${this.frameSerial++}:${key}`, target, props, false, key);
       const restored = this.restoredContinuations.get(key);
       if (restored) {
         invariant(restored.fragment === target.id, 'SAVE_CONTINUATION', `Continuation target changed at ${key}.`);
@@ -265,113 +252,15 @@ export class Story {
     try {
       frame.declaredRegions.clear();
       const context = this.context(frame, 'render');
-      return this.evaluateRenderInput(
-        frame,
+      return evaluateRenderInput(
         context,
         frame.fragment.render(context, deepReadonly(frame.props)),
         `${frame.key}/flow`,
+        this.options.flow?.projection,
       ).view;
     } finally {
       this.renderDepth--;
     }
-  }
-  private evaluateRenderInput(
-    frame: Frame,
-    context: FragmentContext,
-    input: RenderInput,
-    path: string,
-  ): RenderEvaluation {
-    const segments: View[][] = [[]];
-    const splitBoundaries = (view: View): View[] => {
-      if (view.kind === 'suspend' || !view.children?.length) return [view];
-      const flattened = view.children.flatMap(splitBoundaries);
-      if (!flattened.some((child) => child.kind === 'suspend')) return [view];
-      const output: View[] = [];
-      let children: View[] = [];
-      let part = 0;
-      const flush = () => {
-        if (!children.length) return;
-        output.push({ ...view, key: view.key ? `${view.key}:flow:${part++}` : undefined, children });
-        children = [];
-      };
-      for (const child of flattened) {
-        if (child.kind === 'suspend') {
-          flush();
-          output.push(child);
-        } else children.push(child);
-      }
-      flush();
-      return output;
-    };
-    const appendViews = (views: View[]) => {
-      for (const view of views.flatMap(splitBoundaries)) {
-        if (view.kind === 'suspend') {
-          if (segments.at(-1)!.length || segments.length === 1) segments.push([]);
-          if (view.attrs?.active) break;
-        } else segments.at(-1)!.push(view);
-      }
-    };
-    const visit = (value: RenderInput | FlowNode, currentPath: string): void => {
-      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow') {
-        const flow = value as Flow;
-        for (let index = 0; index < flow.nodes.length && !context.suspended; index++)
-          visit(flow.nodes[index], `${currentPath}/${index}`);
-        return;
-      }
-      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.lazy') {
-        const lazy = value as import('@gneh/core').FlowLazy;
-        visit(lazy.render(context), `${currentPath}/${lazy.id ?? 'lazy'}`);
-        return;
-      }
-      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.suspend') {
-        const suspension = value as import('@gneh/core').FlowSuspend;
-        const key = `${currentPath}/${suspension.id ?? 'suspend'}`;
-        const stopped = context.suspend(
-          key,
-          suspension.resume,
-          suspension.bind
-            ? (resumeValue, actionContext) => {
-                actionContext.setContinuation(suspension.bind!, resumeValue ?? null);
-              }
-            : undefined,
-        );
-        segments.push([]);
-        if (stopped) return;
-        return;
-      }
-      if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'gneh.flow.each') {
-        const each = value as FlowEach;
-        const loopPath = `${currentPath}/${each.id ?? 'each'}`;
-        const items = context.continuation(`flow:items:${loopPath}`, (initial) => {
-          const resolved = typeof each.items === 'function' ? each.items(initial) : each.items;
-          invariant(Array.isArray(resolved), 'E_ITERABLE', 'A flow loop requires an array.');
-          assertJson(resolved);
-          return cloneState(resolved as Json[]);
-        });
-        const seen = new Set<string>();
-        for (let index = 0; index < items.length && !context.suspended; index++) {
-          const item = items[index];
-          const identity = each.key(item, index);
-          invariant(
-            typeof identity === 'string' || typeof identity === 'number',
-            'E_KEY',
-            'Flow loop keys must be strings or numbers.',
-          );
-          const stable = JSON.stringify(identity);
-          invariant(!seen.has(stable), 'DUPLICATE_KEY', `Duplicate flow loop key: ${stable}`);
-          seen.add(stable);
-          visit(each.render(item, index, context), `${loopPath}/${stable}`);
-        }
-        if (!context.suspended) context.deleteContinuation(`flow:items:${loopPath}`);
-        return;
-      }
-      appendViews(normalizeView(value as ViewInput));
-    };
-    visit(input, path);
-    const nonempty = segments.filter((segment) => segment.length > 0);
-    const projection = this.options.flow?.projection ?? 'revealed';
-    const view = projection === 'current' ? (nonempty.at(-1) ?? []) : nonempty.flatMap((segment) => segment);
-    return { view, suspended: context.suspended };
   }
   private installSuspension(
     frame: Frame,
@@ -524,7 +413,7 @@ export class Story {
       },
       evaluate(input, key = 'nested') {
         alive();
-        return story.evaluateRenderInput(frame, context, input, `${frame.key}/${key}`);
+        return evaluateRenderInput(context, input, `${frame.key}/${key}`, story.options.flow?.projection);
       },
       suspend(key, resume = { type: 'manual' }, accept) {
         alive();
@@ -712,9 +601,7 @@ export class Story {
     }
     // Copy-on-transaction isolates changes; failure restores state, RNG, and both histories.
     const before = this.snapshot();
-    const oldPast = [...this.past],
-      oldFuture = [...this.future];
-    const oldRegistry = new Map(this.registry);
+    const rollback = this.checkpoint();
     this.values = cloneState(this.values);
     this.steps = 0;
     this.transactionDepth++;
@@ -737,10 +624,7 @@ export class Story {
     } catch (error) {
       this.transactionDepth = 0;
       this.pendingRoute = undefined;
-      this.past = oldPast;
-      this.future = oldFuture;
-      this.registry = oldRegistry;
-      this.restoreSnapshot(before);
+      this.rollback(rollback);
       throw error;
     }
   }
@@ -774,7 +658,7 @@ export class Story {
       } while (this.newFrames);
       for (const [key, frame] of this.frames)
         if (!this.visited.has(key)) {
-          storySupport.disposeFrame(frame);
+          disposeFrame(frame);
           this.frames.delete(key);
         }
       this.restoredContinuations.clear();
@@ -790,12 +674,12 @@ export class Story {
     for (const listener of this.listeners) listener(this.currentView);
   }
   private resetFrames(): void {
-    for (const frame of this.frames.values()) storySupport.disposeFrame(frame);
+    for (const frame of this.frames.values()) disposeFrame(frame);
     this.frames.clear();
     this.activeFlow = undefined;
   }
   private resetSetupFrames(): void {
-    for (const frame of this.setupFrames.values()) storySupport.disposeFrame(frame);
+    for (const frame of this.setupFrames.values()) disposeFrame(frame);
     this.setupFrames.clear();
   }
   private runSetup(): void {
@@ -807,7 +691,7 @@ export class Story {
     this.settingUp = true;
     try {
       for (const passage of this.setup) {
-        const frame = storySupport.createFrame(`setup:${passage.id}`, passage, {}, true);
+        const frame = createFrame(`setup:${passage.id}`, passage, {}, true);
         this.setupFrames.set(passage.id, frame);
         passage.enter?.(this.context(frame, 'enter'), {});
         passage.render(this.context(frame, 'enter'), {});
@@ -823,7 +707,7 @@ export class Story {
     }
   }
   private restoreSnapshot(snapshot: Snapshot): void {
-    storySupport.validateSnapshot(snapshot, (id) => this.resolve(id));
+    validateSnapshot(snapshot, (id) => this.resolve(id));
     this.route = snapshot.current;
     this.props = cloneState(snapshot.props);
     this.values = cloneState(snapshot.state);
@@ -863,15 +747,11 @@ export class Story {
     return JSON.stringify(data);
   }
   load(source: string): void {
-    const data = storySupport.readSave(source, this.identity, (id) => this.resolve(id));
-    const before = this.snapshot();
-    const beforePast = this.past;
-    const beforeFuture = this.future;
-    const beforeRegistry = new Map(this.registry);
-    const wasStarted = this.started;
+    const data = readSave(source, this.identity, (id) => this.resolve(id));
+    const rollback = this.checkpoint();
     try {
-      this.past = storySupport.boundedHistory(data.past, this.options.historyLimit);
-      this.future = storySupport.boundedHistory(data.future, this.options.historyLimit);
+      this.past = boundedHistory(data.past, this.options.historyLimit);
+      this.future = boundedHistory(data.future, this.options.historyLimit);
       this.route = data.present.current;
       this.props = cloneState(data.present.props);
       this.values = cloneState(data.present.state);
@@ -885,32 +765,12 @@ export class Story {
       this.trace('restore');
       this.started = true;
     } catch (error) {
-      this.resetFrames();
-      this.route = before.current;
-      this.props = cloneState(before.props);
-      this.values = cloneState(before.state);
-      this.seed = before.seed;
-      this.past = beforePast;
-      this.future = beforeFuture;
-      this.registry = beforeRegistry;
-      this.restoredContinuations = new Map(Object.entries(cloneState(before.continuations)));
-      this.started = wasStarted;
-      if (wasStarted) {
-        this.skipEnter = true;
-        this.refresh();
-      } else {
-        this.skipEnter = false;
-        this.currentView = [];
-      }
+      this.rollback(rollback);
       throw error;
     }
   }
   reset(): void {
-    const before = this.snapshot();
-    const beforePast = this.past;
-    const beforeFuture = this.future;
-    const beforeRegistry = new Map(this.registry);
-    const wasStarted = this.started;
+    const rollback = this.checkpoint();
     try {
       this.route = this.initialRoute;
       this.props = {};
@@ -925,23 +785,7 @@ export class Story {
       this.refresh();
       this.started = true;
     } catch (error) {
-      this.resetFrames();
-      this.route = before.current;
-      this.props = cloneState(before.props);
-      this.values = cloneState(before.state);
-      this.seed = before.seed;
-      this.past = beforePast;
-      this.future = beforeFuture;
-      this.registry = beforeRegistry;
-      this.restoredContinuations = new Map(Object.entries(cloneState(before.continuations)));
-      this.started = wasStarted;
-      if (wasStarted) {
-        this.skipEnter = true;
-        this.refresh();
-      } else {
-        this.skipEnter = false;
-        this.currentView = [];
-      }
+      this.rollback(rollback);
       throw error;
     }
   }
