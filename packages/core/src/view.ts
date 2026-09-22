@@ -1,13 +1,15 @@
-import type { ContentKind, Dialect, Metadata, PassageIR } from './ir.js';
+import type { ContentKind, Dialect, InvocationPhase, Metadata, PassageIR } from './ir.js';
 import type { Json, Scalar, State } from './json.js';
 import { display } from './json.js';
 
 export type Scope = Record<string, unknown>;
 
+export type EvaluationPhase = 'render' | 'enter' | 'action' | 'value';
+
 export interface EvaluationContext {
   readonly state: State;
   readonly bindings: Readonly<Record<string, unknown>>;
-  readonly phase: 'render' | 'enter' | 'action' | 'value';
+  readonly phase: EvaluationPhase;
   makeCallable?(id: string, scope: Scope): unknown;
   invokeValueCallable?(value: unknown, args: readonly unknown[], scope: Scope): unknown;
   step(): void;
@@ -84,14 +86,14 @@ export interface RenderEvaluation {
 
 export interface RuntimeExtensionInvocation {
   readonly id: string;
-  readonly phase: 'view' | 'effect';
+  readonly phase: InvocationPhase;
   readonly args: readonly unknown[];
   readonly context: FragmentContext;
   children(): View[];
 }
 
 export interface RuntimeExtension {
-  readonly phases: readonly ('view' | 'effect')[];
+  readonly phases: readonly (InvocationPhase)[];
   invoke(invocation: RuntimeExtensionInvocation): ViewInput | void;
 }
 
@@ -135,7 +137,7 @@ export interface FragmentContext extends EvaluationContext {
   /** Execute an initialization effect once; restoration marks it complete without replaying it. */
   effect(key: string, action: (ctx: FragmentContext) => void): void;
   host(operation: string, args?: unknown[]): unknown;
-  invokeExtension(id: string, phase: 'view' | 'effect', args: readonly unknown[], children: () => View[]): View[];
+  invokeExtension(id: string, phase: InvocationPhase, args: readonly unknown[], children: () => View[]): View[];
   include<P extends object>(
     target: Fragment<P>,
     ...args: {} extends P ? [props?: P, key?: string] : [props: P, key?: string]

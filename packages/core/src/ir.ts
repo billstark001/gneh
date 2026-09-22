@@ -10,7 +10,8 @@ export interface Expression {
   span: Span;
 }
 
-export type CallablePhase = 'value' | 'view' | 'effect';
+export type InvocationPhase = 'view' | 'effect';
+export type CallablePhase = InvocationPhase | 'value';
 
 export interface ValueCallableBodyIR {
   effects: EffectNode[];
@@ -158,7 +159,7 @@ export type StoryNode =
       /** Renderer-neutral call into an application-provided runtime extension. */
       type: 'invoke';
       id: string;
-      phase: 'view' | 'effect';
+      phase: InvocationPhase;
       args: Expression[];
       children: StoryNode[];
       span: Span;
